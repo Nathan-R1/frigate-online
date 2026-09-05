@@ -11,10 +11,6 @@
 
 <div class="topbar">
   <span class="game-title">FRIGATE</span>
-  <div class="control">
-    <label for="gridSize">Grid</label>
-    <input type="number" id="gridSize" min="1" max="40" value="18" title="Board width &amp; height (Enter to apply)">
-  </div>
   <div class="control" title="Your colour">
     <label>Colour</label>
     <div class="swatches" id="swatches"></div>
@@ -25,6 +21,10 @@
   <div class="settings-wrap" id="settingsWrap">
     <button type="button" class="btn settings-cog" id="settingsBtn" title="Settings">⚙</button>
     <div class="settings-menu hidden" id="settingsMenu">
+      <div class="settings-grid">
+        <label for="gridSize">Grid</label>
+        <input type="number" id="gridSize" min="1" max="40" value="18" title="Board width &amp; height (Enter to apply)">
+      </div>
       <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
       <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
     </div>
@@ -45,9 +45,7 @@
       <div id="pings" class="layer"></div>
     </div>
   </div>
-  <div class="hand-slot" id="handSlot">
-    <iframe id="handFrame" src="frigate-sheet/hand.html" title="Tech Hand"></iframe>
-  </div>
+  <iframe class="hand-slot" id="handSlot" src="frigate-sheet/hand.html" title="Tech Hand"></iframe>
 </div>
 
 <div id="createPopup" class="overlay hidden">
@@ -879,12 +877,61 @@ document.addEventListener('click', function (e) {
 
 /* ===== tech hand bar ===== */
 var handSlot = document.getElementById('handSlot');
-var handFrame = document.getElementById('handFrame');
+var handFrame = handSlot;
 window.addEventListener('message', function (e) {
   if (!handFrame || e.source !== handFrame.contentWindow) return;
-  if (e.data === 'hand:expand') handSlot.classList.add('expanded');
-  else if (e.data === 'hand:collapse') handSlot.classList.remove('expanded');
+  var m = e.data;
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'hand-size') {
+    if (m.open) {
+      handSlot.classList.add('expanded');
+      handSlot.style.height = Math.max(46, m.h) + 'px';
+    } else {
+      handSlot.classList.remove('expanded');
+      handSlot.style.height = '';
+      handFrame.style.pointerEvents = '';
+    }
+  } else if (m.t === 'pe') {
+    if (handSlot.classList.contains('expanded')) {
+      handFrame.style.pointerEvents = m.on ? 'auto' : 'none';
+    }
+  }
 });
+
+/* Click-through: while the hand is expanded, the iframe only captures input
+   while the cursor is over a card/bar/slider. Entering from the board, mirror
+   the pointer into the hand document to know when to wake the iframe up. */
+function handActive(el) {
+  return !!el && !!el.closest && !!el.closest('.hand-card, .hand-bar, .hand-slider.on, .preset-menu');
+}
+var handRaf = 0, handX = -1, handY = -1;
+function handParentMirror() {
+  handRaf = 0;
+  if (!handSlot.classList.contains('expanded')) {
+    handFrame.style.pointerEvents = '';
+    return;
+  }
+  var rect = handFrame.getBoundingClientRect();
+  var inside = handX >= rect.left && handX <= rect.right &&
+               handY >= rect.top && handY <= rect.bottom;
+  var on = false;
+  if (inside) {
+    try {
+      var doc = handFrame.contentDocument;
+      if (doc) {
+        on = handActive(doc.elementFromPoint(handX - rect.left, handY - rect.top));
+      }
+    } catch (err) {}
+  }
+  handFrame.style.pointerEvents = inside && on ? 'auto' : 'none';
+}
+function handScheduleMirror(e) {
+  handX = e.clientX;
+  handY = e.clientY;
+  if (!handRaf) handRaf = requestAnimationFrame(handParentMirror);
+}
+window.addEventListener('pointermove', handScheduleMirror);
+window.addEventListener('pointerdown', handScheduleMirror);
 
 /* ===== keyboard ===== */
 window.addEventListener('keydown', function (e) {

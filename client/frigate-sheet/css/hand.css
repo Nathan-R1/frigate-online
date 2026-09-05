@@ -9,6 +9,11 @@ html, body{
     --hand-card-h: 210px;
     --hand-card-w: 190px;
   }
+/* empty parts of the hand stay click-through to the board behind the iframe */
+.hand-view{ pointer-events:none; }
+.hand-view .hand-card{ pointer-events:auto; }
+.hand-slider{ pointer-events:none; }
+.hand-slider.on{ pointer-events:auto; }
 /* ===== Hand Dock (bottom tech hand) ===== */
   .hand-dock{
 
