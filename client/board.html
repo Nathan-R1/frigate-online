@@ -918,7 +918,7 @@ function toggleMenu() {
   menuToggleBtn.textContent = hidden ? 'Show Menu' : 'Hide Menu';
   menuToggleBtn.title = hidden ? 'Show the top menu bar' : 'Hide the top menu bar';
   closeSettingsMenu();
-  syncVerticalTop();
+  syncVerticalRect();
 }
 menuToggleBtn.addEventListener('click', toggleMenu);
 
@@ -930,9 +930,13 @@ viewBtn.addEventListener('click', function (e) {
 });
 
 var verticalToggleBtn = document.getElementById('verticalToggleBtn');
-function syncVerticalTop() {
+function syncVerticalRect() {
   if (!statsBar.classList.contains('vertical-stats')) return;
-  statsBar.style.top = topbarEl.offsetHeight + 'px';
+  var top = topbarEl.offsetHeight;
+  var bottom = handSlot.offsetHeight || 0;
+  statsBar.style.top = top + 'px';
+  statsBar.style.bottom = 'auto';
+  statsBar.style.height = Math.max(0, window.innerHeight - top - bottom) + 'px';
 }
 function toggleVertical() {
   var v = statsBar.classList.toggle('vertical-stats');
@@ -940,25 +944,16 @@ function toggleVertical() {
   verticalToggleBtn.title = v ? 'Show the stats bar horizontally at the top' : 'Show the stats bar vertically along the right edge';
   if (!v) {
     statsBar.style.top = '';
+    statsBar.style.bottom = '';
     statsBar.style.height = '';
   } else {
-    syncVerticalTop();
+    syncVerticalRect();
   }
   if (statsBar.contentWindow) statsBar.contentWindow.postMessage({ t: 'vertical', on: v }, '*');
   closeSettingsMenu();
 }
 verticalToggleBtn.addEventListener('click', toggleVertical);
-window.addEventListener('resize', syncVerticalTop);
-
-window.addEventListener('message', function (e) {
-  if (!statsBar || e.source !== statsBar.contentWindow) return;
-  var m = e.data;
-  if (!m || typeof m !== 'object' || m.t !== 'sbheight') return;
-  if (statsBar.classList.contains('vertical-stats')) {
-    statsBar.style.height = (parseInt(m.h, 10) || 0) + 'px';
-    syncVerticalTop();
-  }
-});
+window.addEventListener('resize', syncVerticalRect);
 
 statsBar.addEventListener('load', function () {
   if (!statsBar.contentWindow) return;
@@ -1066,6 +1061,7 @@ window.addEventListener('message', function (e) {
       handFrame.style.pointerEvents = m.on ? 'auto' : 'none';
     }
   }
+  syncVerticalRect();
 });
 
 /* Click-through: while the hand is expanded, the iframe only captures input

@@ -66,8 +66,8 @@ input[type=number]:focus { outline: none; border-color: #35d0e0; }
 .hull-stats-bar.hidden-stats { display: none; }
 .hull-stats-bar.detailed-stats { height: 88px; }
 .hull-stats-bar.vertical-stats {
-  position: fixed; right: 0; bottom: auto;
-  width: 90px; height: auto; z-index: 40;
+  position: fixed; right: 0; top: auto; bottom: auto;
+  width: 90px; z-index: 40;
   border-left: 1px solid #1f2a38; border-bottom: 0;
 }
 .hull-stats-bar.vertical-stats ~ .main { margin-right: 90px; }
