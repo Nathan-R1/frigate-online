@@ -15,6 +15,7 @@ body {
   background: linear-gradient(#10161f, #0c1117);
   border-bottom: 1px solid #1f2a38;
 }
+.topbar.hidden-menu { display: none; }
 .game-title {
   font-family: 'Orbitron', sans-serif; font-size: 18px; letter-spacing: 2px;
   color: #35d0e0; text-shadow: 0 0 12px rgba(53, 208, 224, .35); white-space: nowrap;
