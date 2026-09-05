@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frigate — Battle Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+/* ===== base ===== */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden;
+  background: #07090c; color: #dfe6ee;
+  font-family: 'Rajdhani', Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+
+/* ===== top bar ===== */
+.topbar {
+  flex: none; display: flex; align-items: center; gap: 18px;
+  padding: 10px 16px; flex-wrap: wrap;
+  background: linear-gradient(#10161f, #0c1117);
+  border-bottom: 1px solid #1f2a38;
+}
+.game-title {
+  font-family: 'Orbitron', sans-serif; font-size: 18px; letter-spacing: 2px;
+  color: #35d0e0; text-shadow: 0 0 12px rgba(53, 208, 224, .35); white-space: nowrap;
+}
+.control { display: flex; align-items: center; gap: 8px; }
+.control label { font-size: 12px; letter-spacing: 1px; color: #7f8fa0; text-transform: uppercase; }
+input[type=number] {
+  width: 64px; background: #0d141c; border: 1px solid #26374a; color: #dfe6ee;
+  padding: 5px 8px; border-radius: 4px; font: 600 13px 'Rajdhani', sans-serif;
+}
+input[type=number]:focus { outline: none; border-color: #35d0e0; }
+.swatches { position: relative; }
+.sw-trigger { width: 26px; height: 26px; border-radius: 6px; border: 2px solid #1f2a38; cursor: pointer; padding: 0; }
+.sw-trigger:hover { border-color: #35d0e0; }
+.sw-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  display: grid; grid-template-columns: repeat(4, 22px); gap: 6px; padding: 8px;
+  background: #0e141c; border: 1px solid #22303f; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .6);
+}
+.sw-menu.hidden { display: none; }
+.sw { width: 22px; height: 22px; border-radius: 6px; border: 2px solid #1f2a38; cursor: pointer; padding: 0; }
+.sw:hover { border-color: #35d0e0; }
+.sw.on { border-color: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, .4); }
+#badge { margin-left: auto; font: 600 12px 'Rajdhani', sans-serif; letter-spacing: 1px; padding: 4px 10px; border-radius: 4px; white-space: nowrap; }
+#badge.on { color: #7df0a8; background: rgba(61, 220, 140, .12); border: 1px solid rgba(61, 220, 140, .35); }
+#badge.off { color: #f2c063; background: rgba(242, 192, 99, .12); border: 1px solid rgba(242, 192, 99, .35); }
+#badge.pending { color: #ffd166; background: rgba(255, 209, 102, .12); border: 1px solid rgba(255, 209, 102, .4); }
+.btn {
+  background: #0a0f16; border: 1px solid #26374a; color: #8fa4b8;
+  font: 600 12px 'Rajdhani', sans-serif; letter-spacing: 1px; padding: 6px 12px;
+  border-radius: 4px; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: #35d0e0; color: #35d0e0; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+/* ===== hint bar ===== */
+.hint {
+  flex: none; padding: 5px 16px; font-size: 12.5px; color: #7f8fa0;
+  border-top: 1px solid #141c26; background: #0a0e13; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ===== board ===== */
+#board { flex: 1; position: relative; overflow: hidden; cursor: grab; }
+#board.dragging { cursor: grabbing; }
+#world {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0;
+  background: #0d141c; will-change: transform;
+  background-image:
+    linear-gradient(to right, rgba(70, 95, 120, .28) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(70, 95, 120, .28) 1px, transparent 1px);
+}
+.layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.piece { position: absolute; pointer-events: auto; cursor: grab; }
+.piece img { width: 100%; height: 100%; display: block; user-select: none; -webkit-user-select: none; }
+.piece.selected, .chip.selected {
+  outline: 2px solid #35d0e0; outline-offset: -2px;
+  box-shadow: 0 0 12px rgba(53, 208, 224, .6);
+}
+.piece.exhausted img { filter: brightness(.72); }
+
+.ctr {
+  position: absolute; pointer-events: auto; user-select: none; -webkit-user-select: none;
+  color: #fff; font: 600 13px/1 'JetBrains Mono', monospace; border-radius: 3px;
+  padding: 2px 4px; cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.piece:hover .ctr, .chip:hover .ctr { opacity: 1; }
+.ctr-red { top: 2px; left: 2px; background: rgba(196, 44, 54, .92); border: 1px solid rgba(255, 255, 255, .25); }
+.ctr-grey { top: 2px; right: 2px; background: rgba(112, 124, 136, .95); border: 1px solid rgba(255, 255, 255, .25); }
+
+.cell-chips { position: absolute; pointer-events: none; }
+.chip { position: absolute; pointer-events: auto; cursor: grab; }
+.chip img { width: 100%; height: 100%; display: block; }
+.chip .ctr { font-size: 7px; padding: 1px; border-radius: 2px; }
+.chip .ctr-red { top: 0; left: 0; }
+.chip .ctr-grey { top: 0; right: 0; }
+
+.ping {
+  position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .65); box-shadow: 0 0 12px rgba(255, 255, 255, .35);
+  animation: pingfade 4s ease-out forwards; pointer-events: none;
+}
+@keyframes pingfade {
+  0% { opacity: .95; transform: scale(.5); }
+  25% { opacity: .85; transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+.blockflash {
+  position: absolute; border: 2px solid rgba(255, 70, 70, .8); background: rgba(255, 70, 70, .12);
+  animation: bf .4s ease-out forwards; pointer-events: none;
+}
+@keyframes bf { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ===== create popup ===== */
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.overlay.hidden { display: none; }
+.panel {
+  background: #0e141c; border: 1px solid #22303f; border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6); padding: 18px;
+  min-width: 320px; max-width: 560px; max-height: 80vh; display: flex; flex-direction: column;
+}
+.pop-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.eyebrow { font: 600 11px 'Rajdhani', sans-serif; letter-spacing: 2px; color: #35d0e0; text-transform: uppercase; white-space: nowrap; }
+.pop-toggle { display: flex; gap: 4px; margin-left: auto; }
+.pv {
+  background: #0a0f16; border: 1px solid #26374a; color: #8fa4b8;
+  font: 600 12px 'Rajdhani', sans-serif; letter-spacing: 1px; padding: 5px 12px;
+  border-radius: 4px; cursor: pointer;
+}
+.pv.on { color: #0b0f14; background: #35d0e0; border-color: #35d0e0; }
+.x { background: none; border: none; color: #8fa4b8; font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.pop-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px; overflow-y: auto; min-height: 96px;
+}
+.choose {
+  border: 1px solid #26374a; background: #0a0f16; border-radius: 6px; padding: 10px;
+  cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  color: #dfe6ee; font: 600 13px 'Rajdhani', sans-serif;
+}
+.choose:hover { border-color: #35d0e0; background: #0d141c; }
+.choose img { width: 56px; height: 56px; object-fit: contain; }
+.pop-foot { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #7f8fa0; }
+#popReload { background: none; border: 1px solid #26374a; color: #8fa4b8; padding: 4px 10px; border-radius: 4px; cursor: pointer; font: 600 12px 'Rajdhani', sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="game-title">FRIGATE</span>
+  <div class="control">
+    <label for="gridSize">Grid</label>
+    <input type="number" id="gridSize" min="1" max="40" value="18" title="Board width &amp; height (Enter to apply)">
+  </div>
+  <div class="control" title="Your colour">
+    <label>Colour</label>
+    <div class="swatches" id="swatches"></div>
+  </div>
+  <button type="button" class="btn" id="saveBtn" title="Send all your pending changes to the server in one request">SAVE</button>
+  <button type="button" class="btn" id="refreshBtn" title="Pull the latest board state from the server">⟳ REFRESH</button>
+  <span id="badge" class="off">…</span>
+</div>
+
+<div class="hint">Click a piece = select / move &nbsp;·&nbsp; Click an empty cell = create &nbsp;·&nbsp; Middle-click = ping &nbsp;·&nbsp; Right-click a piece = exhausted on/off &nbsp;·&nbsp; Wheel = zoom &nbsp;·&nbsp; Drag = pan &nbsp;·&nbsp; Red / grey counter: left click +1, right click −1</div>
+
+<div id="board">
+  <div id="world">
+    <div id="pieces" class="layer"></div>
+    <div id="chips" class="layer"></div>
+    <div id="pings" class="layer"></div>
+  </div>
+</div>
+
+<div id="createPopup" class="overlay hidden">
+  <div class="panel">
+    <div class="pop-head">
+      <span class="eyebrow" id="popCell">CREATE</span>
+      <div class="pop-toggle">
+        <button type="button" class="pv on" data-createtype="piece">PIECES</button>
+        <button type="button" class="pv" data-createtype="chip">CHIPS</button>
+      </div>
+      <button type="button" class="x" id="popClose" title="Close">✕</button>
+    </div>
+    <div class="pop-list" id="popList"></div>
+    <div class="pop-foot">
+      <span id="popStatus">scanned from pieces/images</span>
+      <button type="button" id="popReload">⟳ RESCAN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ===== constants & globals ===== */
+var CELL = 72;                       // px per grid cell — keep in sync with #world background-size
+var CHIP = Math.round(CELL / 4);     // chip footprint = 1/4 cell
+var MIN_ZOOM = 0.35, MAX_ZOOM = 3;
+var PING_TTL = 4000;
+var COLOR_ORDER = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
+var PALETTE = {
+  red: '#e04a4a', orange: '#f09030', yellow: '#e8cf50',
+  green: '#46d176', cyan: '#35d0e0', blue: '#5b94f0',
+  purple: '#b060e0', pink: '#f069b8'
+};
+
+var boardEl = document.getElementById('board');
+var worldEl = document.getElementById('world');
+var piecesEl = document.getElementById('pieces');
+var chipsEl = document.getElementById('chips');
+var pingsEl = document.getElementById('pings');
+var badgeEl = document.getElementById('badge');
+var saveBtn = document.getElementById('saveBtn');
+var refreshBtn = document.getElementById('refreshBtn');
+var gridInput = document.getElementById('gridSize');
+var swatchesEl = document.getElementById('swatches');
+var popupEl = document.getElementById('createPopup');
+var popListEl = document.getElementById('popList');
+var popCellEl = document.getElementById('popCell');
+var popStatusEl = document.getElementById('popStatus');
+
+var state = { rev: 0, grid: { size: 18 }, pieces: [], chips: [], pings: [] };
+var actorColor = localStorage.getItem('frigateColor') || 'green';
+var sel = null;                      // { type: 'piece'|'chip', id: ... }
+var view = { x: 0, y: 0, zoom: 1 };
+var lastCreate = { x: 0, y: 0 };
+var activeCreateType = 'piece';
+var pieceCatalog = [];               // [{file, label}]
+var masterImages = {};               // file -> Image
+var tintCache = {};                  // file|color -> dataURL
+var shownPings = {};                 // dedupe key -> time
+var synced = false;
+var lastSync = null;
+
+/* ===== small helpers ===== */
+function el(tag, cls, parent) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+function uid(prefix) {
+  return prefix + Date.now().toString(36) + Math.floor(Math.random() * 1679616).toString(36);
+}
+function cellPx(c) { return c * CELL; }
+
+function occupancy(x, y) {
+  var i;
+  for (i = 0; i < state.pieces.length; i++) {
+    if (state.pieces[i].x === x && state.pieces[i].y === y) return 'piece';
+  }
+  for (i = 0; i < state.chips.length; i++) {
+    if (state.chips[i].x === x && state.chips[i].y === y) return 'chip';
+  }
+  return null;
+}
+
+/* ===== canvas tinting ===== */
+function loadMaster(file) {
+  var m = masterImages[file];
+  if (m) return m;
+  m = new Image();
+  m.src = 'pieces/images/' + file + '.png';
+  m.onload = function () {
+    renderPieces();
+    renderChips();
+    buildCreateList();
+  };
+  masterImages[file] = m;
+  return m;
+}
+
+function hexToRgb(hex) {
+  var n = parseInt(hex.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function tintedSrc(file, color) {
+  var key = file + '|' + color;
+  if (tintCache[key]) return tintCache[key];
+  var m = masterImages[file];
+  if (!m || !m.complete || !m.naturalWidth) return null;
+  try {
+    var canvas = document.createElement('canvas');
+    canvas.width = m.naturalWidth; canvas.height = m.naturalHeight;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(m, 0, 0);
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var px = data.data;
+    var rgb = hexToRgb(PALETTE[color] || '#7fa0b0');
+    var i, lum, f;
+    for (i = 0; i < px.length; i += 4) {
+      if (px[i + 3] === 0) continue;
+      lum = (px[i] + px[i + 1] + px[i + 2]) / 3;
+      f = lum > 150 ? 1 : (lum > 60 ? 0.62 : 0.3);
+      px[i] = Math.round(rgb.r * f);
+      px[i + 1] = Math.round(rgb.g * f);
+      px[i + 2] = Math.round(rgb.b * f);
+    }
+    ctx.putImageData(data, 0, 0);
+    tintCache[key] = canvas.toDataURL('image/png');
+    return tintCache[key];
+  } catch (e) {
+    return 'pieces/images/' + file + '.png';
+  }
+}
+
+function setTinted(imgEl, file, color) {
+  loadMaster(file);
+  var src = tintedSrc(file, color);
+  imgEl.src = src || ('pieces/images/' + file + '.png');
+}
+
+/* ===== grid / view ===== */
+function renderGrid() {
+  var px = state.grid.size * CELL;
+  worldEl.style.width = px + 'px';
+  worldEl.style.height = px + 'px';
+  worldEl.style.backgroundSize = CELL + 'px ' + CELL + 'px';
+  gridInput.value = state.grid.size;
+}
+function applyView() {
+  worldEl.style.transform = 'translate(' + view.x + 'px,' + view.y + 'px) scale(' + view.zoom + ')';
+}
+function clientToCell(cx, cy) {
+  var r = boardEl.getBoundingClientRect();
+  var wx = (cx - r.left - view.x) / view.zoom;
+  var wy = (cy - r.top - view.y) / view.zoom;
+  return { x: Math.floor(wx / CELL), y: Math.floor(wy / CELL) };
+}
+
+/* ===== rendering the objects ===== */
+function countersFor(obj) {
+  var cr = el('span', 'ctr ctr-red');
+  cr.textContent = String(obj.buttons.red);
+  var cg = el('span', 'ctr ctr-grey');
+  cg.textContent = String(obj.buttons.grey);
+  return { cr: cr, cg: cg };
+}
+
+function renderPieces() {
+  piecesEl.innerHTML = '';
+  var i;
+  for (i = 0; i < state.pieces.length; i++) {
+    var p = state.pieces[i];
+    var d = el('div', 'piece');
+    d.setAttribute('data-cid', p.id);
+    d.style.left = cellPx(p.x) + 'px';
+    d.style.top = cellPx(p.y) + 'px';
+    d.style.width = CELL + 'px';
+    d.style.height = CELL + 'px';
+    var im = el('img');
+    im.alt = p.img;
+    setTinted(im, p.img, p.color);
+    d.appendChild(im);
+    var c = countersFor(p);
+    d.appendChild(c.cr);
+    d.appendChild(c.cg);
+    var cls = 'piece';
+    if (p.exhausted) cls += ' exhausted';
+    if (sel && sel.type === 'piece' && sel.id === p.id) cls += ' selected';
+    d.className = cls;
+    piecesEl.appendChild(d);
+  }
+}
+
+function renderChips() {
+  chipsEl.innerHTML = '';
+  var groups = {};
+  var i, p, key;
+  for (i = 0; i < state.chips.length; i++) {
+    p = state.chips[i];
+    key = p.x + ',' + p.y;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  }
+  for (var gk in groups) {
+    var arr = groups[gk];
+    var xy = gk.split(',');
+    var cont = el('div', 'cell-chips');
+    cont.style.left = cellPx(Number(xy[0])) + 'px';
+    cont.style.top = cellPx(Number(xy[1])) + 'px';
+    cont.style.width = CELL + 'px';
+    cont.style.height = CELL + 'px';
+    var n = arr.length;
+    var dim = Math.ceil(Math.sqrt(n));
+    var box = CELL / dim;
+    for (i = 0; i < n; i++) {
+      p = arr[i];
+      var c = el('div', 'chip');
+      c.setAttribute('data-cid', p.id);
+      c.style.left = Math.round((i % dim) * box + (box - CHIP) / 2) + 'px';
+      c.style.top = Math.round(Math.floor(i / dim) * box + (box - CHIP) / 2) + 'px';
+      c.style.width = CHIP + 'px';
+      c.style.height = CHIP + 'px';
+      var im = el('img');
+      im.alt = p.img;
+      setTinted(im, p.img, p.color);
+      c.appendChild(im);
+      var cb = countersFor(p);
+      c.appendChild(cb.cr);
+      c.appendChild(cb.cg);
+      if (sel && sel.type === 'chip' && sel.id === p.id) c.className = 'chip selected';
+      cont.appendChild(c);
+    }
+    chipsEl.appendChild(cont);
+  }
+}
+
+/* ===== pings ===== */
+function showPing(color, x, y) {
+  var d = el('div', 'ping');
+  d.style.left = cellPx(x) + 'px';
+  d.style.top = cellPx(y) + 'px';
+  d.style.background = PALETTE[color] || '#9aa4ae';
+  pingsEl.appendChild(d);
+  setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, PING_TTL);
+}
+
+/* ===== selection / move ===== */
+function findObj(type, id) {
+  var list = type === 'piece' ? state.pieces : state.chips;
+  var i;
+  for (i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+function selectAt(x, y) {
+  var i;
+  for (i = 0; i < state.pieces.length; i++) {
+    if (state.pieces[i].x === x && state.pieces[i].y === y) {
+      return { type: 'piece', id: state.pieces[i].id };
+    }
+  }
+  for (i = 0; i < state.chips.length; i++) {
+    if (state.chips[i].x === x && state.chips[i].y === y) {
+      return { type: 'chip', id: state.chips[i].id };
+    }
+  }
+  return null;
+}
+function setSelection(next) {
+  if (sel && next && sel.type === next.type && sel.id === next.id) {
+    sel = null;               // clicking again deselects
+  } else {
+    sel = next;
+  }
+  renderPieces();
+  renderChips();
+}
+
+function flashBlocked(x, y) {
+  var d = el('div', 'blockflash');
+  d.style.left = cellPx(x) + 'px';
+  d.style.top = cellPx(y) + 'px';
+  d.style.width = CELL + 'px';
+  d.style.height = CELL + 'px';
+  worldEl.appendChild(d);
+  setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 420);
+}
+
+function canMoveTo(type, id, x, y) {
+  var same = findObj(type, id);
+  if (same && same.x === x && same.y === y) return true;
+  var occ = occupancy(x, y);
+  if (!occ) return true;
+  if (type === 'chip' && occ === 'chip') return true;   // chips can share with chips
+  return false;
+}
+
+/* ===== interactions on the board ===== */
+var drag = null;
+boardEl.addEventListener('mousedown', function (e) {
+  if (e.button === 1) {           // middle-click = ping
+    e.preventDefault();
+    var cell = clientToCell(e.clientX, e.clientY);
+    if (cell.x >= 0 && cell.y >= 0 && cell.x < state.grid.size && cell.y < state.grid.size) {
+      shownPings[cell.x + ',' + cell.y + ',' + Date.now() + ',' + actorColor] = Date.now();
+      showPing(actorColor, cell.x, cell.y);
+      queue('pg:' + cell.x + ',' + cell.y + ',' + actorColor, { action: 'ping', x: cell.x, y: cell.y, color: actorColor });
+    }
+    return;
+  }
+  if (e.button !== 0) return;
+  drag = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
+});
+
+window.addEventListener('mousemove', function (e) {
+  if (!drag) return;
+  var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
+  if (drag.moved) {
+    view.x = drag.ox + dx;
+    view.y = drag.oy + dy;
+    boardEl.className = 'dragging';
+    applyView();
+  }
+});
+
+window.addEventListener('mouseup', function (e) {
+  if (!drag) return;
+  var wasDrag = drag.moved;
+  drag = null;
+  boardEl.className = '';
+  if (wasDrag) return;
+  handleClick(e.clientX, e.clientY);
+});
+
+boardEl.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  var r = boardEl.getBoundingClientRect();
+  var mx = e.clientX - r.left, my = e.clientY - r.top;
+  var f = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+  var z = clamp(view.zoom * f, MIN_ZOOM, MAX_ZOOM);
+  view.x = mx - (mx - view.x) * (z / view.zoom);
+  view.y = my - (my - view.y) * (z / view.zoom);
+  view.zoom = z;
+  applyView();
+}, { passive: false });
+
+function handleClick(cx, cy) {
+  var cell = clientToCell(cx, cy);
+  var size = state.grid.size;
+  if (cell.x < 0 || cell.y < 0 || cell.x >= size || cell.y >= size) return;
+
+  var hit = selectAt(cell.x, cell.y);
+  if (hit) { setSelection(hit); return; }
+
+  if (sel) {
+    var obj = findObj(sel.type, sel.id);
+    if (obj) {
+      if (canMoveTo(sel.type, sel.id, cell.x, cell.y)) {
+        moveObject(sel.type, sel.id, cell.x, cell.y);
+      } else {
+        flashBlocked(cell.x, cell.y);
+      }
+    }
+    return;
+  }
+
+  openCreate(cell.x, cell.y);
+}
+
+/* ===== counter buttons (delegated) ===== */
+function findCtr(node) {
+  for (var i = 0; i < 4 && node; i++) {
+    if (node.className && String(node.className).indexOf('ctr ') === 0) return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+function counterDelta(ctrNode, delta) {
+  var holder = ctrNode.parentNode;              // .piece or .chip
+  var type = holder.className.indexOf('chip') === 0 ? 'chip' : 'piece';
+  var id = holder.getAttribute('data-cid');
+  var which = ctrNode.className.indexOf('ctr-red') !== -1 ? 'red' : 'grey';
+  var obj = null;
+  var list = type === 'piece' ? state.pieces : state.chips;
+  var i;
+  for (i = 0; i < list.length; i++) if (list[i].id === id) { obj = list[i]; break; }
+  if (!obj) return;
+  var v = (Number(obj.buttons[which]) || 0) + delta;
+  if (v < 0) v = 0;
+  obj.buttons[which] = v;
+  ctrNode.textContent = String(v);
+  queue('ct:' + type + ':' + id + ':' + which, { action: 'counter', type: type, id: id, which: which, value: v });
+}
+function toggleExhaust(node) {
+  var id = node.getAttribute('data-cid');
+  var obj = findObj('piece', id);
+  if (!obj) return;
+  obj.exhausted = obj.exhausted ? 0 : 1;
+  renderPieces();
+  queue('ex:' + id, { action: 'exhaust', type: 'piece', id: id, exhausted: obj.exhausted });
+}
+function wireCounters(layer) {
+  layer.addEventListener('mousedown', function (e) {
+    if (findCtr(e.target)) e.stopPropagation();   // don't start a pan drag
+  });
+  layer.addEventListener('click', function (e) {
+    var c = findCtr(e.target);
+    if (!c) return;
+    e.stopPropagation();
+    counterDelta(c, +1);
+  });
+  layer.addEventListener('contextmenu', function (e) {
+    var c = findCtr(e.target);
+    if (c) {
+      e.preventDefault();
+      e.stopPropagation();
+      counterDelta(c, -1);
+      return;
+    }
+    if (layer !== piecesEl) return;                 // counter right-click only exists on pieces/chips layers
+    var n = e.target;
+    var i;
+    for (i = 0; i < 4 && n; i++) {
+      if (n.className && String(n.className).indexOf('piece') === 0) {
+        e.preventDefault();
+        toggleExhaust(n);
+        return;
+      }
+      n = n.parentNode;
+    }
+  });
+}
+wireCounters(piecesEl);
+wireCounters(chipsEl);
+
+/* ===== create popup ===== */
+function showCreateList() {
+  popListEl.innerHTML = '';
+  if (pieceCatalog.length === 0) {
+    popStatusEl.textContent = 'no pieces found — drop PNGs into pieces/images';
+    return;
+  }
+  var i;
+  for (i = 0; i < pieceCatalog.length; i++) {
+    (function (entry) {
+      var b = el('button', 'choose');
+      b.type = 'button';
+      var im = el('img');
+      im.alt = entry.label;
+      setTinted(im, entry.file, actorColor);
+      b.appendChild(im);
+      b.appendChild(el('span')).textContent = entry.label;
+      b.addEventListener('click', function () {
+        createObject(activeCreateType, entry.file);
+      });
+      popListEl.appendChild(b);
+    })(pieceCatalog[i]);
+  }
+}
+function refreshCatalog(cb) {
+  popStatusEl.textContent = 'scanning pieces/images …';
+  fetch('board.php?pieces&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
+    if (data && data.ok) {
+      pieceCatalog = data.pieces || [];
+      var i;
+      for (i = 0; i < pieceCatalog.length; i++) loadMaster(pieceCatalog[i].file);
+    } else {
+      popStatusEl.textContent = 'scan failed — upload board.php to a PHP host';
+    }
+    if (cb) cb();
+  }).catch(function () {
+    popStatusEl.textContent = 'scan failed — board.php unreachable';
+    if (cb) cb();
+  });
+}
+function buildCreateList() {
+  if (popupEl.classList.contains('hidden')) return;
+  if (pieceCatalog.length === 0) refreshCatalog(function () { showCreateList(); });
+  else showCreateList();
+}
+function openCreate(x, y) {
+  lastCreate.x = x; lastCreate.y = y;
+  popCellEl.textContent = 'CREATE AT ' + x + ',' + y;
+  popupEl.classList.remove('hidden');
+  buildCreateList();
+}
+function hideCreate() { popupEl.classList.add('hidden'); }
+function setCreateType(t) {
+  activeCreateType = t;
+  var btns = popupEl.querySelectorAll('.pv');
+  var i;
+  for (i = 0; i < btns.length; i++) btns[i].className = btns[i].getAttribute('data-createtype') === t ? 'pv on' : 'pv';
+  showCreateList();
+}
+popupEl.querySelectorAll('.pv').forEach(function (b) {
+  b.addEventListener('click', function () { setCreateType(b.getAttribute('data-createtype')); });
+});
+document.getElementById('popClose').addEventListener('click', hideCreate);
+document.getElementById('popReload').addEventListener('click', function () { refreshCatalog(function () { showCreateList(); }); });
+popupEl.addEventListener('click', function (e) {
+  if (e.target === popupEl) hideCreate();
+});
+
+/* ===== create / move ===== */
+function createObject(type, file) {
+  var obj = {
+    id: uid(type === 'piece' ? 'p' : 'c'),
+    img: file,
+    color: actorColor,
+    x: lastCreate.x,
+    y: lastCreate.y,
+    buttons: { red: 0, grey: 0 },
+    exhausted: 1
+  };
+  if (type === 'piece') {
+    state.pieces.push(obj);
+    renderPieces();
+  } else {
+    state.chips.push(obj);
+    renderChips();
+  }
+  hideCreate();
+  queue('cr:' + obj.id, { action: 'create', type: type, id: obj.id, img: file, x: obj.x, y: obj.y, color: actorColor });
+}
+function moveObject(type, id, x, y) {
+  var obj = findObj(type, id);
+  if (!obj) return;
+  obj.x = x; obj.y = y;
+  if (type === 'piece') renderPieces(); else renderChips();
+  queue('mv:' + id, { action: 'move', type: type, id: id, x: x, y: y });
+}
+
+/* ===== networking ===== */
+var pending = { order: [], map: {} };
+
+function queue(key, action) {
+  if (!pending.map[key]) pending.order.push(key);
+  pending.map[key] = action;
+  setBadge();
+}
+
+function actionKey(act) {
+  switch (act.action) {
+    case 'resize':  return 'resize';
+    case 'create':  return 'cr:' + act.id;
+    case 'move':    return 'mv:' + act.id;
+    case 'counter': return 'ct:' + act.type + ':' + act.id + ':' + act.which;
+    case 'exhaust': return 'ex:' + act.id;
+    case 'ping':    return 'pg:' + act.x + ',' + act.y + ',' + act.color;
+  }
+  return 'act:' + act.action + ':' + Math.random();
+}
+
+function batchPayload() {
+  var batch = [];
+  for (var i = 0; i < pending.order.length; i++) batch.push(pending.map[pending.order[i]]);
+  return batch;
+}
+
+function requeue(batch) {
+  for (var i = 0; i < batch.length; i++) {
+    var act = batch[i];
+    var key = actionKey(act);
+    if (!pending.map[key]) pending.order.push(key);
+    pending.map[key] = act;
+  }
+}
+
+function saveChanges() {
+  if (pending.order.length === 0) return;
+  saveBtn.disabled = true;
+  refreshBtn.disabled = true;
+  var batch = batchPayload();
+  pending = { order: [], map: {} };
+  fetch('board.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batch: batch })
+  }).then(function (r) { return r.json(); }).then(function (data) {
+    if (data && data.ok && data.state) { synced = true; applyServer(data.state); }
+    else { synced = false; requeue(batch); }
+  }).catch(function () {
+    synced = false;
+    requeue(batch);
+  }).then(function () {
+    saveBtn.disabled = false;
+    refreshBtn.disabled = false;
+    lastSync = new Date().toLocaleTimeString();
+    setBadge();
+  });
+}
+
+function arrSig(a) { return JSON.stringify(a); }
+
+function applyServer(s) {
+  if (!s || !s.grid) return;
+  var gridChanged = Number(s.grid.size) !== Number(state.grid.size);
+  state.grid.size = Number(s.grid.size);
+  if (gridChanged) renderGrid();
+
+  if (arrSig(s.pieces) !== arrSig(state.pieces)) {
+    state.pieces = s.pieces || [];
+    renderPieces();
+  }
+  if (arrSig(s.chips) !== arrSig(state.chips)) {
+    state.chips = s.chips || [];
+    renderChips();
+  }
+  if (sel && !findObj(sel.type, sel.id)) { sel = null; renderPieces(); renderChips(); }
+  var now = Date.now();
+  var i;
+  if (s.pings) {
+    for (i = 0; i < s.pings.length; i++) {
+      var p = s.pings[i];
+      var key = p.x + ',' + p.y + ',' + p.t + ',' + p.color;
+      if (!shownPings[key]) {
+        shownPings[key] = now;
+        showPing(p.color, p.x, p.y);
+      }
+    }
+  }
+  // prune the dedupe set periodically
+  var keys = Object.keys(shownPings);
+  for (i = 0; i < keys.length; i++) {
+    if (now - shownPings[keys[i]] > 60000) delete shownPings[keys[i]];
+  }
+  state.rev = s.rev || 0;
+}
+
+function setBadge() {
+  if (pending.order.length > 0) {
+    badgeEl.className = 'pending';
+    badgeEl.textContent = pending.order.length + ' CHANGE' + (pending.order.length === 1 ? '' : 'S') + ' — PRESS SAVE';
+    return;
+  }
+  badgeEl.className = synced ? 'on' : 'off';
+  badgeEl.textContent = synced ? 'SYNCED — last sync ' + (lastSync || 'just now')
+                                : (lastSync ? 'OFFLINE — no sync since ' + lastSync : 'NOT SYNCED — press REFRESH');
+}
+function refresh() {
+  if (pending.order.length > 0) {
+    if (!window.confirm('You have ' + pending.order.length + ' unsaved change(s). Refreshing will discard them. Continue?')) return;
+    pending = { order: [], map: {} };
+  }
+  refreshBtn.disabled = true;
+  fetch('board.php?get&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
+    if (data && data.ok && data.state) { synced = true; applyServer(data.state); }
+    else synced = false;
+  }).catch(function () { synced = false; }).then(function () {
+    lastSync = new Date().toLocaleTimeString();
+    refreshBtn.disabled = false;
+    setBadge();
+  });
+}
+saveBtn.addEventListener('click', saveChanges);
+refreshBtn.addEventListener('click', refresh);
+
+/* ===== grid size control ===== */
+gridInput.addEventListener('change', function () {
+  var n = Math.floor(Number(gridInput.value));
+  if (!n || n < 1) { gridInput.value = state.grid.size; return; }
+  n = Math.min(40, Math.max(1, n));
+  gridInput.value = n;
+  if (n === state.grid.size) return;
+  if (n < state.grid.size) {
+    var anyOutside = false;
+    var i;
+    for (i = 0; i < state.pieces.length && !anyOutside; i++) if (state.pieces[i].x >= n || state.pieces[i].y >= n) anyOutside = true;
+    for (i = 0; i < state.chips.length && !anyOutside; i++) if (state.chips[i].x >= n || state.chips[i].y >= n) anyOutside = true;
+    if (anyOutside && !window.confirm('Shrinking the grid will DESTROY pieces/chips outside the new size. Continue?')) {
+      gridInput.value = state.grid.size;
+      return;
+    }
+  }
+  state.grid.size = n;
+  renderGrid();
+  queue('resize', { action: 'resize', size: n });
+});
+
+/* ===== colour picker ===== */
+function showSwMenu() { swatchesEl.querySelector('.sw-menu').classList.remove('hidden'); }
+function closeSwMenu() { swatchesEl.querySelector('.sw-menu').classList.add('hidden'); }
+function toggleSwMenu() {
+  var m = swatchesEl.querySelector('.sw-menu');
+  if (m.classList.contains('hidden')) m.classList.remove('hidden');
+  else m.classList.add('hidden');
+}
+
+function buildSwatches() {
+  if (PALETTE[actorColor] === undefined) actorColor = 'green';
+  swatchesEl.innerHTML = '';
+  var trigger = el('button', 'sw-trigger');
+  trigger.type = 'button';
+  trigger.title = 'Choose colour';
+  trigger.style.background = PALETTE[actorColor];
+  var menu = el('div', 'sw-menu hidden');
+  var i;
+  for (i = 0; i < COLOR_ORDER.length; i++) {
+    (function (c) {
+      var b = el('button', 'sw');
+      b.type = 'button';
+      b.style.background = PALETTE[c];
+      b.title = c;
+      if (c === actorColor) b.className = 'sw on';
+      b.addEventListener('click', function () {
+        actorColor = c;
+        localStorage.setItem('frigateColor', c);
+        trigger.style.background = PALETTE[c];
+        var all = menu.querySelectorAll('.sw');
+        var k;
+        for (k = 0; k < all.length; k++) all[k].className = 'sw';
+        b.className = 'sw on';
+        closeSwMenu();
+      });
+      b.setAttribute('data-c', c);
+      menu.appendChild(b);
+    })(COLOR_ORDER[i]);
+  }
+  trigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleSwMenu();
+  });
+  swatchesEl.appendChild(trigger);
+  swatchesEl.appendChild(menu);
+}
+
+document.addEventListener('click', function (e) {
+  if (!swatchesEl.contains(e.target)) closeSwMenu();
+});
+
+/* ===== keyboard ===== */
+window.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    if (!popupEl.classList.contains('hidden')) { hideCreate(); return; }
+    if (!swatchesEl.querySelector('.sw-menu').classList.contains('hidden')) { closeSwMenu(); return; }
+    if (sel) { sel = null; renderPieces(); renderChips(); }
+  }
+});
+
+/* ===== init ===== */
+(function init() {
+  buildSwatches();
+  renderGrid();
+  applyView();
+  refreshCatalog();
+  refresh();
+  // centre the board
+  var w = state.grid.size * CELL, h = state.grid.size * CELL;
+  if (boardEl.clientWidth > w) view.x = (boardEl.clientWidth - w) / 2;
+  if (boardEl.clientHeight > h) view.y = (boardEl.clientHeight - h) / 2;
+  applyView();
+})();
+
+})();
+</script>
+</body>
+</html>
