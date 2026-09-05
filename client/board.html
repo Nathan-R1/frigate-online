@@ -26,11 +26,17 @@
 
 
 
-<div id="board">
-  <div id="world">
-    <div id="pieces" class="layer"></div>
-    <div id="chips" class="layer"></div>
-    <div id="pings" class="layer"></div>
+<div class="main">
+  <aside class="player-panel" aria-label="Player Sheet">
+    <iframe id="playerFrame" src="player.html" title="Player Sheet"></iframe>
+    <div class="player-resizer" id="playerResizer" title="Drag to resize"></div>
+  </aside>
+  <div id="board">
+    <div id="world">
+      <div id="pieces" class="layer"></div>
+      <div id="chips" class="layer"></div>
+      <div id="pings" class="layer"></div>
+    </div>
   </div>
 </div>
 
@@ -713,6 +719,30 @@ gridInput.addEventListener('change', function () {
   state.grid.size = n;
   renderGrid();
   queue('resize', { action: 'resize', size: n });
+});
+
+/* ===== side panel resize ===== */
+var playerPanel = document.querySelector('.player-panel');
+var playerResizer = document.getElementById('playerResizer');
+
+playerResizer.addEventListener('mousedown', function (e) {
+  e.preventDefault();
+  var startX = e.clientX;
+  var startW = playerPanel.offsetWidth;
+  var maxW = Math.max(240, window.innerWidth - 220);
+  document.body.classList.add('resizing');
+  function onMove(ev) {
+    var w = startW + ev.clientX - startX;
+    w = Math.max(140, Math.min(w, maxW));
+    playerPanel.style.width = w + 'px';
+  }
+  function onUp() {
+    document.body.classList.remove('resizing');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 });
 
 /* ===== colour picker ===== */
