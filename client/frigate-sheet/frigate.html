@@ -778,12 +778,26 @@
     if(!HAND_CHANNEL) return;
     HAND_CHANNEL.postMessage({ t:'snapshot', cards: handTechSnapshot() });
   }
+  function techCostNum(card, cls){
+    var inp = card ? card.querySelector(cls) : null;
+    if(!inp) return 0;
+    var v = parseFloat(inp.value);
+    return (isNaN(v) || v <= 0) ? 0 : v;
+  }
   function handleHandState(idx, state){
     var grid = document.getElementById('techGrid');
     var card = grid ? grid.children[idx] : null;
     if(!card || !isTechState(state)) return;
+    var from = techState(card);
+    var cost = 0;
+    if(from === 'hand' && state === 'played'){
+      cost = techCostNum(card, '.tcost-onbuild');
+    } else if(from === 'played' && state === 'exhausted'){
+      cost = techCostNum(card, '.tcost-onactivate');
+    }
     setTechState(card, state);
     handBroadcast();
+    if(cost > 0) adjustHullCur('energy', -cost);
   }
   function handleHandCharge(idx, delta){
     var grid = document.getElementById('techGrid');
