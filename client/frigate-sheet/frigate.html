@@ -54,17 +54,17 @@
       <div class="class-body">
       <div class="stat-strip">
         <div class="stat hull">
-          <svg class="icon dec" onclick="decrementStat('hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="decrementStat('hullCur')" oncontextmenu="incrementStat(event,'hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="hullCur" value="5" maxlength="2"><span class="sep">/</span><input id="hullMax" value="5" maxlength="2"></div>
           <div class="lbl">Hull HP</div>
         </div>
         <div class="stat shield">
-          <svg class="icon dec" onclick="decrementStat('shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="decrementStat('shieldCur')" oncontextmenu="incrementStat(event,'shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="shieldCur" value="6" maxlength="2"><span class="sep">/</span><input id="shieldMax" value="6" maxlength="2"></div>
           <div class="lbl">Base Shield</div>
         </div>
         <div class="stat energy">
-          <svg class="icon dec" onclick="decrementStat('energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="decrementStat('energyCur')" oncontextmenu="incrementStat(event,'energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="energyCur" value="6" maxlength="2"><span class="sep">/</span><input id="energyMax" value="6" maxlength="2"></div>
           <div class="lbl">Energy</div>
         </div>
@@ -74,7 +74,7 @@
           <div class="lbl">Storage</div>
         </div>
         <div class="stat speed">
-          <svg class="icon dec" onclick="decrementStat('speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="decrementStat('speedCur')" oncontextmenu="incrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedMax" value="2" maxlength="2"></div>
           <div class="lbl">Speed</div>
         </div>
@@ -215,9 +215,6 @@
     </div>
   </div>
 
-  <footer>Fleet Command &nbsp;//&nbsp; Vessel Operations Manual &nbsp;//&nbsp; Sheet rev. 01</footer>
-</div>
-
 <script src="presets/tech-presets.js"></script>
 <script src="presets/crew-presets.js"></script>
 <script src="presets/mod-presets.js"></script>
@@ -239,6 +236,14 @@
     var v = parseInt(el.value, 10);
     if(isNaN(v)) v = 0;
     if(v > 0) el.value = v - 1;
+  }
+  function incrementStat(e, id){
+    if(e && e.preventDefault) e.preventDefault();
+    var el = document.getElementById(id);
+    if(!el) return;
+    var v = parseInt(el.value, 10);
+    if(isNaN(v)) v = 0;
+    el.value = v + 1;
   }
   var SKILL_DESCRIPTIONS = {
     'Engineering': 'Engineering is added to Hull HP (min. 0)',
