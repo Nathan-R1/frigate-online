@@ -717,11 +717,15 @@ function setBadge() {
   if (pending.order.length > 0) {
     badgeEl.className = 'pending';
     badgeEl.textContent = pending.order.length + ' CHANGE' + (pending.order.length === 1 ? '' : 'S') + ' — PRESS SAVE';
+    badgeEl.title = '';
     return;
   }
   badgeEl.className = synced ? 'on' : 'off';
-  badgeEl.textContent = synced ? 'SYNCED — last sync ' + (lastSync || 'just now')
-                                : (lastSync ? 'OFFLINE — no sync since ' + lastSync : 'NOT SYNCED — press REFRESH');
+  badgeEl.title = synced
+    ? 'Last sync: ' + (lastSync || 'just now')
+    : (lastSync ? 'Offline — no sync since ' + lastSync : 'Not synced — press REFRESH');
+  badgeEl.textContent = synced ? 'SYNCED'
+                               : (lastSync ? 'OFFLINE' : 'NOT SYNCED');
 }
 function refresh() {
   if (pending.order.length > 0) {
