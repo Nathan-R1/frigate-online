@@ -204,6 +204,9 @@ min-width:0;
 @media (max-width:320px){
 
     .eyebrow .eb-text{display:none;}
+    table.skills th:first-child{display:none;}
+    table.skills td:first-child .sk-name{display:none;}
+    table.skills td:first-child{text-align:center;padding-right:2px;}
   
   }
 /* ===== class/stats panel ===== */
