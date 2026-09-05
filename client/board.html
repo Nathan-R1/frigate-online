@@ -26,9 +26,15 @@
         <input type="number" id="gridSize" min="1" max="40" value="18" title="Board width &amp; height (Enter to apply)">
       </div>
       <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
-      <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
-      <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
-      <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
+      <div class="settings-submenu-wrap">
+        <button type="button" class="settings-item view-btn" id="viewBtn" title="View options">View ▸</button>
+        <div class="settings-submenu" id="viewMenu">
+          <button type="button" class="settings-item" id="verticalToggleBtn" title="Show the stats bar vertically along the right edge">Vertical</button>
+          <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
+          <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
+          <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
+        </div>
+      </div>
       <button type="button" class="settings-item" id="classInfoBtn" title="Show the class details">Class Info</button>
     </div>
   </div>
@@ -912,8 +918,53 @@ function toggleMenu() {
   menuToggleBtn.textContent = hidden ? 'Show Menu' : 'Hide Menu';
   menuToggleBtn.title = hidden ? 'Show the top menu bar' : 'Hide the top menu bar';
   closeSettingsMenu();
+  syncVerticalTop();
 }
 menuToggleBtn.addEventListener('click', toggleMenu);
+
+var viewBtn = document.getElementById('viewBtn');
+var viewMenu = document.getElementById('viewMenu');
+viewBtn.addEventListener('click', function (e) {
+  e.stopPropagation();
+  viewMenu.classList.toggle('open');
+});
+
+var verticalToggleBtn = document.getElementById('verticalToggleBtn');
+function syncVerticalTop() {
+  if (!statsBar.classList.contains('vertical-stats')) return;
+  statsBar.style.top = topbarEl.offsetHeight + 'px';
+}
+function toggleVertical() {
+  var v = statsBar.classList.toggle('vertical-stats');
+  verticalToggleBtn.textContent = v ? 'Horizontal' : 'Vertical';
+  verticalToggleBtn.title = v ? 'Show the stats bar horizontally at the top' : 'Show the stats bar vertically along the right edge';
+  if (!v) {
+    statsBar.style.top = '';
+    statsBar.style.height = '';
+  } else {
+    syncVerticalTop();
+  }
+  if (statsBar.contentWindow) statsBar.contentWindow.postMessage({ t: 'vertical', on: v }, '*');
+  closeSettingsMenu();
+}
+verticalToggleBtn.addEventListener('click', toggleVertical);
+window.addEventListener('resize', syncVerticalTop);
+
+window.addEventListener('message', function (e) {
+  if (!statsBar || e.source !== statsBar.contentWindow) return;
+  var m = e.data;
+  if (!m || typeof m !== 'object' || m.t !== 'sbheight') return;
+  if (statsBar.classList.contains('vertical-stats')) {
+    statsBar.style.height = (parseInt(m.h, 10) || 0) + 'px';
+    syncVerticalTop();
+  }
+});
+
+statsBar.addEventListener('load', function () {
+  if (!statsBar.contentWindow) return;
+  statsBar.contentWindow.postMessage({ t: 'vertical', on: statsBar.classList.contains('vertical-stats') }, '*');
+  statsBar.contentWindow.postMessage({ t: 'detail', on: statsBar.classList.contains('detailed-stats') }, '*');
+});
 
 var CLASS_PRESETS = {
   'Support Class': { stats: {hull:2, shield:2, storage:2}, techName: 'Repulsor Unit', modName: 'Repulsor Unit' },

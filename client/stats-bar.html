@@ -51,7 +51,28 @@
   .sb-skills.hidden { display: none; }
   .sb-skill { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: default; }
   .sb-skill svg { width: 19px; height: 19px; opacity: .85; }
+  .sb-skill-label { display: none; font: 600 11px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-mid); }
   .sb-skill-num { font-family: var(--mono); font-weight: 700; font-size: 15px; line-height: 1; color: var(--ink); }
+  .sb-wrap.vertical { height: auto; flex-direction: column; align-items: stretch; }
+  .sb-wrap.vertical .sb {
+    order: 2; flex: 1 1 auto;
+    display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+  }
+  .sb-wrap.vertical .sb-left,
+  .sb-wrap.vertical .sb-right { display: none; }
+  .sb-wrap.vertical .sb-center {
+    flex-direction: column; align-items: center; gap: 12px;
+    height: auto; max-height: none; padding: 12px 0;
+  }
+  .sb-wrap.vertical .sb-sep,
+  .sb-wrap.vertical .sb-max { display: none; }
+  .sb-wrap.vertical .sb-skills {
+    order: 1; flex: none;
+    flex-direction: column; justify-content: flex-start; align-items: center;
+    gap: 8px; height: auto; padding: 12px 0;
+    border-top: none; border-bottom: 1px solid #1f2a38;
+  }
+  .sb-wrap.vertical .sb-skill { gap: 8px; }
 </style>
 </head>
 <body>
@@ -98,8 +119,16 @@
   var skillEls = {};
   var skillValues = {};
   var detailOn = false;
+  var verticalOn = false;
+  var sbWrap = document.getElementById('sbWrap');
   var skillsEl = document.getElementById('sbSkills');
 
+  function updateSkillsVisibility(){
+    skillsEl.classList.toggle('hidden', !(verticalOn || detailOn));
+  }
+  function reportHeight(){
+    window.parent.postMessage({ t: 'sbheight', h: sbWrap.offsetHeight }, '*');
+  }
   function buildSkills(){
     skillsEl.innerHTML = '';
     for (var i = 0; i < SKILL_META.length; i++) {
@@ -108,10 +137,14 @@
         item.className = 'sb-skill';
         var icon = document.createElement('span');
         icon.innerHTML = m.svg;
+        var label = document.createElement('span');
+        label.className = 'sb-skill-label';
+        label.textContent = m.key;
         var num = document.createElement('span');
         num.className = 'sb-skill-num';
         num.textContent = '–';
         item.appendChild(icon);
+        item.appendChild(label);
         item.appendChild(num);
         skillsEl.appendChild(item);
         skillEls[m.key] = num;
@@ -178,11 +211,21 @@
   }
   window.addEventListener('message', function (e) {
     var m = e.data;
-    if (!m || typeof m !== 'object' || m.t !== 'detail') return;
-    detailOn = !!m.on;
-    skillsEl.classList.toggle('hidden', !detailOn);
+    if (!m || typeof m !== 'object') return;
+    if (m.t === 'detail') {
+      detailOn = !!m.on;
+      updateSkillsVisibility();
+    } else if (m.t === 'vertical') {
+      verticalOn = !!m.on;
+      sbWrap.classList.toggle('vertical', verticalOn);
+      updateSkillsVisibility();
+      reportHeight();
+    }
   });
   buildSkills();
+  reportHeight();
+  window.addEventListener('resize', function () { if (verticalOn) reportHeight(); });
+  setInterval(function () { if (verticalOn) reportHeight(); }, 1200);
   if(typeof BroadcastChannel === 'undefined') return;
   var ch = new BroadcastChannel('frigate-hull-stats');
   ch.onmessage = function(ev){
