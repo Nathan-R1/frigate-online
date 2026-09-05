@@ -798,6 +798,42 @@
     refreshTechSections(card);
     handBroadcast();
   }
+  var HULL_CHANNEL = null;
+  function initHullStats(){
+    if(typeof BroadcastChannel === 'undefined') return;
+    HULL_CHANNEL = new BroadcastChannel('frigate-hull-stats');
+    HULL_CHANNEL.onmessage = function(ev){
+      var m = ev.data;
+      if(!m || !m.t) return;
+      if(m.t === 'hello'){ broadcastHullStats(); return; }
+      if(m.t === 'adjust'){ adjustHullCur(m.key, m.delta); return; }
+    };
+    broadcastHullStats();
+    setInterval(broadcastHullStats, 750);
+  }
+  function adjustHullCur(key, delta){
+    if(['hull','shield','energy','speed'].indexOf(key) === -1) return;
+    var el = document.getElementById(key + 'Cur');
+    if(!el) return;
+    var v = parseInt(el.value, 10);
+    if(isNaN(v)) v = 0;
+    el.value = Math.max(0, v + (parseInt(delta, 10) || 0));
+    broadcastHullStats();
+  }
+  function statVal(id){
+    var el = document.getElementById(id);
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? 0 : v;
+  }
+  function broadcastHullStats(){
+    if(!HULL_CHANNEL) return;
+    HULL_CHANNEL.postMessage({ t:'stats', stats:{
+      hull:   { cur: statVal('hullCur'),   max: statVal('hullMax') },
+      shield: { cur: statVal('shieldCur'), max: statVal('shieldMax') },
+      energy: { cur: statVal('energyCur'), max: statVal('energyMax') },
+      speed:  { cur: statVal('speedCur'),  max: statVal('speedMax') }
+    }});
+  }
   function setTechType(el, key){
     var meta = techTypeMeta(key);
     el.setAttribute('data-tt', meta.key);
@@ -1618,6 +1654,7 @@
     }
     initHandChannel();
     handBroadcast();
+    initHullStats();
     var mods = document.querySelectorAll('.mod-card .mtype-btn');
     for(var m=0;m<mods.length;m++){
       setModType(mods[m], mods[m].getAttribute('data-mtype'));
