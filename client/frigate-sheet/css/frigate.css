@@ -43,6 +43,18 @@
 .theme-wrap{
 text-align:center;margin-bottom:16px;
   }
+.menu-brand input.name{
+    background:none;border:none;border-bottom:1px solid var(--line-bright);
+    color:var(--cyan);
+    font-family:var(--disp);font-weight:700;font-size:16px;letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:1px 4px;
+    width:min(100%,320px);
+    min-width:200px;
+  }
+.menu-brand input.name:focus{
+outline:none;border-bottom-color:var(--cyan);
+  }
 /* ===== header ===== */
   .topbar{
 
@@ -171,6 +183,8 @@ min-width:0;
 
     body{padding:16px 10px 48px;}
     .panel{padding:16px 14px;}
+    .menu-brand{flex:1;min-width:0;}
+    .menu-brand input.name{min-width:0;width:100%;}
     .topbar{
       grid-template-columns:1fr;
       gap:12px;
