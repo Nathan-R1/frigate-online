@@ -4,7 +4,7 @@
  *
  * GET  board.php?get       -> full board state (JSON)
  * GET  board.php?pieces    -> autoscanned list from pieces/images/*.png
- * POST board.php           -> one JSON action: resize | create | move | counter | ping
+ * POST board.php           -> one JSON action: resize | create | move | counter | exhaust | ping | delete
  *
  * The board state lives in board-state.json. Writes are serialised with flock
  * and saved atomically (temp file + rename) so the state can never be half-written.
@@ -18,11 +18,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 define('STATE_FILE', __DIR__ . '/board-state.json');
 define('IMAGES_DIR', __DIR__ . '/../client/pieces/images');
-define('BOARD_VERSION', 7);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
+define('BOARD_VERSION', 8);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
 define('MAX_SIZE', 40);
 define('PING_TTL', 4);
 
-$VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping');
+$VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping', 'delete');
 $VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink');
 $PACKET_LIMIT  = 65536;
 
@@ -211,6 +211,20 @@ function actMove(&$s, $a) {
     return null;
 }
 
+function actDelete(&$s, $a) {
+    $type = $a['type'];
+    if ($type !== 'piece' && $type !== 'chip') return array('error' => 'bad type');
+    if (!isSafeId($a['id'])) return array('error' => 'bad id');
+    $key = ($type === 'piece') ? 'pieces' : 'chips';
+    foreach ($s[$key] as $i => $o) {
+        if ($o['id'] === $a['id']) {
+            array_splice($s[$key], $i, 1);
+            return null;
+        }
+    }
+    return array('error' => 'not found');
+}
+
 function actCounter(&$s, $a) {
     $type = $a['type'];
     if ($type !== 'piece' && $type !== 'chip') return array('error' => 'bad type');
@@ -307,6 +321,7 @@ if ($method === 'POST') {
                     case 'counter': $r = actCounter($s, $act); break;
                     case 'exhaust': $r = actExhaust($s, $act); break;
                     case 'ping':    $r = actPing($s, $act);    break;
+                    case 'delete':  $r = actDelete($s, $act);  break;
                 }
                 if (is_array($r) && isset($r['error'])) return $r;   // abort the whole batch, nothing saved
             }
@@ -329,6 +344,7 @@ if ($method === 'POST') {
             case 'counter': return actCounter($s, $a);
             case 'exhaust': return actExhaust($s, $a);
             case 'ping':    return actPing($s, $a);
+            case 'delete':  return actDelete($s, $a);
         }
         return array('error' => 'unknown action');
     });
