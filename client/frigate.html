@@ -640,7 +640,7 @@ function showCreateList() {
 }
 function refreshCatalog(cb) {
   popStatusEl.textContent = 'scanning pieces/images …';
-  fetch('board.php?pieces&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
+  fetch('../server/board.php?pieces&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
     if (data && data.ok) {
       pieceCatalog = data.pieces || [];
       var i;
@@ -753,7 +753,7 @@ function saveChanges() {
   refreshBtn.disabled = true;
   var batch = batchPayload();
   pending = { order: [], map: {} };
-  fetch('board.php', {
+  fetch('../server/board.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch: batch })
@@ -824,7 +824,7 @@ function refresh() {
     pending = { order: [], map: {} };
   }
   refreshBtn.disabled = true;
-  fetch('board.php?get&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
+  fetch('../server/board.php?get&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
     if (data && data.ok && data.state) { synced = true; applyServer(data.state); }
     else synced = false;
   }).catch(function () { synced = false; }).then(function () {

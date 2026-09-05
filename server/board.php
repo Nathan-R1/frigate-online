@@ -17,7 +17,7 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 define('STATE_FILE', __DIR__ . '/board-state.json');
-define('IMAGES_DIR', __DIR__ . '/pieces/images');
+define('IMAGES_DIR', __DIR__ . '/../client/pieces/images');
 define('BOARD_VERSION', 7);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
 define('MAX_SIZE', 40);
 define('PING_TTL', 4);
