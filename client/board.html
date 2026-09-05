@@ -45,6 +45,9 @@
       <div id="pings" class="layer"></div>
     </div>
   </div>
+  <div class="hand-slot" id="handSlot">
+    <iframe id="handFrame" src="frigate-sheet/hand.html" title="Tech Hand"></iframe>
+  </div>
 </div>
 
 <div id="createPopup" class="overlay hidden">
@@ -872,6 +875,15 @@ rulesPopup.addEventListener('click', function (e) {
 
 document.addEventListener('click', function (e) {
   if (!settingsWrap.contains(e.target)) closeSettingsMenu();
+});
+
+/* ===== tech hand bar ===== */
+var handSlot = document.getElementById('handSlot');
+var handFrame = document.getElementById('handFrame');
+window.addEventListener('message', function (e) {
+  if (!handFrame || e.source !== handFrame.contentWindow) return;
+  if (e.data === 'hand:expand') handSlot.classList.add('expanded');
+  else if (e.data === 'hand:collapse') handSlot.classList.remove('expanded');
 });
 
 /* ===== keyboard ===== */

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tech Hand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/hand.css">
+</head>
+<body>
+<div class="hand-dock" id="handDock">
+  <div class="hand-bar">
+    <div class="hand-slider" id="handSlider">
+      <div class="hand-slider-track"></div>
+      <div class="hand-slider-thumb" id="handSliderThumb"></div>
+    </div>
+    <button type="button" class="hand-tab" id="handTab" onclick="toggleHand()">
+      <span class="hand-label">Tech Hand</span>
+      <span class="hand-count" id="handCount">0</span>
+      <span class="hand-caret">▴</span>
+    </button>
+    <div class="hand-sort">
+      <label for="handSort">Sort</label>
+      <span class="sort-wrap">
+        <select id="handSort" onchange="onHandSortChange()">
+          <option value="az">Name</option>
+          <option value="trait">Trait</option>
+          <option value="type">Type</option>
+          <option value="energy">Energy</option>
+        </select>
+        <button type="button" class="hand-icon-btn" id="handSortBtn" onclick="openHandSelect('handSort')" title="Sort hand">⇵</button>
+      </span>
+      <div class="slot-menu-wrap">
+        <button type="button" class="hand-filter-btn" id="handFilterBtn" onclick="toggleFilterMenu(event)" title="Filter hand">
+          <span class="fico" aria-hidden="true">ᯤ</span>
+          <span class="flabel">Filter</span>
+          <span class="fcount" id="handFilterCount">0</span>
+        </button>
+        <div class="preset-menu filter-menu" id="handFilterMenu"></div>
+      </div>
+    </div>
+  </div>
+  <div class="hand-view">
+    <div class="hand" id="hand"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var TECH_TYPES = [
+    {key:'offense', icon:'⚔', label:'Offense'},
+    {key:'defense', icon:'🛡', label:'Defense'},
+    {key:'movement', icon:'➤', label:'Movement'},
+    {key:'science', icon:'⚛︎', label:'Science'}
+  ];
+  function techTypeMeta(key){
+    for(var i=0;i<TECH_TYPES.length;i++){ if(TECH_TYPES[i].key===key) return TECH_TYPES[i]; }
+    return TECH_TYPES[0];
+  }
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function energyLabel(label, cost){
+    if(cost && cost !== '0'){
+      return label + ' <span class="hc-cost-inline">' + escapeHtml(cost) +
+        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>';
+    }
+    return label;
+  }
+  var HAND_SORT = 'az';
+  var HAND_TYPE_ORDER = { offense:0, defense:1, movement:2, science:3 };
+  var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
+  var HAND_DATA = [];
+  var HAND_CHANNEL = null;
+  function nextHandCardState(cur){
+    return (cur === 'played') ? 'exhausted' : 'played';
+  }
+  function handCardHtml(d, state){
+    var typeIcon = techTypeMeta(d.typeKey).icon;
+    var costVal = (state === 'played') ? d.onactivateenergy : (state === 'hand' ? d.onbuildenergy : '');
+    var costHtml = (costVal && costVal !== '0')
+      ? '<span class="hc-cost">' + escapeHtml(costVal) +
+        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>'
+      : '';
+    var chargesVal = (d.charges || '').trim();
+    var chargesHtml = (chargesVal !== '')
+      ? '<span class="hc-charges">' + escapeHtml(chargesVal) +
+        '<svg viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg></span>'
+      : '';
+    return '<div class="hc-head">' + costHtml +
+        '<div class="hc-name">' + escapeHtml(d.name || 'UNTITLED TECH') + '</div>' +
+      '</div>' +
+      (d.traits ? '<div class="hc-traits">' + escapeHtml(d.traits) + '</div>' : '') +
+      '<div class="hc-secs">' +
+        (d.onbuild || d.onbuildenergy ? '<div class="hc-sec"><b>' + energyLabel('On Play', d.onbuildenergy) + '</b>' + escapeHtml(d.onbuild) + '</div>' : '') +
+        (d.passive ? '<div class="hc-sec"><b>Passive</b>' + escapeHtml(d.passive) + '</div>' : '') +
+        (d.onactivate ? '<div class="hc-sec"><b>' + energyLabel('On Activate', d.onactivateenergy) + '</b>' + escapeHtml(d.onactivate) + '</div>' : '') +
+      '</div>' +
+      '<div class="hc-foot">' +
+        '<span class="hc-tags">' + escapeHtml(typeIcon) +
+          '<span class="hc-state" data-state="' + state + '">' + state + '</span>' +
+        '</span>' + chargesHtml +
+      '</div>';
+  }
+  function wireHandCardInteractions(el, onActivate, roomSync){
+    var charges = el.querySelector('.hc-charges');
+    if(charges){
+      charges.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(el._onChargeDelta) el._onChargeDelta(1);
+      });
+      charges.addEventListener('contextmenu', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(el._onChargeDelta) el._onChargeDelta(-1);
+      });
+    }
+    el.addEventListener('mouseenter', function(){
+      var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
+      if(popped && popped !== el) popped.classList.remove('popped');
+      if(roomSync) roomSync();
+    });
+    el.addEventListener('mouseleave', function(){
+      if(roomSync) setTimeout(roomSync, 0);
+    });
+    el.addEventListener('click', function(){
+      var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
+      if(popped && popped !== el) popped.classList.remove('popped');
+      el.classList.toggle('popped');
+      if(roomSync) roomSync();
+    });
+    el.addEventListener('dblclick', function(e){
+      e.preventDefault();
+      if(onActivate) onActivate();
+    });
+  }
+  function send(msg){
+    if(HAND_CHANNEL) HAND_CHANNEL.postMessage(msg);
+  }
+  var FILTER_CATS = [
+    {key:'hand', label:'Hand', options:[
+      {value:'', label:'N/A'},
+      {value:'hand', label:'In hand'},
+      {value:'nothand', label:'Not in hand'},
+      {value:'played', label:'Played'},
+      {value:'exhausted', label:'Exhausted'},
+      {value:'trashed', label:'Trash'}
+    ]},
+    {key:'type', label:'Type', options:[
+      {value:'', label:'N/A'},
+      {value:'offense', label:'Offense'},
+      {value:'defense', label:'Defense'},
+      {value:'movement', label:'Movement'},
+      {value:'science', label:'Science'}
+    ]},
+    {key:'energy', label:'Energy', options:[
+      {value:'', label:'N/A'},
+      {value:'has', label:'Has cost'},
+      {value:'none', label:'No cost'}
+    ]},
+    {key:'trait', label:'Trait', options:[
+      {value:'', label:'N/A'},
+      {value:'has', label:'Has trait'},
+      {value:'none', label:'No trait'}
+    ]}
+  ];
+  function filterCatMeta(key){
+    for(var i=0;i<FILTER_CATS.length;i++){ if(FILTER_CATS[i].key === key) return FILTER_CATS[i]; }
+    return null;
+  }
+  function filterValueLabel(key){
+    var cat = filterCatMeta(key);
+    if(!cat) return 'N/A';
+    var val = HAND_FILTERS[key];
+    for(var i=0;i<cat.options.length;i++){
+      if(cat.options[i].value === val) return cat.options[i].label;
+    }
+    return 'N/A';
+  }
+  function buildFilterMenu(){
+    var menu = document.getElementById('handFilterMenu');
+    if(!menu) return;
+    menu.innerHTML = '';
+    FILTER_CATS.forEach(function(cat){
+      var row = document.createElement('div');
+      row.className = 'filter-row';
+      row.setAttribute('data-cat', cat.key);
+
+      var name = document.createElement('span');
+      name.className = 'filter-cat';
+      name.textContent = cat.label;
+      row.appendChild(name);
+
+      var val = document.createElement('span');
+      val.className = 'filter-val';
+      row.appendChild(val);
+
+      var sel = document.createElement('select');
+      sel.setAttribute('data-cat', cat.key);
+      sel.setAttribute('aria-label', cat.label + ' filter');
+      cat.options.forEach(function(o){
+        var opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.label;
+        sel.appendChild(opt);
+      });
+      sel.value = HAND_FILTERS[cat.key];
+      sel.onchange = function(){
+        HAND_FILTERS[cat.key] = sel.value;
+        updateFilterUI();
+        renderHand();
+      };
+      row.appendChild(sel);
+      menu.appendChild(row);
+    });
+    var clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'filter-clear';
+    clear.textContent = 'Clear all';
+    clear.onclick = clearFilters;
+    menu.appendChild(clear);
+    updateFilterUI();
+  }
+  function activeFilterCount(){
+    var n = 0;
+    for(var k in HAND_FILTERS){
+      if(HAND_FILTERS.hasOwnProperty(k) && HAND_FILTERS[k]) n++;
+    }
+    return n;
+  }
+  function updateFilterUI(){
+    var n = activeFilterCount();
+    var rows = document.querySelectorAll('#handFilterMenu .filter-row');
+    for(var i=0;i<rows.length;i++){
+      var key = rows[i].getAttribute('data-cat');
+      var valEl = rows[i].querySelector('.filter-val');
+      if(valEl) valEl.textContent = filterValueLabel(key);
+      rows[i].classList.toggle('off', !HAND_FILTERS[key]);
+      var sel = rows[i].querySelector('select');
+      if(sel) sel.value = HAND_FILTERS[key];
+    }
+    var btn = document.getElementById('handFilterBtn');
+    if(btn) btn.classList.toggle('active', n > 0);
+    var count = document.getElementById('handFilterCount');
+    if(count) count.textContent = n;
+  }
+  function clearFilters(){
+    for(var k in HAND_FILTERS){
+      if(HAND_FILTERS.hasOwnProperty(k)) HAND_FILTERS[k] = '';
+    }
+    updateFilterUI();
+    renderHand();
+  }
+  function toggleFilterMenu(e){
+    e.stopPropagation();
+    var menu = document.getElementById('handFilterMenu');
+    if(menu) menu.classList.toggle('open');
+  }
+  function closeFilterMenu(){
+    var menu = document.getElementById('handFilterMenu');
+    if(menu) menu.classList.remove('open');
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('handFilterMenu');
+    if(menu && menu.classList.contains('open') && !menu.contains(e.target)){
+      menu.classList.remove('open');
+    }
+  });
+  function onHandSortChange(){
+    HAND_SORT = document.getElementById('handSort').value;
+    renderHand();
+  }
+  function openHandSelect(id){
+    var sel = document.getElementById(id);
+    if(!sel) return;
+    if(sel.showPicker){
+      try{ sel.showPicker(); }catch(e){ sel.focus(); }
+    } else {
+      sel.focus();
+    }
+  }
+  function handCardPasses(d){
+    if(HAND_FILTERS.hand){
+      var st = d.state;
+      if(HAND_FILTERS.hand === 'nothand'){
+        if(st === 'hand') return false;
+      } else if(st !== HAND_FILTERS.hand){
+        return false;
+      }
+    }
+    if(HAND_FILTERS.type){
+      if(d.typeKey !== HAND_FILTERS.type) return false;
+    }
+    if(HAND_FILTERS.energy){
+      var e = d.onbuildenergy;
+      var hasCost = !!(e && e.trim() !== '' && parseFloat(e) > 0);
+      if((HAND_FILTERS.energy === 'has') !== hasCost) return false;
+    }
+    if(HAND_FILTERS.trait){
+      if((HAND_FILTERS.trait === 'has') !== !!d.traits) return false;
+    }
+    return true;
+  }
+  function handSortCards(items){
+    items.sort(function(a,b){
+      var da = a.d, db = b.d;
+      if(HAND_SORT === 'trait'){
+        var ta = (da.traits || '').toLowerCase();
+        var tb = (db.traits || '').toLowerCase();
+        if(ta !== tb) return ta < tb ? -1 : 1;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      if(HAND_SORT === 'type'){
+        var oa = HAND_TYPE_ORDER[da.typeKey];
+        var ob = HAND_TYPE_ORDER[db.typeKey];
+        if(oa === undefined) oa = 99;
+        if(ob === undefined) ob = 99;
+        if(oa !== ob) return oa - ob;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      if(HAND_SORT === 'energy'){
+        var ea = parseFloat(da.onbuildenergy);
+        var eb = parseFloat(db.onbuildenergy);
+        if(isNaN(ea)) ea = Infinity;
+        if(isNaN(eb)) eb = Infinity;
+        if(ea !== eb) return ea - eb;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      return (da.name || '').localeCompare(db.name || '');
+    });
+  }
+  function renderHand(){
+    var handEl = document.getElementById('hand');
+    var countEl = document.getElementById('handCount');
+    if(!handEl || !countEl) return;
+    var items = [];
+    for(var i=0;i<HAND_DATA.length;i++){
+      if(!HAND_DATA[i]) continue;
+      if(handCardPasses(HAND_DATA[i])) items.push({d: HAND_DATA[i], idx: i});
+    }
+    handSortCards(items);
+    handEl.innerHTML = '';
+    if(items.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'hand-empty';
+      empty.textContent = activeFilterCount() ? 'No techs match' : 'No techs';
+      handEl.appendChild(empty);
+    } else {
+      for(var j=0;j<items.length;j++){
+        var d = items[j].d;
+        var el = document.createElement('div');
+        el.className = 'hand-card';
+        el.setAttribute('data-state', d.state);
+        el.innerHTML = handCardHtml(d, d.state);
+        el._idx = items[j].idx;
+        el._onChargeDelta = (function(idx){
+          return function(delta){
+            send({ t:'charge', idx: idx, delta: delta });
+          };
+        })(items[j].idx);
+        wireHandCardInteractions(el, (function(idx, state){
+          return function(){
+            send({ t:'state', idx: idx, state: nextHandCardState(state) });
+          };
+        })(items[j].idx, items[j].d.state), syncHandRoom);
+        handEl.appendChild(el);
+      }
+    }
+    countEl.textContent = items.length;
+    updateHandSpread();
+    updateHandSlider();
+  }
+  function syncHandRoom(){
+    var view = document.querySelector('.hand-view');
+    var strip = document.getElementById('hand');
+    if(!view || !strip) return;
+    var up = strip.querySelector('.hand-card.popped') || strip.querySelector('.hand-card:hover');
+    view.classList.toggle('roomy', !!up);
+  }
+  function updateHandSpread(){
+    var view = document.querySelector('.hand-view');
+    var strip = document.getElementById('hand');
+    if(!view || !strip) return;
+    var n = strip.querySelectorAll('.hand-card').length;
+    var cardW = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue('--hand-card-w')) || 190;
+    var loose = cardW * 0.67;
+    var tight = cardW * 0.34;
+    var step = loose;
+    if(n > 1){
+      var cs = getComputedStyle(strip);
+      var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      var avail = view.clientWidth - pad;
+      var needed = (avail - cardW) / (n - 1);
+      step = Math.max(tight, Math.min(loose, needed));
+    }
+    strip.style.setProperty('--hand-step', step + 'px');
+  }
+  function updateHandSlider(){
+    var view = document.querySelector('.hand-view');
+    var slider = document.getElementById('handSlider');
+    var thumb = document.getElementById('handSliderThumb');
+    if(!view || !slider || !thumb) return;
+    var sw = view.scrollWidth, cw = view.clientWidth;
+    if(sw <= cw + 1){
+      slider.classList.remove('on');
+      return;
+    }
+    slider.classList.add('on');
+    var track = slider.querySelector('.hand-slider-track');
+    var trackW = track.offsetWidth;
+    var w = Math.max(28, (cw / sw) * trackW);
+    var maxLeft = trackW - w;
+    var maxScroll = sw - cw;
+    var left = maxScroll > 0 ? (view.scrollLeft / maxScroll) * maxLeft : 0;
+    thumb.style.width = w + 'px';
+    thumb.style.left = (12 + left) + 'px';
+  }
+  function syncHandBarHeight(){
+    var bar = document.querySelector('.hand-bar');
+    if(!bar) return;
+    document.documentElement.style.setProperty('--hand-bar-h', bar.offsetHeight + 'px');
+  }
+  function wireHandSlider(){
+    var view = document.querySelector('.hand-view');
+    var slider = document.getElementById('handSlider');
+    if(!view || !slider) return;
+    syncHandBarHeight();
+    window.addEventListener('resize', syncHandBarHeight);
+    window.addEventListener('resize', updateHandSpread);
+    view.addEventListener('scroll', updateHandSlider);
+    window.addEventListener('resize', updateHandSlider);
+    var dragging = false;
+    function scrollToPointer(clientX){
+      var track = slider.querySelector('.hand-slider-track');
+      var r = track.getBoundingClientRect();
+      var thumb = document.getElementById('handSliderThumb');
+      var w = thumb.offsetWidth;
+      var maxLeft = r.width - w;
+      if(maxLeft <= 0) return;
+      var pos = clientX - r.left - w / 2;
+      pos = Math.max(0, Math.min(maxLeft, pos));
+      view.scrollLeft = (pos / maxLeft) * (view.scrollWidth - view.clientWidth);
+    }
+    slider.addEventListener('pointerdown', function(e){
+      dragging = true;
+      slider.classList.add('dragging');
+      slider.setPointerCapture(e.pointerId);
+      scrollToPointer(e.clientX);
+      e.preventDefault();
+    });
+    slider.addEventListener('pointermove', function(e){
+      if(dragging) scrollToPointer(e.clientX);
+    });
+    function endDrag(){
+      dragging = false;
+      slider.classList.remove('dragging');
+    }
+    slider.addEventListener('pointerup', endDrag);
+    slider.addEventListener('pointercancel', endDrag);
+  }
+  function toggleHand(){
+    var dock = document.getElementById('handDock');
+    var willExpand = !dock.classList.contains('expanded');
+    dock.classList.toggle('expanded', willExpand);
+    try{
+      window.parent.postMessage(willExpand ? 'hand:expand' : 'hand:collapse', '*');
+    }catch(e){}
+    if(willExpand){
+      renderHand();
+      setTimeout(function(){
+        updateHandSpread();
+        updateHandSlider();
+      }, 240);
+    }
+  }
+  function initChannel(){
+    if(typeof BroadcastChannel === 'undefined') return;
+    HAND_CHANNEL = new BroadcastChannel('frigate-hand-tech');
+    HAND_CHANNEL.onmessage = function(ev){
+      var m = ev.data;
+      if(!m || !m.t) return;
+      if(m.t === 'snapshot'){
+        HAND_DATA = m.cards || [];
+        renderHand();
+      }
+    };
+    var tries = 0;
+    function hello(){
+      send({ t:'hello' });
+      if(++tries < 3){
+        setTimeout(function(){
+          var has = false;
+          for(var i=0;i<HAND_DATA.length;i++){ if(HAND_DATA[i]) has = true; }
+          if(!has) hello();
+        }, 700 * tries);
+      }
+    }
+    hello();
+  }
+  buildFilterMenu();
+  wireHandSlider();
+  renderHand();
+  initChannel();
+
+  /* inline onclick/onchange attributes resolve against the global scope */
+  window.toggleHand = toggleHand;
+  window.onHandSortChange = onHandSortChange;
+  window.openHandSelect = openHandSelect;
+  window.toggleFilterMenu = toggleFilterMenu;
+})();
+</script>
+</body>
+</html>

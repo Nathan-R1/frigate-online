@@ -521,7 +521,7 @@
     refreshTechSections(card);
     syncTechStateUI(card);
     refreshTechSlotControls();
-    refreshHand();
+    handBroadcast();
   }
   function removeTechSlot(){
     var grid = document.getElementById('techGrid');
@@ -529,7 +529,7 @@
       grid.removeChild(grid.lastElementChild);
     }
     refreshTechSlotControls();
-    refreshHand();
+    handBroadcast();
   }
   function removeTechCard(btn){
     var card = btn.closest('.tech-card');
@@ -540,7 +540,7 @@
     }
     grid.removeChild(card);
     refreshTechSlotControls();
-    refreshHand();
+    handBroadcast();
   }
   function showSlotPicker(e, btn, gridId, nameSel){
     e.stopPropagation();
@@ -588,7 +588,7 @@
       relabelMods();
     }else{
       refreshTechSlotControls();
-      refreshHand();
+      handBroadcast();
     }
   }
   function closeSlotPicker(){
@@ -679,7 +679,7 @@
     setTechType(card.querySelector('.tticker'), t.tt);
     setTechDeploy(card.querySelector('.tdepbtn'), t.deploy);
     refreshTechSections(card);
-    refreshHand();
+    handBroadcast();
   }
   function escapeHtml(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -713,14 +713,7 @@
     var cur = techState(card);
     var next = TECH_STATE_ORDER[(TECH_STATE_ORDER.indexOf(cur) + 1) % TECH_STATE_ORDER.length];
     setTechState(card, next);
-    refreshHand();
-  }
-  function energyLabel(label, cost){
-    if(cost && cost !== '0'){
-      return label + ' <span class="hc-cost-inline">' + escapeHtml(cost) +
-        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>';
-    }
-    return label;
+    handBroadcast();
   }
   function techCardViewData(card){
     var typeBtn = card.querySelector('.tticker');
@@ -744,443 +737,60 @@
       charges: card.querySelector('.tcharges-input').value
     };
   }
-  var HAND_SORT = 'az';
-  var HAND_TYPE_ORDER = { offense:0, defense:1, movement:2, science:3 };
-
-  /* Each category holds one value; '' means the attribute is not filtered on. */
-  var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
-  function nextHandCardState(cur){
-    return (cur === 'played') ? 'exhausted' : 'played';
+  function handTechSnapshot(){
+    var grid = document.getElementById('techGrid');
+    var cards = [];
+    for(var i=0;i<grid.children.length;i++){
+      var c = grid.children[i];
+      cards.push({
+        name: c.querySelector('.tname').value.trim(),
+        typeKey: c.querySelector('.tticker').getAttribute('data-tt'),
+        traits: c.querySelector('.ttraits').value.trim(),
+        onbuild: c.querySelector('.tsec.onbuild textarea').value,
+        passive: c.querySelector('.tsec.passive textarea').value,
+        onactivate: c.querySelector('.tsec.onactivate textarea').value,
+        onbuildenergy: c.querySelector('.tcost-onbuild').value,
+        onactivateenergy: c.querySelector('.tcost-onactivate').value,
+        charges: c.querySelector('.tcharges-input').value,
+        state: techState(c)
+      });
+    }
+    return cards;
   }
-  function adjustTechCharges(card, delta){
-    if(!card || !delta) return;
+  var HAND_CHANNEL = null;
+  function initHandChannel(){
+    if(typeof BroadcastChannel === 'undefined') return;
+    HAND_CHANNEL = new BroadcastChannel('frigate-hand-tech');
+    HAND_CHANNEL.onmessage = function(ev){
+      var m = ev.data;
+      if(!m || !m.t) return;
+      if(m.t === 'hello'){ handBroadcast(); return; }
+      if(m.t === 'state'){ handleHandState(m.idx, m.state); return; }
+      if(m.t === 'charge'){ handleHandCharge(m.idx, m.delta); return; }
+    };
+  }
+  function handBroadcast(){
+    if(!HAND_CHANNEL) return;
+    HAND_CHANNEL.postMessage({ t:'snapshot', cards: handTechSnapshot() });
+  }
+  function handleHandState(idx, state){
+    var grid = document.getElementById('techGrid');
+    var card = grid ? grid.children[idx] : null;
+    if(!card || !isTechState(state)) return;
+    setTechState(card, state);
+    handBroadcast();
+  }
+  function handleHandCharge(idx, delta){
+    var grid = document.getElementById('techGrid');
+    var card = grid ? grid.children[idx] : null;
+    if(!card) return;
     var inp = card.querySelector('.tcharges-input');
     if(!inp) return;
     var cur = parseInt(inp.value, 10);
     if(isNaN(cur)) cur = 0;
-    inp.value = Math.max(0, cur + delta);
+    inp.value = Math.max(0, cur + (parseInt(delta, 10) || 0));
     refreshTechSections(card);
-    var grid = document.getElementById('techGrid');
-    var gi = grid ? Array.prototype.indexOf.call(grid.children, card) : -1;
-    syncHandCardCharges(gi, inp.value);
-  }
-  function syncHandCardCharges(gi, val){
-    var handEl = document.getElementById('hand');
-    if(!handEl) return;
-    var cards = handEl.querySelectorAll('.hand-card');
-    for(var i=0;i<cards.length;i++){
-      if(cards[i]._sourceIndex !== gi) continue;
-      var span = cards[i].querySelector('.hc-charges');
-      if(span && span.firstChild && span.firstChild.nodeType === 3){
-        span.firstChild.nodeValue = val;
-      } else {
-        refreshHand();
-      }
-      return;
-    }
-  }
-  function handCardHtml(d, state){
-    var costVal = (state === 'played') ? d.onactivateenergy : (state === 'hand' ? d.onbuildenergy : '');
-    var costHtml = (costVal && costVal !== '0')
-      ? '<span class="hc-cost">' + escapeHtml(costVal) +
-        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>'
-      : '';
-    var chargesVal = (d.charges || '').trim();
-    var chargesHtml = (chargesVal !== '')
-      ? '<span class="hc-charges">' + escapeHtml(chargesVal) +
-        '<svg viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg></span>'
-      : '';
-    return '<div class="hc-head">' + costHtml +
-        '<div class="hc-name">' + escapeHtml(d.name || 'UNTITLED TECH') + '</div>' +
-      '</div>' +
-      (d.traits ? '<div class="hc-traits">' + escapeHtml(d.traits) + '</div>' : '') +
-      '<div class="hc-secs">' +
-        (d.onbuild || d.onbuildenergy ? '<div class="hc-sec"><b>' + energyLabel('On Play', d.onbuildenergy) + '</b>' + escapeHtml(d.onbuild) + '</div>' : '') +
-        (d.passive ? '<div class="hc-sec"><b>Passive</b>' + escapeHtml(d.passive) + '</div>' : '') +
-        (d.onactivate ? '<div class="hc-sec"><b>' + energyLabel('On Activate', d.onactivateenergy) + '</b>' + escapeHtml(d.onactivate) + '</div>' : '') +
-      '</div>' +
-      '<div class="hc-foot">' +
-        '<span class="hc-tags">' + (d.type || '') +
-          '<span class="hc-state" data-state="' + state + '">' + state + '</span>' +
-        '</span>' + chargesHtml +
-      '</div>';
-  }
-  function wireHandCardInteractions(el, onActivate, roomSync){
-    var charges = el.querySelector('.hc-charges');
-    if(charges){
-      charges.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(el._onChargeDelta) el._onChargeDelta(1);
-      });
-      charges.addEventListener('contextmenu', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(el._onChargeDelta) el._onChargeDelta(-1);
-      });
-    }
-    el.addEventListener('mouseenter', function(){
-      var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
-      if(popped && popped !== el) popped.classList.remove('popped');
-      if(roomSync) roomSync();
-    });
-    el.addEventListener('mouseleave', function(){
-      if(roomSync) setTimeout(roomSync, 0);
-    });
-    el.addEventListener('click', function(){
-      var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
-      if(popped && popped !== el) popped.classList.remove('popped');
-      el.classList.toggle('popped');
-      if(roomSync) roomSync();
-    });
-    el.addEventListener('dblclick', function(e){
-      e.preventDefault();
-      if(onActivate) onActivate();
-    });
-  }
-  var FILTER_CATS = [
-    {key:'hand', label:'Hand', options:[
-      {value:'', label:'N/A'},
-      {value:'hand', label:'In hand'},
-      {value:'nothand', label:'Not in hand'},
-      {value:'played', label:'Played'},
-      {value:'exhausted', label:'Exhausted'},
-      {value:'trashed', label:'Trash'}
-    ]},
-    {key:'type', label:'Type', options:[
-      {value:'', label:'N/A'},
-      {value:'offense', label:'Offense'},
-      {value:'defense', label:'Defense'},
-      {value:'movement', label:'Movement'},
-      {value:'science', label:'Science'}
-    ]},
-    {key:'energy', label:'Energy', options:[
-      {value:'', label:'N/A'},
-      {value:'has', label:'Has cost'},
-      {value:'none', label:'No cost'}
-    ]},
-    {key:'trait', label:'Trait', options:[
-      {value:'', label:'N/A'},
-      {value:'has', label:'Has trait'},
-      {value:'none', label:'No trait'}
-    ]}
-  ];
-  function filterCatMeta(key){
-    for(var i=0;i<FILTER_CATS.length;i++){ if(FILTER_CATS[i].key === key) return FILTER_CATS[i]; }
-    return null;
-  }
-  function filterValueLabel(key){
-    var cat = filterCatMeta(key);
-    if(!cat) return 'N/A';
-    var val = HAND_FILTERS[key];
-    for(var i=0;i<cat.options.length;i++){
-      if(cat.options[i].value === val) return cat.options[i].label;
-    }
-    return 'N/A';
-  }
-  function buildFilterMenu(){
-    var menu = document.getElementById('handFilterMenu');
-    if(!menu) return;
-    menu.innerHTML = '';
-    FILTER_CATS.forEach(function(cat){
-      var row = document.createElement('div');
-      row.className = 'filter-row';
-      row.setAttribute('data-cat', cat.key);
-
-      var name = document.createElement('span');
-      name.className = 'filter-cat';
-      name.textContent = cat.label;
-      row.appendChild(name);
-
-      var val = document.createElement('span');
-      val.className = 'filter-val';
-      row.appendChild(val);
-
-      var sel = document.createElement('select');
-      sel.setAttribute('data-cat', cat.key);
-      sel.setAttribute('aria-label', cat.label + ' filter');
-      cat.options.forEach(function(o){
-        var opt = document.createElement('option');
-        opt.value = o.value;
-        opt.textContent = o.label;
-        sel.appendChild(opt);
-      });
-      sel.value = HAND_FILTERS[cat.key];
-      sel.onchange = function(){
-        HAND_FILTERS[cat.key] = sel.value;
-        updateFilterUI();
-        refreshHand();
-      };
-      row.appendChild(sel);
-      menu.appendChild(row);
-    });
-    var clear = document.createElement('button');
-    clear.type = 'button';
-    clear.className = 'filter-clear';
-    clear.textContent = 'Clear all';
-    clear.onclick = clearFilters;
-    menu.appendChild(clear);
-    updateFilterUI();
-  }
-  function activeFilterCount(){
-    var n = 0;
-    for(var k in HAND_FILTERS){
-      if(HAND_FILTERS.hasOwnProperty(k) && HAND_FILTERS[k]) n++;
-    }
-    return n;
-  }
-  function updateFilterUI(){
-    var n = activeFilterCount();
-    var rows = document.querySelectorAll('#handFilterMenu .filter-row');
-    for(var i=0;i<rows.length;i++){
-      var key = rows[i].getAttribute('data-cat');
-      var valEl = rows[i].querySelector('.filter-val');
-      if(valEl) valEl.textContent = filterValueLabel(key);
-      rows[i].classList.toggle('off', !HAND_FILTERS[key]);
-      var sel = rows[i].querySelector('select');
-      if(sel) sel.value = HAND_FILTERS[key];
-    }
-    var btn = document.getElementById('handFilterBtn');
-    if(btn) btn.classList.toggle('active', n > 0);
-    var count = document.getElementById('handFilterCount');
-    if(count) count.textContent = n;
-  }
-  function clearFilters(){
-    for(var k in HAND_FILTERS){
-      if(HAND_FILTERS.hasOwnProperty(k)) HAND_FILTERS[k] = '';
-    }
-    updateFilterUI();
-    refreshHand();
-  }
-  function toggleFilterMenu(e){
-    e.stopPropagation();
-    var menu = document.getElementById('handFilterMenu');
-    if(menu) menu.classList.toggle('open');
-  }
-  function closeFilterMenu(){
-    var menu = document.getElementById('handFilterMenu');
-    if(menu) menu.classList.remove('open');
-  }
-  document.addEventListener('click', function(e){
-    var menu = document.getElementById('handFilterMenu');
-    if(menu && menu.classList.contains('open') && !menu.contains(e.target)){
-      menu.classList.remove('open');
-    }
-  });
-  function onHandSortChange(){
-    HAND_SORT = document.getElementById('handSort').value;
-    refreshHand();
-  }
-  function openHandSelect(id){
-    var sel = document.getElementById(id);
-    if(!sel) return;
-    if(sel.showPicker){
-      try{ sel.showPicker(); }catch(e){ sel.focus(); }
-    } else {
-      sel.focus();
-    }
-  }
-  function handCardPasses(card){
-    var d = techCardViewData(card);
-
-    if(HAND_FILTERS.hand){
-      var st = techState(card);
-      if(HAND_FILTERS.hand === 'nothand'){
-        if(st === 'hand') return false;
-      } else if(st !== HAND_FILTERS.hand){
-        return false;
-      }
-    }
-    if(HAND_FILTERS.type){
-      if(card.querySelector('.tticker').getAttribute('data-tt') !== HAND_FILTERS.type) return false;
-    }
-    if(HAND_FILTERS.energy){
-      var e = d.onbuildenergy;
-      var hasCost = !!(e && e.trim() !== '' && parseFloat(e) > 0);
-      if((HAND_FILTERS.energy === 'has') !== hasCost) return false;
-    }
-    if(HAND_FILTERS.trait){
-      if((HAND_FILTERS.trait === 'has') !== !!d.traits) return false;
-    }
-    return true;
-  }
-  function handSortCards(cards){
-    cards.sort(function(a,b){
-      var da = techCardViewData(a);
-      var db = techCardViewData(b);
-      if(HAND_SORT === 'trait'){
-        var ta = (da.traits || '').toLowerCase();
-        var tb = (db.traits || '').toLowerCase();
-        if(ta !== tb) return ta < tb ? -1 : 1;
-        return (da.name || '').localeCompare(db.name || '');
-      }
-      if(HAND_SORT === 'type'){
-        var oa = HAND_TYPE_ORDER[a.querySelector('.tticker').getAttribute('data-tt')];
-        var ob = HAND_TYPE_ORDER[b.querySelector('.tticker').getAttribute('data-tt')];
-        if(oa === undefined) oa = 99;
-        if(ob === undefined) ob = 99;
-        if(oa !== ob) return oa - ob;
-        return (da.name || '').localeCompare(db.name || '');
-      }
-      if(HAND_SORT === 'energy'){
-        var ea = parseFloat(da.onbuildenergy);
-        var eb = parseFloat(db.onbuildenergy);
-        if(isNaN(ea)) ea = Infinity;
-        if(isNaN(eb)) eb = Infinity;
-        if(ea !== eb) return ea - eb;
-        return (da.name || '').localeCompare(db.name || '');
-      }
-      return (da.name || '').localeCompare(db.name || '');
-    });
-  }
-  function refreshHand(){
-    var grid = document.getElementById('techGrid');
-    var handEl = document.getElementById('hand');
-    var countEl = document.getElementById('handCount');
-    if(!handEl || !countEl) return;
-    var cards = [];
-    for(var i=0;i<grid.children.length;i++){
-      if(handCardPasses(grid.children[i])) cards.push(grid.children[i]);
-    }
-    handSortCards(cards);
-    handEl.innerHTML = '';
-    if(cards.length === 0){
-      var empty = document.createElement('div');
-      empty.className = 'hand-empty';
-      empty.textContent = activeFilterCount() ? 'No techs match' : 'No techs';
-      handEl.appendChild(empty);
-    } else {
-      for(var j=0;j<cards.length;j++){
-        var d = techCardViewData(cards[j]);
-        var el = document.createElement('div');
-        el.className = 'hand-card';
-        el.setAttribute('data-state', techState(cards[j]));
-        el.innerHTML = handCardHtml(d, techState(cards[j]));
-        el._sourceIndex = Array.prototype.indexOf.call(grid.children, cards[j]);
-        el._onChargeDelta = (function(card){
-          return function(delta){
-            adjustTechCharges(card, delta);
-          };
-        })(cards[j]);
-        wireHandCardInteractions(el, (function(card){
-          return function(){
-            setTechState(card, nextHandCardState(techState(card)));
-            refreshHand();
-          };
-        })(cards[j]), syncHandRoom);
-        handEl.appendChild(el);
-      }
-    }
-    countEl.textContent = cards.length;
-    updateHandSpread();
-    updateHandSlider();
-  }
-  /* Cards overlap by 33% when the hand is small and there is room to fan out,
-     tightening to 66% as the hand fills the strip. */
-  /* The layer sits flush with the card tops; it only needs the extra height
-     while a card is hovered or popped, so add it just for that moment. */
-  function syncHandRoom(){
-    var view = document.querySelector('.hand-view');
-    var strip = document.getElementById('hand');
-    if(!view || !strip) return;
-    var up = strip.querySelector('.hand-card.popped') || strip.querySelector('.hand-card:hover');
-    view.classList.toggle('roomy', !!up);
-  }
-  function updateHandSpread(){
-    var view = document.querySelector('.hand-view');
-    var strip = document.getElementById('hand');
-    if(!view || !strip) return;
-    var n = strip.querySelectorAll('.hand-card').length;
-    var cardW = parseFloat(getComputedStyle(document.documentElement)
-      .getPropertyValue('--hand-card-w')) || 190;
-    var loose = cardW * 0.67;   /* 33% overlap */
-    var tight = cardW * 0.34;   /* 66% overlap */
-    var step = loose;
-    if(n > 1){
-      var cs = getComputedStyle(strip);
-      var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-      var avail = view.clientWidth - pad;
-      var needed = (avail - cardW) / (n - 1);
-      step = Math.max(tight, Math.min(loose, needed));
-    }
-    strip.style.setProperty('--hand-step', step + 'px');
-  }
-  /* The native scrollbar sits at the bottom edge of .hand-view, which the bar
-     covers, so scroll position is mirrored onto a slider drawn on the bar. */
-  function updateHandSlider(){
-    var view = document.querySelector('.hand-view');
-    var slider = document.getElementById('handSlider');
-    var thumb = document.getElementById('handSliderThumb');
-    if(!view || !slider || !thumb) return;
-    var sw = view.scrollWidth, cw = view.clientWidth;
-    if(sw <= cw + 1){
-      slider.classList.remove('on');
-      return;
-    }
-    slider.classList.add('on');
-    var track = slider.querySelector('.hand-slider-track');
-    var trackW = track.offsetWidth;
-    var w = Math.max(28, (cw / sw) * trackW);
-    var maxLeft = trackW - w;
-    var maxScroll = sw - cw;
-    var left = maxScroll > 0 ? (view.scrollLeft / maxScroll) * maxLeft : 0;
-    thumb.style.width = w + 'px';
-    thumb.style.left = (12 + left) + 'px';
-  }
-  function syncHandBarHeight(){
-    var bar = document.querySelector('.hand-bar');
-    if(!bar) return;
-    document.documentElement.style.setProperty('--hand-bar-h', bar.offsetHeight + 'px');
-  }
-  function wireHandSlider(){
-    var view = document.querySelector('.hand-view');
-    var slider = document.getElementById('handSlider');
-    if(!view || !slider) return;
-    syncHandBarHeight();
-    window.addEventListener('resize', syncHandBarHeight);
-    window.addEventListener('resize', updateHandSpread);
-    view.addEventListener('scroll', updateHandSlider);
-    window.addEventListener('resize', updateHandSlider);
-    var dragging = false;
-    function scrollToPointer(clientX){
-      var track = slider.querySelector('.hand-slider-track');
-      var r = track.getBoundingClientRect();
-      var thumb = document.getElementById('handSliderThumb');
-      var w = thumb.offsetWidth;
-      var maxLeft = r.width - w;
-      if(maxLeft <= 0) return;
-      var pos = clientX - r.left - w / 2;
-      pos = Math.max(0, Math.min(maxLeft, pos));
-      view.scrollLeft = (pos / maxLeft) * (view.scrollWidth - view.clientWidth);
-    }
-    slider.addEventListener('pointerdown', function(e){
-      dragging = true;
-      slider.classList.add('dragging');
-      slider.setPointerCapture(e.pointerId);
-      scrollToPointer(e.clientX);
-      e.preventDefault();
-    });
-    slider.addEventListener('pointermove', function(e){
-      if(dragging) scrollToPointer(e.clientX);
-    });
-    function endDrag(){
-      dragging = false;
-      slider.classList.remove('dragging');
-    }
-    slider.addEventListener('pointerup', endDrag);
-    slider.addEventListener('pointercancel', endDrag);
-  }
-  function toggleHand(){
-    var dock = document.getElementById('handDock');
-    var willExpand = !dock.classList.contains('expanded');
-    dock.classList.toggle('expanded', willExpand);
-    if(willExpand){
-      refreshHand();
-      setTimeout(function(){
-        updateHandSpread();
-        updateHandSlider();
-      }, 240);
-    }
+    handBroadcast();
   }
   function setTechType(el, key){
     var meta = techTypeMeta(key);
@@ -1921,7 +1531,7 @@
       setTechState(card, state);
       refreshTechSections(card);
     }
-    refreshHand();
+    handBroadcast();
   }
   function collectSheet(){
     function v(id){ var el = document.getElementById(id); return el ? el.value : ''; }
@@ -2000,7 +1610,8 @@
       syncTechStateUI(cards[i]);
       refreshTechSections(cards[i]);
     }
-    refreshHand();
+    initHandChannel();
+    handBroadcast();
     var mods = document.querySelectorAll('.mod-card .mtype-btn');
     for(var m=0;m<mods.length;m++){
       setModType(mods[m], mods[m].getAttribute('data-mtype'));
@@ -2032,46 +1643,5 @@
     <div class="class-info-list" id="classInfoList"></div>
   </div>
 </div>
-<div class="hand-dock" id="handDock">
-  <div class="hand-bar">
-    <div class="hand-slider" id="handSlider">
-      <div class="hand-slider-track"></div>
-      <div class="hand-slider-thumb" id="handSliderThumb"></div>
-    </div>
-    <button type="button" class="hand-tab" id="handTab" onclick="toggleHand()">
-      <span class="hand-label">Tech Hand</span>
-      <span class="hand-count" id="handCount">0</span>
-      <span class="hand-caret">▴</span>
-    </button>
-    <div class="hand-sort">
-      <label for="handSort">Sort</label>
-      <span class="sort-wrap">
-        <select id="handSort" onchange="onHandSortChange()">
-          <option value="az">Name</option>
-          <option value="trait">Trait</option>
-          <option value="type">Type</option>
-          <option value="energy">Energy</option>
-        </select>
-        <button type="button" class="hand-icon-btn" id="handSortBtn" onclick="openHandSelect('handSort')" title="Sort hand">⇵</button>
-      </span>
-      <div class="slot-menu-wrap">
-        <button type="button" class="hand-filter-btn" id="handFilterBtn" onclick="toggleFilterMenu(event)" title="Filter hand">
-          <span class="fico" aria-hidden="true">ᯤ</span>
-          <span class="flabel">Filter</span>
-          <span class="fcount" id="handFilterCount">0</span>
-        </button>
-        <div class="preset-menu filter-menu" id="handFilterMenu"></div>
-      </div>
-    </div>
-  </div>
-  <div class="hand-view">
-    <div class="hand" id="hand"></div>
-  </div>
-</div>
-<script>
-  buildFilterMenu();
-  wireHandSlider();
-  refreshHand();
-</script>
 </body>
 </html>
