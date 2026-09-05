@@ -28,6 +28,7 @@
       <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
       <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
       <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
+      <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
       <button type="button" class="settings-item" id="classInfoBtn" title="Show the class details">Class Info</button>
     </div>
   </div>
@@ -904,6 +905,16 @@ function setStatsMode(idx) {
 function toggleStats() { setStatsMode(statsModeIdx + 1); }
 statsToggleBtn.addEventListener('click', toggleStats);
 
+var topbarEl = document.querySelector('.topbar');
+var menuToggleBtn = document.getElementById('menuToggleBtn');
+function toggleMenu() {
+  var hidden = topbarEl.classList.toggle('hidden-menu');
+  menuToggleBtn.textContent = hidden ? 'Show Menu' : 'Hide Menu';
+  menuToggleBtn.title = hidden ? 'Show the top menu bar' : 'Hide the top menu bar';
+  closeSettingsMenu();
+}
+menuToggleBtn.addEventListener('click', toggleMenu);
+
 var CLASS_PRESETS = {
   'Support Class': { stats: {hull:2, shield:2, storage:2}, techName: 'Repulsor Unit', modName: 'Repulsor Unit' },
   'Jump Class': { stats: {speed:2}, skills: {Sensors:1}, techName: 'Phantom' },
@@ -1051,6 +1062,11 @@ window.addEventListener('keydown', function (e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
     e.preventDefault();
     refresh();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+    e.preventDefault();
+    toggleMenu();
     return;
   }
   if (e.key === 'Escape') {
