@@ -402,6 +402,49 @@
     updateHandSpread();
     updateHandSlider();
   }
+  function updateHandFromSnapshot(cards){
+    var handEl = document.getElementById('hand');
+    var els = handEl ? handEl.querySelectorAll('.hand-card') : [];
+    var oldData = HAND_DATA;
+    var expected = 0;
+    for(var k=0;k<cards.length;k++){
+      if(cards[k] && handCardPasses(cards[k])) expected++;
+    }
+    var render = els.length !== expected;
+    if(!render){
+      var byIdx = {};
+      for(var i=0;i<cards.length;i++){ if(cards[i]) byIdx[i] = cards[i]; }
+      for(var j=0;j<els.length && !render;j++){
+        var el = els[j];
+        var nd = byIdx[el._idx];
+        var od = oldData && oldData[el._idx];
+        if(!nd || !od){
+          render = true;
+          break;
+        }
+        if(od.name !== nd.name || od.typeKey !== nd.typeKey ||
+           od.traits !== nd.traits || od.onbuild !== nd.onbuild ||
+           od.onbuildenergy !== nd.onbuildenergy || od.passive !== nd.passive ||
+           od.onactivate !== nd.onactivate || od.onactivateenergy !== nd.onactivateenergy ||
+           od.state !== nd.state){
+          render = true;
+          break;
+        }
+        var nc = (nd.charges || '').trim();
+        var chip = el.querySelector('.hc-charges');
+        if(nc !== ''){
+          if(chip){
+            var tn = chip.childNodes[0];
+            if(tn && tn.nodeType === 3) tn.nodeValue = String(nc);
+          }
+        } else if(chip){
+          chip.style.display = 'none';
+        }
+      }
+    }
+    HAND_DATA = cards || [];
+    if(render) renderHand();
+  }
   function syncHandRoom(){
     var view = document.querySelector('.hand-view');
     var strip = document.getElementById('hand');
@@ -528,8 +571,7 @@
       var m = ev.data;
       if(!m || !m.t) return;
       if(m.t === 'snapshot'){
-        HAND_DATA = m.cards || [];
-        renderHand();
+        updateHandFromSnapshot(m.cards || []);
       }
     };
     var tries = 0;
