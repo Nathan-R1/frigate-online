@@ -26,6 +26,7 @@
     <button type="button" class="btn settings-cog" id="settingsBtn" title="Settings">⚙</button>
     <div class="settings-menu hidden" id="settingsMenu">
       <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
+      <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
     </div>
   </div>
 </div>
@@ -851,6 +852,15 @@ document.getElementById('settingsBtn').addEventListener('click', function (e) {
 });
 
 document.getElementById('rulesBtn').addEventListener('click', openRules);
+
+var sheetToggleBtn = document.getElementById('sheetToggleBtn');
+function toggleSheet() {
+  var hidden = playerPanel.classList.toggle('hidden-sheet');
+  sheetToggleBtn.textContent = hidden ? 'Show Sheet' : 'Hide Sheet';
+  sheetToggleBtn.title = hidden ? 'Show the player sheet panel' : 'Hide the player sheet panel';
+  closeSettingsMenu();
+}
+sheetToggleBtn.addEventListener('click', toggleSheet);
 
 document.getElementById('rulesClose').addEventListener('click', function () {
   rulesPopup.classList.add('hidden');
