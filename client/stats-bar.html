@@ -8,11 +8,29 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
   .sb {
-    display: flex; align-items: center; justify-content: center; gap: 34px; height: 100%;
+    display: flex; align-items: center; justify-content: center; gap: 0; height: 100%;
     user-select: none; -webkit-user-select: none;
     background: linear-gradient(#10161f, #0c1117);
   }
-  .sb-item { display: flex; align-items: center; gap: 9px; white-space: nowrap; cursor: pointer; line-height: 1; }
+  .sb-side { flex: 1; min-width: 0; display: flex; align-items: center; height: 100%; }
+  .sb-left { justify-content: flex-start; padding-left: 18px; }
+  .sb-right { justify-content: flex-end; padding-right: 18px; }
+  .sb-center { display: flex; align-items: center; gap: 34px; }
+  .sb-name {
+    font-family: var(--disp); font-weight: 700; font-size: 17px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1;
+  }
+  .sb-name.empty { color: var(--ink-dim); opacity: .55; }
+  .sb-dc { display: flex; align-items: center; gap: 8px; }
+  .sb-dc-label {
+    font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .18em;
+    color: var(--ink-dim);
+  }
+  .sb-dc-val {
+    font-family: var(--mono); font-weight: 700; font-size: 21px; color: var(--icon-amber); line-height: 1;
+  }
+  .sb-item { display: flex; align-items: center; gap: 9px; white-space: nowrap; cursor: pointer; }
   .sb-item svg { width: 21px; height: 21px; flex: none; }
   .sb-num { font-family: var(--mono); font-weight: 700; font-size: 19px; color: var(--ink); line-height: 1; }
   .sb-sep { font-family: var(--mono); font-weight: 600; font-size: 16px; color: var(--ink-dim); line-height: 1; }
@@ -20,27 +38,34 @@
   .sb-item.shield .sb-num { color: var(--icon-shield); }
   .sb-item.energy .sb-num { color: var(--icon-energy); }
   .sb-item.speed .sb-num { color: var(--icon-cyan); }
+  .sb-num, .sb-sep { position: relative; top: -1px; }
   .sb-item svg { opacity: .85; transition: opacity .12s ease, transform .12s ease; }
   .sb-item:hover svg { opacity: 1; transform: scale(1.12); }
 </style>
 </head>
 <body>
 <div class="sb" id="sb">
-  <div class="sb-item hull">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-    <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+  <div class="sb-side sb-left"><span class="sb-name empty" id="sbName">SHIP NAME</span></div>
+  <div class="sb-center">
+    <div class="sb-item hull">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+    </div>
+    <div class="sb-item shield">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+    </div>
+    <div class="sb-item energy">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+    </div>
+    <div class="sb-item speed">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+    </div>
   </div>
-  <div class="sb-item shield">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-    <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
-  </div>
-  <div class="sb-item energy">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-    <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
-  </div>
-  <div class="sb-item speed">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+  <div class="sb-side sb-right">
+    <div class="sb-dc"><span class="sb-dc-label">DC</span><span class="sb-dc-val" id="sbDc">–</span></div>
   </div>
 </div>
 <script>
@@ -53,12 +78,22 @@
     item.querySelector('.sb-cur').textContent = cur;
     item.querySelector('.sb-max').textContent = max;
   }
-  function applyStats(s){
-    if(!s) return;
+  function applyStats(m){
+    var s = m.stats || {};
     set(s.hull,   document.querySelector('.sb-item.hull'));
     set(s.shield, document.querySelector('.sb-item.shield'));
     set(s.energy, document.querySelector('.sb-item.energy'));
     set(s.speed,  document.querySelector('.sb-item.speed'));
+    var nameEl = document.getElementById('sbName');
+    if(m.name && String(m.name).length){
+      nameEl.textContent = m.name;
+      nameEl.classList.remove('empty');
+    } else {
+      nameEl.textContent = 'SHIP NAME';
+      nameEl.classList.add('empty');
+    }
+    var dcEl = document.getElementById('sbDc');
+    if(m.dc !== undefined && String(m.dc) !== '') dcEl.textContent = m.dc;
   }
   var KEYS = ['hull', 'shield', 'energy', 'speed'];
   function adjust(key, delta){
@@ -83,7 +118,7 @@
   var ch = new BroadcastChannel('frigate-hull-stats');
   ch.onmessage = function(ev){
     var m = ev.data;
-    if(m && m.t === 'stats') applyStats(m.stats);
+    if(m && m.t === 'stats') applyStats(m);
   };
   ch.postMessage({ t: 'hello', from: 'stats' });
   setInterval(function(){ ch.postMessage({ t: 'hello', from: 'stats' }); }, 2000);

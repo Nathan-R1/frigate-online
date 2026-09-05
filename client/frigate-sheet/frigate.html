@@ -40,7 +40,6 @@
           <option>Discovery Class</option>
           <option>Bulwark Class</option>
         </select>
-        <button type="button" class="info-btn" onclick="openClassInfo()" title="Show class details">i</button>
       </div>
 
       <div class="class-body">
@@ -825,9 +824,13 @@
     var v = el ? parseInt(el.value, 10) : NaN;
     return isNaN(v) ? 0 : v;
   }
+  function statStr(id){
+    var el = document.getElementById(id);
+    return el ? el.value : '';
+  }
   function broadcastHullStats(){
     if(!HULL_CHANNEL) return;
-    HULL_CHANNEL.postMessage({ t:'stats', stats:{
+    HULL_CHANNEL.postMessage({ t:'stats', name: statStr('shipName'), dc: statStr('dcHex'), stats:{
       hull:   { cur: statVal('hullCur'),   max: statVal('hullMax') },
       shield: { cur: statVal('shieldCur'), max: statVal('shieldMax') },
       energy: { cur: statVal('energyCur'), max: statVal('energyMax') },
@@ -976,61 +979,6 @@
       crewTraits: ['Citadel']
     }
   };
-  function classStatsSummary(stats){
-    if(!stats) return '<span>No stat increases.</span>';
-    var parts = [];
-    if(stats.hull) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.hull)) + ' Hull</span>');
-    if(stats.shield) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.shield)) + ' Shield</span>');
-    if(stats.storage) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.storage)) + ' Storage</span>');
-    if(stats.speed) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.speed)) + ' Speed</span>');
-    return parts.length ? parts.join('') : '<span>No stat increases.</span>';
-  }
-  function classSkillSummary(skills){
-    if(!skills) return '';
-    var parts = [];
-    if(skills.Sensors) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg>+' + escapeHtml(String(skills.Sensors)) + ' Sensors</span>');
-    if(skills.Leadership) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg>+' + escapeHtml(String(skills.Leadership)) + ' Leadership</span>');
-    if(skills.Logistics) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(skills.Logistics)) + ' Logistics</span>');
-    if(skills.Science) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>+' + escapeHtml(String(skills.Science)) + ' Science</span>');
-    return parts.join('');
-  }
-  function renderClassInfo(){
-    var list = document.getElementById('classInfoList');
-    if(!list) return;
-    list.innerHTML = '';
-    var order = ['Support Class', 'Jump Class', 'Striker Class', 'Discovery Class', 'Bulwark Class'];
-    for(var i = 0; i < order.length; i++){
-      var name = order[i];
-      var preset = CLASS_PRESETS[name];
-      if(!preset) continue;
-      var item = document.createElement('div');
-      item.className = 'class-info-item';
-      var skillHtml = classSkillSummary(preset.skills || null);
-      var html = '<b>' + escapeHtml(name) + '</b>' +
-        '<p><strong>Stats:</strong></p><p class="class-stat-line">' + classStatsSummary(preset.stats || null) + '</p>';
-      if(skillHtml){
-        html += '<p><strong>Crew Skills:</strong></p><p class="class-stat-line">' + skillHtml + '</p>';
-      }
-      html += '<p><strong>Tech:</strong> ' + escapeHtml(preset.techName || 'None') + '</p>';
-      if(preset.modName){
-        html += '<p><strong>Module:</strong> ' + escapeHtml(preset.modName) + '</p>';
-      }
-      if(preset.crewTraits && preset.crewTraits.length){
-        html += '<p><strong>Traits:</strong> ' + escapeHtml(preset.crewTraits.join(', ')) + '</p>';
-      }
-      item.innerHTML = html;
-      list.appendChild(item);
-    }
-  }
-  function openClassInfo(){
-    renderClassInfo();
-    var modal = document.getElementById('classInfoModal');
-    if(modal) modal.classList.add('open');
-  }
-  function closeClassInfo(){
-    var modal = document.getElementById('classInfoModal');
-    if(modal) modal.classList.remove('open');
-  }
   function findTechByName(name){
     for(var i=0;i<TECH_PRESETS.length;i++){
       if(TECH_PRESETS[i].name === name) return TECH_PRESETS[i];
@@ -1402,7 +1350,7 @@
     }
   });
   document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape') closeClassInfo();
+    if(e.key === 'Escape'){ /* class info moved to board */ }
   });
   buildModPresetMenu();
   refreshModSlotControls();
@@ -1677,14 +1625,5 @@
 </script>
 <div id="skillPopover"></div>
 <div class="preset-menu" id="slotPicker"></div>
-<div class="class-info-modal" id="classInfoModal" onclick="if(event.target===this) closeClassInfo()">
-  <div class="class-info-card">
-    <div class="class-info-head">
-      <div class="class-info-title">Class Info</div>
-      <button type="button" class="class-info-close" onclick="closeClassInfo()">Close</button>
-    </div>
-    <div class="class-info-list" id="classInfoList"></div>
-  </div>
-</div>
 </body>
 </html>

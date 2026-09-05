@@ -28,6 +28,7 @@
       <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
       <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
       <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
+      <button type="button" class="settings-item" id="classInfoBtn" title="Show the class details">Class Info</button>
     </div>
   </div>
 </div>
@@ -100,6 +101,16 @@
         </li>
       </ul>
     </div>
+  </div>
+</div>
+
+<div id="classInfoPopup" class="overlay hidden">
+  <div class="panel">
+    <div class="pop-head">
+      <span class="eyebrow">CLASS INFO</span>
+      <button type="button" class="x" id="classInfoClose" title="Close">✕</button>
+    </div>
+    <div class="class-info-list" id="classInfoList"></div>
   </div>
 </div>
 
@@ -880,6 +891,73 @@ function toggleStats() {
 }
 statsToggleBtn.addEventListener('click', toggleStats);
 
+var CLASS_PRESETS = {
+  'Support Class': { stats: {hull:2, shield:2, storage:2}, techName: 'Repulsor Unit', modName: 'Repulsor Unit' },
+  'Jump Class': { stats: {speed:2}, skills: {Sensors:1}, techName: 'Phantom' },
+  'Discovery Class': { stats: {storage:2}, skills: {Logistics:2, Science:1}, techName: 'Experimental Reconnaissance' },
+  'Striker Class': { stats: {storage:2}, skills: {Leadership:2}, techName: 'Decomp Strikes' },
+  'Bulwark Class': { stats: {hull:4}, crewTraits: ['Citadel'] }
+};
+function classStatsSummary(stats){
+  if(!stats) return '<span>No stat increases.</span>';
+  var parts = [];
+  if(stats.hull) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtmlBoard(String(stats.hull)) + ' Hull</span>');
+  if(stats.shield) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtmlBoard(String(stats.shield)) + ' Shield</span>');
+  if(stats.storage) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtmlBoard(String(stats.storage)) + ' Storage</span>');
+  if(stats.speed) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>+' + escapeHtmlBoard(String(stats.speed)) + ' Speed</span>');
+  return parts.length ? parts.join('') : '<span>No stat increases.</span>';
+}
+function classSkillSummary(skills){
+  if(!skills) return '';
+  var parts = [];
+  if(skills.Sensors) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg>+' + escapeHtmlBoard(String(skills.Sensors)) + ' Sensors</span>');
+  if(skills.Leadership) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg>+' + escapeHtmlBoard(String(skills.Leadership)) + ' Leadership</span>');
+  if(skills.Logistics) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtmlBoard(String(skills.Logistics)) + ' Logistics</span>');
+  if(skills.Science) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>+' + escapeHtmlBoard(String(skills.Science)) + ' Science</span>');
+  return parts.join('');
+}
+function escapeHtmlBoard(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function renderClassInfoList(){
+  var list = document.getElementById('classInfoList');
+  if(!list) return;
+  list.innerHTML = '';
+  var order = ['Support Class', 'Jump Class', 'Striker Class', 'Discovery Class', 'Bulwark Class'];
+  for (var i = 0; i < order.length; i++) {
+    var name = order[i];
+    var preset = CLASS_PRESETS[name];
+    if(!preset) continue;
+    var item = document.createElement('div');
+    item.className = 'class-info-item';
+    var skillHtml = classSkillSummary(preset.skills || null);
+    var html = '<b>' + escapeHtmlBoard(name) + '</b>' +
+      '<p><strong>Stats:</strong></p><p class="class-stat-line">' + classStatsSummary(preset.stats || null) + '</p>';
+    if(skillHtml){
+      html += '<p><strong>Crew Skills:</strong></p><p class="class-stat-line">' + skillHtml + '</p>';
+    }
+    html += '<p><strong>Tech:</strong> ' + escapeHtmlBoard(preset.techName || 'None') + '</p>';
+    if(preset.modName){
+      html += '<p><strong>Module:</strong> ' + escapeHtmlBoard(preset.modName) + '</p>';
+    }
+    if(preset.crewTraits && preset.crewTraits.length){
+      html += '<p><strong>Traits:</strong> ' + escapeHtmlBoard(preset.crewTraits.join(', ')) + '</p>';
+    }
+    item.innerHTML = html;
+    list.appendChild(item);
+  }
+}
+var classInfoPopup = document.getElementById('classInfoPopup');
+function openClassInfo() {
+  renderClassInfoList();
+  closeSettingsMenu();
+  classInfoPopup.classList.remove('hidden');
+}
+function closeClassInfo() { classInfoPopup.classList.add('hidden'); }
+document.getElementById('classInfoBtn').addEventListener('click', openClassInfo);
+document.getElementById('classInfoClose').addEventListener('click', closeClassInfo);
+classInfoPopup.addEventListener('click', function (e) { if (e.target === classInfoPopup) closeClassInfo(); });
+
 document.getElementById('rulesClose').addEventListener('click', function () {
   rulesPopup.classList.add('hidden');
 });
@@ -954,6 +1032,7 @@ window.addEventListener('pointerdown', handScheduleMirror);
 window.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     if (!rulesPopup.classList.contains('hidden')) { rulesPopup.classList.add('hidden'); return; }
+    if (!classInfoPopup.classList.contains('hidden')) { closeClassInfo(); return; }
     if (!popupEl.classList.contains('hidden')) { hideCreate(); return; }
     if (!swatchesEl.querySelector('.sw-menu').classList.contains('hidden')) { closeSwMenu(); return; }
     if (sel) { sel = null; renderPieces(); renderChips(); }
