@@ -933,10 +933,9 @@ var verticalToggleBtn = document.getElementById('verticalToggleBtn');
 function syncVerticalRect() {
   if (!statsBar.classList.contains('vertical-stats')) return;
   var top = topbarEl.offsetHeight;
-  var bottom = handSlot.offsetHeight || 0;
   statsBar.style.top = top + 'px';
   statsBar.style.bottom = 'auto';
-  statsBar.style.height = Math.max(0, window.innerHeight - top - bottom) + 'px';
+  statsBar.style.height = Math.max(0, window.innerHeight - top - 46) + 'px';
 }
 function toggleVertical() {
   var v = statsBar.classList.toggle('vertical-stats');
