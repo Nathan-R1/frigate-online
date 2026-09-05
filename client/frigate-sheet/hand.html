@@ -40,6 +40,10 @@
         </button>
         <div class="preset-menu filter-menu" id="handFilterMenu"></div>
       </div>
+      <button type="button" class="hand-align-btn" id="handAlignBtn" onclick="cycleHandAlign()" data-align="center" title="Align cards: Center (click to change)">
+        <span class="alicon" aria-hidden="true">☲</span>
+        <span class="alabel" id="handAlignLabel">Center</span>
+      </button>
     </div>
   </div>
   <div class="hand-view">
@@ -273,6 +277,30 @@
   function onHandSortChange(){
     HAND_SORT = document.getElementById('handSort').value;
     renderHand();
+  }
+  var HAND_ALIGN_ORDER = ['center', 'right', 'left'];
+  var HAND_ALIGN = 'center';
+  function cycleHandAlign(){
+    var i = HAND_ALIGN_ORDER.indexOf(HAND_ALIGN);
+    if(i === -1) i = 0;
+    HAND_ALIGN = HAND_ALIGN_ORDER[(i + 1) % HAND_ALIGN_ORDER.length];
+    applyHandAlign();
+    updateAlignUI();
+  }
+  function applyHandAlign(){
+    var strip = document.getElementById('hand');
+    if(!strip) return;
+    strip.classList.remove('align-center', 'align-right', 'align-left');
+    strip.classList.add('align-' + HAND_ALIGN);
+  }
+  function updateAlignUI(){
+    var btn = document.getElementById('handAlignBtn');
+    if(!btn) return;
+    btn.setAttribute('data-align', HAND_ALIGN);
+    var txt = HAND_ALIGN.charAt(0).toUpperCase() + HAND_ALIGN.slice(1);
+    btn.title = 'Align cards: ' + txt + ' (click to change)';
+    var lbl = document.getElementById('handAlignLabel');
+    if(lbl) lbl.textContent = txt;
   }
   function openHandSelect(id){
     var sel = document.getElementById(id);
@@ -538,6 +566,8 @@
   buildFilterMenu();
   wireHandSlider();
   renderHand();
+  applyHandAlign();
+  updateAlignUI();
   initChannel();
 
   /* inline onclick/onchange attributes resolve against the global scope */
@@ -545,6 +575,7 @@
   window.onHandSortChange = onHandSortChange;
   window.openHandSelect = openHandSelect;
   window.toggleFilterMenu = toggleFilterMenu;
+  window.cycleHandAlign = cycleHandAlign;
 })();
 </script>
 </body>
