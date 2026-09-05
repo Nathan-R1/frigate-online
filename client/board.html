@@ -22,6 +22,12 @@
   <button type="button" class="btn" id="saveBtn" title="Send all your pending changes to the server in one request">SAVE</button>
   <button type="button" class="btn" id="refreshBtn" title="Pull the latest board state from the server">⟳ REFRESH</button>
   <span id="badge" class="off">…</span>
+  <div class="settings-wrap" id="settingsWrap">
+    <button type="button" class="btn settings-cog" id="settingsBtn" title="Settings">⚙</button>
+    <div class="settings-menu hidden" id="settingsMenu">
+      <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
+    </div>
+  </div>
 </div>
 
 
@@ -54,6 +60,40 @@
     <div class="pop-foot">
       <span id="popStatus">scanned from pieces/images</span>
       <button type="button" id="popReload">⟳ RESCAN</button>
+    </div>
+  </div>
+</div>
+
+<div id="rulesPopup" class="overlay hidden">
+  <div class="panel rules-panel">
+    <div class="pop-head">
+      <span class="eyebrow">RULES</span>
+      <button type="button" class="x" id="rulesClose" title="Close">✕</button>
+    </div>
+    <div class="rules-body">
+      <h4>At the start of your turn</h4>
+      <ul>
+        <li>Recharge <b>Energy</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg>.</li>
+        <li>Refresh any exhausted <b>Technologies</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>, <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> or <b>Deployables</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg>.</li>
+        <li>Draw 5 cards from your Deck. Play 1 <b>Technology</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> (* see Science). Discard the remainder.</li>
+        <li>Move any <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> (up to <b>Speed</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> distance).</li>
+        <li>Destroy any <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> that do not meet their requirements.</li>
+      </ul>
+      <h4>During your turn</h4>
+      <ul>
+        <li>Activate <b>Technologies</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>, <b>Deployable</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> or <b>Module</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> effects (pay Energy where required).
+          <ul>
+            <li>Unless otherwise noted, a Technology, Deployable or Module cannot use its passive or activate when Exhausted.</li>
+          </ul>
+        </li>
+        <li>When you Create <b>Deployables</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> and <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg>, you place them on the board.
+          <ul>
+            <li><b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> cannot share the space with other objects. They can be built in any empty space that meets their Requirements.</li>
+            <li><b>Deployables</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> can share a location with objects. They can be built in any adjacent space to your ship.</li>
+            <li>Unless otherwise noted, "Adjacent" means horizontally/vertically adjacent NOT diagonal.</li>
+          </ul>
+        </li>
+      </ul>
     </div>
   </div>
 </div>
@@ -796,9 +836,38 @@ document.addEventListener('click', function (e) {
   if (!swatchesEl.contains(e.target)) closeSwMenu();
 });
 
+/* ===== settings menu ===== */
+var settingsWrap = document.getElementById('settingsWrap');
+var settingsMenu = document.getElementById('settingsMenu');
+var rulesPopup = document.getElementById('rulesPopup');
+
+function toggleSettingsMenu() { settingsMenu.classList.toggle('hidden'); }
+function closeSettingsMenu() { settingsMenu.classList.add('hidden'); }
+function openRules() { closeSettingsMenu(); rulesPopup.classList.remove('hidden'); }
+
+document.getElementById('settingsBtn').addEventListener('click', function (e) {
+  e.stopPropagation();
+  toggleSettingsMenu();
+});
+
+document.getElementById('rulesBtn').addEventListener('click', openRules);
+
+document.getElementById('rulesClose').addEventListener('click', function () {
+  rulesPopup.classList.add('hidden');
+});
+
+rulesPopup.addEventListener('click', function (e) {
+  if (e.target === rulesPopup) rulesPopup.classList.add('hidden');
+});
+
+document.addEventListener('click', function (e) {
+  if (!settingsWrap.contains(e.target)) closeSettingsMenu();
+});
+
 /* ===== keyboard ===== */
 window.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
+    if (!rulesPopup.classList.contains('hidden')) { rulesPopup.classList.add('hidden'); return; }
     if (!popupEl.classList.contains('hidden')) { hideCreate(); return; }
     if (!swatchesEl.querySelector('.sw-menu').classList.contains('hidden')) { closeSwMenu(); return; }
     if (sel) { sel = null; renderPieces(); renderChips(); }
