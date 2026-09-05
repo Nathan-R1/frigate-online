@@ -4,7 +4,8 @@ A lightweight browser-based tabletop battle map. Place coloured piece/flip-token
 
 ## What it is
 
-- **`client/frigate.html`** — the whole frontend (single file). Pan/zoom the board, click to create, drag to move, right-click to mark a piece exhausted, middle-click to ping a cell. Pieces start in your chosen colour.
+- **`client/board.html`** — the frontend (markup + JS). Pan/zoom the board, click to create, drag to move, right-click to mark a piece exhausted, middle-click to ping a cell. Pieces start in your chosen colour.
+- **`client/board.css`** — styles for the frontend.
 - **`client/pieces/images/`** — drop PNGs here; they appear automatically in the create menu and on the server-hosted board.
 - **`server/board.php`** — the tiny shared-state server. Persists the board to `server/board-state.json` and serves the piece catalog. Actions (`create`, `move`, `counter`, `exhaust`, `ping`, `resize`) are serialised with `flock` and saved atomically.
 - **`run.sh`** — starts a local PHP dev server so you can test alone or with friends.
@@ -19,7 +20,7 @@ Requires PHP (any 8.x) with `php-cli`.
 ./run.sh
 ```
 
-Then open **http://localhost:8000/client/frigate.html** in your browser.
+Then open **http://localhost:8000/client/board.html** in your browser.
 
 - To test multiplayer, open the same URL in two browser windows/tabs (pick a different colour in each) and refresh.
 - To pick a different port: `PORT=9000 ./run.sh`
