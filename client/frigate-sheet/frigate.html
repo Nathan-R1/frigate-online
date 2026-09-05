@@ -27,13 +27,6 @@
         <input class="name" id="shipName" type="text" placeholder="SHIP NAME" value="">
       </div>
     </div>
-    <div class="dc-badge">
-      <input class="dc-hex" id="dcHex" type="text" value="6" maxlength="2" title="Difficulty Class Check">
-      <div>
-        <div class="dc-label">Difficulty</div>
-        <div class="dc-word">Class Check</div>
-      </div>
-    </div>
   </div>
 
   <!-- ROW 1 -->
@@ -44,6 +37,7 @@
       <div class="bl"></div><div class="br"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section">Hull Classification</div>
+        <input class="dc-hex" id="dcHex" type="text" value="6" maxlength="2" title="Difficulty Class Check">
       </div>
       <div class="class-select">
         <select id="shipClass" onchange="onShipClassChange()">
