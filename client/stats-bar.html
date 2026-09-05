@@ -43,6 +43,8 @@
   .sb-num, .sb-sep { position: relative; top: -1px; }
   .sb-item svg { opacity: .85; transition: opacity .12s ease, transform .12s ease; }
   .sb-item:hover svg { opacity: 1; transform: scale(1.12); }
+  .sb-sec-title { display: none; }
+  .sb-skills-list { display: flex; align-items: center; justify-content: center; gap: 26px; min-width: 0; }
   .sb-skills {
     flex: 0 0 auto; height: 38px;
     display: flex; align-items: center; justify-content: center; gap: 26px;
@@ -55,23 +57,34 @@
   .sb-skill-num { font-family: var(--mono); font-weight: 700; font-size: 15px; line-height: 1; color: var(--ink); }
   .sb-wrap.vertical { height: 100%; flex-direction: column; align-items: stretch; }
   .sb-wrap.vertical .sb {
-    order: 2; flex: 1 1 0; min-height: 0;
-    display: flex; flex-direction: column; justify-content: center; align-items: stretch;
+    order: 1; flex: 1 1 0; min-height: 0;
+    display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
   }
   .sb-wrap.vertical .sb-left,
   .sb-wrap.vertical .sb-right { display: none; }
   .sb-wrap.vertical .sb-center {
-    flex: 1 1 auto;
+    flex: 1 1 auto; min-height: 0;
     flex-direction: column; align-items: center; justify-content: space-evenly; gap: 0;
-    height: auto; max-height: none; padding: 14px 0;
+    height: auto; max-height: none; padding: 6px 0 14px;
   }
   .sb-wrap.vertical .sb-sep,
   .sb-wrap.vertical .sb-max { display: none; }
+  .sb-wrap.vertical .sb-sec-title {
+    display: block; flex: none; align-self: center;
+    font-family: var(--mono); font-weight: 600; font-size: 11px;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--ink-dim);
+    padding: 14px 0 8px;
+  }
   .sb-wrap.vertical .sb-skills {
-    order: 1; flex: 1 1 0; min-height: 0;
-    flex-direction: column; justify-content: space-evenly; align-items: center;
-    gap: 0; height: auto; padding: 14px 0;
-    border-top: none; border-bottom: 1px solid #1f2a38;
+    order: 2; flex: 1 1 0; min-height: 0;
+    flex-direction: column; justify-content: flex-start; align-items: stretch;
+    gap: 0; height: auto; padding: 0;
+    border-top: 1px solid #1f2a38; border-bottom: none;
+  }
+  .sb-wrap.vertical .sb-skills-list {
+    flex: 1 1 auto; min-height: 0;
+    flex-direction: column; align-items: center; justify-content: space-evenly;
+    gap: 0; padding: 0 0 14px;
   }
   .sb-wrap.vertical .sb-skill { gap: 8px; }
 </style>
@@ -79,6 +92,7 @@
 <body>
 <div class="sb-wrap" id="sbWrap">
   <div class="sb" id="sb">
+    <div class="sb-sec-title">STATS</div>
     <div class="sb-side sb-left"><span class="sb-name empty" id="sbName">SHIP NAME</span></div>
     <div class="sb-center">
       <div class="sb-item hull">
@@ -102,7 +116,10 @@
       </div>
     </div>
   </div>
-  <div class="sb-skills hidden" id="sbSkills"></div>
+  <div class="sb-skills hidden" id="sbSkills">
+    <div class="sb-sec-title">SKILLS</div>
+    <div class="sb-skills-list" id="sbSkillsList"></div>
+  </div>
 </div>
 <script>
 (function(){
@@ -123,12 +140,13 @@
   var verticalOn = false;
   var sbWrap = document.getElementById('sbWrap');
   var skillsEl = document.getElementById('sbSkills');
+  var skillsListEl = document.getElementById('sbSkillsList');
 
   function updateSkillsVisibility(){
     skillsEl.classList.toggle('hidden', !(verticalOn || detailOn));
   }
   function buildSkills(){
-    skillsEl.innerHTML = '';
+    skillsListEl.innerHTML = '';
     for (var i = 0; i < SKILL_META.length; i++) {
       (function (m) {
         var item = document.createElement('div');
@@ -144,7 +162,7 @@
         item.appendChild(icon);
         item.appendChild(label);
         item.appendChild(num);
-        skillsEl.appendChild(item);
+        skillsListEl.appendChild(item);
         skillEls[m.key] = num;
       })(SKILL_META[i]);
     }
