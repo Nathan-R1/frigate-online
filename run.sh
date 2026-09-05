@@ -11,8 +11,8 @@ if ! command -v php >/dev/null 2>&1; then
   exit 1
 fi
 
-if curl -sf "http://localhost:${PORT}/board.php?get" >/dev/null 2>&1; then
-  echo "Already running at http://localhost:${PORT}"
+if curl -sf "http://localhost:${PORT}/server/board.php?get" >/dev/null 2>&1; then
+  echo "Already running at http://localhost:${PORT}/client/frigate.html"
   exit 0
 fi
 
@@ -20,8 +20,8 @@ nohup php -S "${HOST}:${PORT}" -t "$APP_DIR" >/tmp/frigate-server.log 2>&1 &
 PID=$!
 
 for i in $(seq 1 30); do
-  if curl -sf "http://localhost:${PORT}/board.php?get" >/dev/null 2>&1; then
-    echo "Frigate running at http://localhost:${PORT}"
+  if curl -sf "http://localhost:${PORT}/server/board.php?get" >/dev/null 2>&1; then
+    echo "Frigate running at http://localhost:${PORT}/client/frigate.html"
     echo "PID ${PID} — log: /tmp/frigate-server.log"
     exit 0
   fi
