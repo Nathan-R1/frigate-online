@@ -71,7 +71,7 @@ input[type=number]:focus { outline: none; border-color: #35d0e0; }
   border-left: 1px solid #1f2a38; border-bottom: 0;
 }
 .hull-stats-bar.vertical-stats ~ .main { margin-right: 90px; }
-.hull-stats-bar.vertical-stats ~ .main .hand-slot { width: calc(100% + 90px); }
+.hull-stats-bar.vertical-stats ~ .main .hand-slot { width: calc(100% + 90px); z-index: 50; }
 
 /* ===== side panel ===== */
 .main { flex: 1; display: flex; min-height: 0; position: relative; }
