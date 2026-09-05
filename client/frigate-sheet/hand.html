@@ -380,6 +380,7 @@
     if(!view || !strip) return;
     var up = strip.querySelector('.hand-card.popped') || strip.querySelector('.hand-card:hover');
     view.classList.toggle('roomy', !!up);
+    reportHandSize();
   }
   function updateHandSpread(){
     var view = document.querySelector('.hand-view');
@@ -432,6 +433,7 @@
     syncHandBarHeight();
     window.addEventListener('resize', syncHandBarHeight);
     window.addEventListener('resize', updateHandSpread);
+    window.addEventListener('resize', reportHandSize);
     view.addEventListener('scroll', updateHandSlider);
     window.addEventListener('resize', updateHandSlider);
     var dragging = false;
@@ -463,13 +465,26 @@
     slider.addEventListener('pointerup', endDrag);
     slider.addEventListener('pointercancel', endDrag);
   }
+  function handExpandedH(){
+    var barH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hand-bar-h')) || 44;
+    var cardH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hand-card-h')) || 210;
+    var view = document.querySelector('.hand-view');
+    var roomy = !!(view && view.classList.contains('roomy'));
+    return Math.round(cardH + barH + (roomy ? 108 : 8)) + 6;
+  }
+  function reportHandSize(){
+    var dock = document.getElementById('handDock');
+    if(!dock) return;
+    var open = dock.classList.contains('expanded');
+    var msg = { t:'hand-size', open: open };
+    if(open) msg.h = handExpandedH();
+    try{ window.parent.postMessage(msg, '*'); }catch(e){}
+  }
   function toggleHand(){
     var dock = document.getElementById('handDock');
     var willExpand = !dock.classList.contains('expanded');
     dock.classList.toggle('expanded', willExpand);
-    try{
-      window.parent.postMessage(willExpand ? 'hand:expand' : 'hand:collapse', '*');
-    }catch(e){}
+    reportHandSize();
     if(willExpand){
       renderHand();
       setTimeout(function(){
@@ -502,6 +517,24 @@
     }
     hello();
   }
+  var peRaf = 0;
+  var lastPE = null;
+  function trackHandPointer(e){
+    lastPE = e;
+    if(peRaf) return;
+    peRaf = requestAnimationFrame(function(){
+      peRaf = 0;
+      var dock = document.getElementById('handDock');
+      if(!dock || !dock.classList.contains('expanded') || !lastPE) return;
+      var el = document.elementFromPoint(lastPE.clientX, lastPE.clientY);
+      var on = !!el && !!el.closest &&
+        !!el.closest('.hand-card, .hand-bar, .hand-slider.on, .preset-menu');
+      try{ window.parent.postMessage({ t:'pe', on: on }, '*'); }catch(e){}
+    });
+  }
+  document.addEventListener('pointermove', trackHandPointer);
+  document.addEventListener('pointerdown', trackHandPointer);
+
   buildFilterMenu();
   wireHandSlider();
   renderHand();
