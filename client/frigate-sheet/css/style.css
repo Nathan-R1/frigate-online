@@ -25,6 +25,8 @@
     --icon-charged:#e88ab4;
     --icon-amber:#e8a94a;
     --icon-cyan:#4fd8c9;
+    --icon-rocket:#7fd88a;
+    --icon-skill:#e8a94a;
     --bg-radial:
       radial-gradient(ellipse at 20% -10%, #142032 0%, transparent 55%),
       radial-gradient(ellipse at 100% 110%, #131c2c 0%, transparent 50%);
@@ -76,7 +78,7 @@ color:var(--cyan);
 
     position:relative;
     background:linear-gradient(180deg, var(--panel) 0%, var(--panel-alt) 100%);
-    border:1px solid var(--line);
+    border:1px solid transparent;
     padding:20px 22px 22px;
     display:flex;flex-direction:column;
   
