@@ -134,7 +134,27 @@ display:inline-flex;
     .hand-filter-btn{padding:5px 8px;}
     .hand-filter-btn .flabel{display:none;}
     .hand-filter-btn .fico{display:inline-block;}
+    .hand-align-btn .alabel{display:none;}
   
+  }
+/* ===== hand align button ===== */
+  .hand-align-btn{
+
+    display:flex;align-items:center;gap:6px;
+    background:none;border:1px solid var(--line-bright);color:var(--ink-dim);
+    font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    padding:4px 9px;cursor:pointer;line-height:1;
+
+  }
+.hand-align-btn:hover{
+color:var(--cyan);border-color:var(--cyan);
+  }
+.hand-align-btn[data-align="right"],
+  .hand-align-btn[data-align="left"]{
+color:var(--cyan);border-color:var(--cyan-dim);
+  }
+.hand-align-btn .alicon{
+font-size:14px;line-height:1;flex:none;
   }
 .filter-menu{
 
@@ -298,6 +318,12 @@ background:var(--cyan);
     width:max-content;
     min-width:100%;
   
+  }
+.hand.align-left{
+justify-content:flex-start;justify-content:safe flex-start;
+  }
+.hand.align-right{
+justify-content:flex-end;justify-content:safe flex-end;
   }
 .hand-card{
 
