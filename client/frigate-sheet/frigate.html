@@ -45,17 +45,17 @@
       <div class="class-body">
       <div class="stat-strip">
         <div class="stat hull">
-          <svg class="icon dec" onclick="decrementStat('hullCur')" oncontextmenu="incrementStat(event,'hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="incrementStat(event,'hullCur')" oncontextmenu="decrementStat(event,'hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="hullCur" value="5" maxlength="2"><span class="sep">/</span><input id="hullMax" value="5" maxlength="2"></div>
           <div class="lbl">Hull HP</div>
         </div>
         <div class="stat shield">
-          <svg class="icon dec" onclick="decrementStat('shieldCur')" oncontextmenu="incrementStat(event,'shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="incrementStat(event,'shieldCur')" oncontextmenu="decrementStat(event,'shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="shieldCur" value="6" maxlength="2"><span class="sep">/</span><input id="shieldMax" value="6" maxlength="2"></div>
           <div class="lbl">Base Shield</div>
         </div>
         <div class="stat energy">
-          <svg class="icon dec" onclick="decrementStat('energyCur')" oncontextmenu="incrementStat(event,'energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="incrementStat(event,'energyCur')" oncontextmenu="decrementStat(event,'energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="energyCur" value="6" maxlength="2"><span class="sep">/</span><input id="energyMax" value="6" maxlength="2"></div>
           <div class="lbl">Energy</div>
         </div>
@@ -65,7 +65,7 @@
           <div class="lbl">Storage</div>
         </div>
         <div class="stat speed">
-          <svg class="icon dec" onclick="decrementStat('speedCur')" oncontextmenu="incrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="incrementStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedMax" value="2" maxlength="2"></div>
           <div class="lbl">Speed</div>
         </div>
@@ -235,7 +235,8 @@
       syncGridCollapse(containers[k]);
     }
   }
-  function decrementStat(id){
+  function decrementStat(e, id){
+    if(e && e.preventDefault) e.preventDefault();
     var el = document.getElementById(id);
     if(!el) return;
     var v = parseInt(el.value, 10);
@@ -1075,12 +1076,7 @@
       if(!inp) return;
       var v = parseInt(inp.value, 10);
       if(isNaN(v)) v = 0;
-      if(hl){
-        v = Math.max(0, v - 1);
-      } else {
-        v = v + 1;
-      }
-      inp.value = v;
+      inp.value = v + 1;
       refreshTechSections(card);
       return;
     }
@@ -1089,6 +1085,19 @@
     if(tk){ cycleTechType(tk); return; }
     var dp = e.target.closest('.tdepbtn');
     if(dp){ cycleTechDeploy(dp); }
+  });
+  document.getElementById('techGrid').addEventListener('contextmenu', function(e){
+    var hl = e.target.closest('.thull, .tcharges');
+    if(!hl) return;
+    e.preventDefault();
+    var card = hl.closest('.tech-card');
+    if(!card || card.classList.contains('editing')) return;
+    var inp = hl.querySelector('input');
+    if(!inp) return;
+    var v = parseInt(inp.value, 10);
+    if(isNaN(v)) v = 0;
+    inp.value = Math.max(0, v - 1);
+    refreshTechSections(card);
   });
   document.getElementById('techGrid').addEventListener('input', function(e){
     if(e.target.closest && e.target.closest('.tech-card')){
@@ -1340,27 +1349,32 @@
     if(bt){ toggleModType(bt); return; }
     var mt = e.target.closest('.mticker');
     if(mt){ cycleModTechType(mt); return; }
-    var hl = e.target.closest('.mhull, .mdur');
+    var hl = e.target.closest('.mhull');
+    var md = e.target.closest('.mdur');
     var ch = e.target.closest('.mcharges');
-    if(ch && !e.target.closest('input')){
-      var chInp = ch.querySelector('input');
-      if(chInp){
-        var cv = parseInt(chInp.value, 10);
-        if(isNaN(cv)) cv = 0;
-        chInp.value = cv + 1;
-        refreshModSections(ch.closest('.mod-card'));
+    var sp = e.target.closest('.mspeed');
+    var bump = hl || md || sp || ch;
+    if(bump && !e.target.closest('input')){
+      var inp = bump.querySelector('input');
+      if(inp){
+        var bv = parseInt(inp.value, 10);
+        if(isNaN(bv)) bv = 0;
+        inp.value = bv + 1;
+        refreshModSections(bump.closest('.mod-card'));
       }
       return;
     }
-    if(hl && !e.target.closest('input')){
-      var inp = hl.querySelector('input');
-      if(inp){
-        var v = parseInt(inp.value, 10);
-        if(isNaN(v)) v = 0;
-        inp.value = Math.max(0, v - 1);
-        refreshModSections(hl.closest('.mod-card'));
-      }
-    }
+  });
+  document.getElementById('modGrid').addEventListener('contextmenu', function(e){
+    var hl = e.target.closest('.mhull, .mcharges, .mdur, .mspeed');
+    if(!hl) return;
+    e.preventDefault();
+    var inp = hl.querySelector('input');
+    if(!inp) return;
+    var v = parseInt(inp.value, 10);
+    if(isNaN(v)) v = 0;
+    inp.value = Math.max(0, v - 1);
+    refreshModSections(hl.closest('.mod-card'));
   });
   document.getElementById('modGrid').addEventListener('input', function(e){
     if(e.target.closest && e.target.closest('.mod-card')){
