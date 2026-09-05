@@ -14,24 +14,15 @@
     user-select: none; -webkit-user-select: none;
     background: linear-gradient(#10161f, #0c1117);
   }
-  .sb-side { flex: 1; min-width: 0; height: 100%; max-height: 100%; overflow: hidden; display: flex; align-items: center; }
+  .sb-side { flex: 0 0 auto; min-width: 0; height: 100%; max-height: 100%; overflow: hidden; display: flex; align-items: center; }
   .sb-left { justify-content: flex-start; padding-left: 18px; }
-  .sb-right { justify-content: flex-end; padding-right: 18px; }
-  .sb-center { display: flex; align-items: center; gap: 34px; height: 100%; max-height: 100%; overflow: hidden; }
+  .sb-center { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 34px; height: 100%; max-height: 100%; overflow: hidden; }
   .sb-name {
     font-family: var(--disp); font-weight: 700; font-size: 17px; letter-spacing: .06em;
     text-transform: uppercase; color: var(--ink);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1;
   }
   .sb-name.empty { color: var(--ink-dim); opacity: .55; }
-  .sb-dc { display: flex; align-items: center; gap: 8px; }
-  .sb-dc-label {
-    font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .18em;
-    color: var(--ink-dim);
-  }
-  .sb-dc-val {
-    font-family: var(--mono); font-weight: 700; font-size: 21px; color: var(--icon-amber); line-height: 1;
-  }
   .sb-item { display: flex; align-items: center; gap: 9px; white-space: nowrap; cursor: pointer; }
   .sb-item svg { width: 21px; height: 21px; flex: none; }
   .sb-num { font-family: var(--mono); font-weight: 700; font-size: 19px; color: var(--ink); line-height: 1; }
@@ -40,6 +31,15 @@
   .sb-item.shield .sb-num { color: var(--icon-shield); }
   .sb-item.energy .sb-num { color: var(--icon-energy); }
   .sb-item.speed .sb-num { color: var(--icon-cyan); }
+  .sb-item.dc { cursor: default; }
+  .sb-item.dc .sb-dc-label {
+    font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .18em;
+    color: var(--ink-dim);
+  }
+  .sb-item.dc .sb-dc-val {
+    font-family: var(--mono); font-weight: 700; font-size: 19px; line-height: 1;
+    color: var(--icon-amber);
+  }
   .sb-num, .sb-sep { position: relative; top: -1px; }
   .sb-item svg { opacity: .85; transition: opacity .12s ease, transform .12s ease; }
   .sb-item:hover svg { opacity: 1; transform: scale(1.12); }
@@ -53,23 +53,24 @@
   .sb-skill svg { width: 19px; height: 19px; opacity: .85; }
   .sb-skill-label { display: none; font: 600 11px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-mid); }
   .sb-skill-num { font-family: var(--mono); font-weight: 700; font-size: 15px; line-height: 1; color: var(--ink); }
-  .sb-wrap.vertical { height: auto; flex-direction: column; align-items: stretch; }
+  .sb-wrap.vertical { height: 100%; flex-direction: column; align-items: stretch; }
   .sb-wrap.vertical .sb {
-    order: 2; flex: 1 1 auto;
-    display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+    order: 2; flex: 1 1 0; min-height: 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: stretch;
   }
   .sb-wrap.vertical .sb-left,
   .sb-wrap.vertical .sb-right { display: none; }
   .sb-wrap.vertical .sb-center {
-    flex-direction: column; align-items: center; gap: 12px;
-    height: auto; max-height: none; padding: 12px 0;
+    flex: 1 1 auto;
+    flex-direction: column; align-items: center; justify-content: space-evenly; gap: 0;
+    height: auto; max-height: none; padding: 14px 0;
   }
   .sb-wrap.vertical .sb-sep,
   .sb-wrap.vertical .sb-max { display: none; }
   .sb-wrap.vertical .sb-skills {
-    order: 1; flex: none;
-    flex-direction: column; justify-content: flex-start; align-items: center;
-    gap: 8px; height: auto; padding: 12px 0;
+    order: 1; flex: 1 1 0; min-height: 0;
+    flex-direction: column; justify-content: space-evenly; align-items: center;
+    gap: 0; height: auto; padding: 14px 0;
     border-top: none; border-bottom: 1px solid #1f2a38;
   }
   .sb-wrap.vertical .sb-skill { gap: 8px; }
@@ -96,9 +97,9 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
       </div>
-    </div>
-    <div class="sb-side sb-right">
-      <div class="sb-dc"><span class="sb-dc-label">DC</span><span class="sb-dc-val" id="sbDc">–</span></div>
+      <div class="sb-item dc">
+        <span class="sb-dc-label">DC</span><span class="sb-dc-val" id="sbDc">–</span>
+      </div>
     </div>
   </div>
   <div class="sb-skills hidden" id="sbSkills"></div>
@@ -125,9 +126,6 @@
 
   function updateSkillsVisibility(){
     skillsEl.classList.toggle('hidden', !(verticalOn || detailOn));
-  }
-  function reportHeight(){
-    window.parent.postMessage({ t: 'sbheight', h: sbWrap.offsetHeight }, '*');
   }
   function buildSkills(){
     skillsEl.innerHTML = '';
@@ -219,13 +217,9 @@
       verticalOn = !!m.on;
       sbWrap.classList.toggle('vertical', verticalOn);
       updateSkillsVisibility();
-      reportHeight();
     }
   });
   buildSkills();
-  reportHeight();
-  window.addEventListener('resize', function () { if (verticalOn) reportHeight(); });
-  setInterval(function () { if (verticalOn) reportHeight(); }, 1200);
   if(typeof BroadcastChannel === 'undefined') return;
   var ch = new BroadcastChannel('frigate-hull-stats');
   ch.onmessage = function(ev){
