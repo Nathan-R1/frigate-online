@@ -36,7 +36,7 @@
     <div class="panel">
       <div class="bl"></div><div class="br"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section">Hull Classification</div>
+        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Hull Classification</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2c2.5 2.5 3.5 6 3.5 10.5L18 15v3l-2.5-1c-.3 1.5-1 2.7-1.7 3.5l-1.8-1.8-1.8 1.8c-.7-.8-1.4-2-1.7-3.5L6 18v-3l2.5-2.5C8.5 8 9.5 4.5 12 2Z" stroke="var(--icon-rocket)" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
         <input class="dc-hex" id="dcHex" type="text" value="6" maxlength="2" title="Difficulty Class Check">
       </div>
       <div class="class-select">
@@ -86,7 +86,7 @@
     <div class="panel skills-panel">
       <div class="bl"></div><div class="br"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section">Crew Skills</div>
+        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Crew Skills</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2 14.9 9.1 22 10.2 16.8 15.2 18.2 22 12 18.5 5.8 22 7.2 15.2 2 10.2 9.1 9.1 12 2Z" stroke="var(--icon-skill)" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
       </div>
       <table class="skills">
         <tr><th>Name</th><th class="pt">Points</th><th class="pt">Penalty</th></tr>
@@ -110,7 +110,7 @@
     <div class="panel">
       <div class="bl"></div><div class="br"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section">Traits &amp; Officers<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Traits &amp; Officers</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg></div>
         <div class="slot-controls">
           <button type="button" class="slot-btn" id="slotRemoveBtn" onclick="showSlotPicker(event, this, 'crewGrid', '.cname')" title="Remove a slot">−</button>
           <div class="slot-menu-wrap">
@@ -133,7 +133,7 @@
     <div class="panel tech-panel">
       <div class="bl"></div><div class="br"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section">Technologies<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Technologies</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <div class="slot-controls">
           <button type="button" class="slot-btn" id="techSlotRemoveBtn" onclick="showSlotPicker(event, this, 'techGrid', '.tname')" title="Remove a slot">−</button>
           <div class="slot-menu-wrap">
@@ -176,7 +176,7 @@
   <div class="panel" style="margin-top:16px;">
     <div class="bl"></div><div class="br"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-      <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section">Modules<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> / Deployables<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg></div>
+      <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Modules</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg><span class="eb-text"> / Deployables</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg></div>
       <div class="slot-controls">
         <button type="button" class="slot-btn" id="modSlotRemoveBtn" onclick="showSlotPicker(event, this, 'modGrid', '.mname')" title="Remove a slot">−</button>
         <div class="slot-menu-wrap">
