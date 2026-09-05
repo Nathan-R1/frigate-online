@@ -27,9 +27,12 @@
       </div>
       <button type="button" class="settings-item" id="rulesBtn" title="Show the rules">Rules</button>
       <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
+      <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
     </div>
   </div>
 </div>
+
+<iframe class="hull-stats-bar" id="hullStatsBar" src="stats-bar.html" title="Hull Stats"></iframe>
 
 
 
@@ -866,6 +869,16 @@ function toggleSheet() {
   closeSettingsMenu();
 }
 sheetToggleBtn.addEventListener('click', toggleSheet);
+
+var statsToggleBtn = document.getElementById('statsToggleBtn');
+var statsBar = document.getElementById('hullStatsBar');
+function toggleStats() {
+  var hidden = statsBar.classList.toggle('hidden-stats');
+  statsToggleBtn.textContent = hidden ? 'Show Stats' : 'Hide Stats';
+  statsToggleBtn.title = hidden ? 'Show the stats bar' : 'Hide the stats bar';
+  closeSettingsMenu();
+}
+statsToggleBtn.addEventListener('click', toggleStats);
 
 document.getElementById('rulesClose').addEventListener('click', function () {
   rulesPopup.classList.add('hidden');

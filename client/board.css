@@ -57,6 +57,13 @@ input[type=number]:focus { outline: none; border-color: #35d0e0; }
   border-top: 1px solid #141c26; background: #0a0e13; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ===== stats bar ===== */
+.hull-stats-bar {
+  flex: none; display: block; width: 100%; height: 46px; border: 0;
+  border-bottom: 1px solid #1f2a38;
+}
+.hull-stats-bar.hidden-stats { display: none; }
+
 /* ===== side panel ===== */
 .main { flex: 1; display: flex; min-height: 0; position: relative; }
 .hand-slot {
