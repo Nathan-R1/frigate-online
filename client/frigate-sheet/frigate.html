@@ -13,10 +13,9 @@
 <nav class="menu-bar">
   <div class="menu-brand">Starship Dossier</div>
   <div class="menu-actions">
-    <button type="button" class="menu-toggle" id="handPopoutLaunchBtn" onclick="openHandPopout()">⧉ Hand Window</button>
-    <button type="button" class="menu-toggle" onclick="exportSheet()">⇩ Export</button>
-    <button type="button" class="menu-toggle" onclick="importSheet()">⇧ Import</button>
-    <button type="button" id="themeToggle" class="menu-toggle" onclick="toggleTheme()">☀ Light Mode</button>
+    <button type="button" class="menu-toggle" onclick="exportSheet()" title="Export sheet as JSON"><span class="menu-ico" aria-hidden="true">⇩</span><span class="menu-label">Export</span></button>
+    <button type="button" class="menu-toggle" onclick="importSheet()" title="Import sheet from JSON"><span class="menu-ico" aria-hidden="true">⇧</span><span class="menu-label">Import</span></button>
+    <button type="button" id="themeToggle" class="menu-toggle" onclick="toggleTheme()" title="Switch to light mode"><span class="menu-ico" aria-hidden="true">☀</span><span class="menu-label">Light Mode</span></button>
   </div>
 </nav>
 <div class="sheet">
@@ -24,15 +23,8 @@
   <!-- HEADER -->
   <div class="topbar">
     <div>
-      <div class="classline">Fleet Registry &nbsp;·&nbsp; Vessel Dossier</div>
       <div class="shiptitle">
-        <span class="kind">Frigate</span>
-        <span class="dash">—</span>
         <input class="name" id="shipName" type="text" placeholder="SHIP NAME" value="">
-      </div>
-      <div class="subline">
-        <span>CAPTAIN: <input id="captain" type="text" placeholder="—" value=""></span>
-        <span>COMMISSIONED: <input id="commissioned" type="text" placeholder="—" value=""></span>
       </div>
     </div>
     <div class="dc-badge">
@@ -274,10 +266,6 @@
 <script src="presets/crew-presets.js"></script>
 <script src="presets/mod-presets.js"></script>
 <script>
-  var HAND_CHANNEL_NAME = 'frigate-hand-sync';
-  var HAND_CHANNEL = null;
-  var HAND_INSTANCE_ID = 'hand-' + Math.random().toString(36).slice(2);
-
   function toggleTurnBox(rhead){
     var box = rhead.parentNode;
     box.classList.toggle('collapsed');
@@ -385,7 +373,17 @@
   }
   function updateToggleLabel(theme){
     var btn = document.getElementById('themeToggle');
-    btn.textContent = theme === 'dark' ? '☀ Light Mode' : '☾ Dark Mode';
+    var ico = btn.querySelector('.menu-ico');
+    var lbl = btn.querySelector('.menu-label');
+    if(theme === 'dark'){
+      ico.textContent = '☀';
+      lbl.textContent = 'Light Mode';
+      btn.title = 'Switch to light mode';
+    } else {
+      ico.textContent = '☾';
+      lbl.textContent = 'Dark Mode';
+      btn.title = 'Switch to dark mode';
+    }
   }
   function toggleTheme(){
     var html = document.documentElement;
@@ -393,7 +391,6 @@
     var next = current === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     updateToggleLabel(next);
-    broadcastHandSnapshot();
   }
 
   function slotLabel(n){
@@ -811,21 +808,6 @@
 
   /* Each category holds one value; '' means the attribute is not filtered on. */
   var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
-  function copyHandFilters(){
-    return {
-      hand: HAND_FILTERS.hand || '',
-      type: HAND_FILTERS.type || '',
-      energy: HAND_FILTERS.energy || '',
-      trait: HAND_FILTERS.trait || ''
-    };
-  }
-  function applyHandFilters(filters){
-    filters = filters || {};
-    HAND_FILTERS.hand = filters.hand || '';
-    HAND_FILTERS.type = filters.type || '';
-    HAND_FILTERS.energy = filters.energy || '';
-    HAND_FILTERS.trait = filters.trait || '';
-  }
   function nextHandCardState(cur){
     return (cur === 'played') ? 'exhausted' : 'played';
   }
@@ -840,7 +822,6 @@
     var grid = document.getElementById('techGrid');
     var gi = grid ? Array.prototype.indexOf.call(grid.children, card) : -1;
     syncHandCardCharges(gi, inp.value);
-    if(gi >= 0) postHandMessage('sync-tech-charges', { index: gi, value: inp.value });
   }
   function syncHandCardCharges(gi, val){
     var handEl = document.getElementById('hand');
@@ -915,84 +896,6 @@
       e.preventDefault();
       if(onActivate) onActivate();
     });
-  }
-  function canUseHandPopout(){
-    return !!(window.frigateElectron && window.frigateElectron.openHandWindow);
-  }
-  function openHandPopout(){
-    if(!canUseHandPopout()){
-      alert('Transparent hand popout requires running this sheet through the Electron wrapper.');
-      return;
-    }
-    broadcastHandSnapshot();
-    window.frigateElectron.openHandWindow();
-  }
-  function setupHandChannel(){
-    if(!window.BroadcastChannel) return;
-    HAND_CHANNEL = new BroadcastChannel(HAND_CHANNEL_NAME);
-    HAND_CHANNEL.onmessage = function(event){
-      var msg = event && event.data ? event.data : null;
-      if(!msg || msg.source === HAND_INSTANCE_ID) return;
-      if(msg.type === 'request-snapshot'){
-        broadcastHandSnapshot();
-        return;
-      }
-      if(msg.type === 'set-hand-controls'){
-        HAND_SORT = msg.handSort || 'az';
-        applyHandFilters(msg.handFilters);
-        var sortSel = document.getElementById('handSort');
-        if(sortSel) sortSel.value = HAND_SORT;
-        updateFilterUI();
-        refreshHand();
-        return;
-      }
-      if(msg.type === 'set-tech-state'){
-        applyHandPopoutStateChange(msg);
-        return;
-      }
-      if(msg.type === 'set-tech-charges'){
-        applyHandPopoutChargeChange(msg);
-      }
-    };
-  }
-  function postHandMessage(type, payload){
-    if(!HAND_CHANNEL) return;
-    var msg = payload || {};
-    msg.type = type;
-    msg.source = HAND_INSTANCE_ID;
-    HAND_CHANNEL.postMessage(msg);
-  }
-  function collectHandSnapshot(){
-    var tech = readTech();
-    for(var i=0;i<tech.length;i++){
-      tech[i].sourceIndex = i;
-    }
-    return {
-      theme: document.documentElement.getAttribute('data-theme') || 'dark',
-      shipName: (document.getElementById('shipName') || {}).value || '',
-      handSort: HAND_SORT,
-      handFilters: copyHandFilters(),
-      tech: tech
-    };
-  }
-  function broadcastHandSnapshot(){
-    if(!HAND_CHANNEL) return;
-    postHandMessage('snapshot', { snapshot: collectHandSnapshot() });
-  }
-  function applyHandPopoutStateChange(msg){
-    var grid = document.getElementById('techGrid');
-    if(!grid) return;
-    var idx = msg.index;
-    if(typeof idx !== 'number' || idx < 0 || idx >= grid.children.length) return;
-    setTechState(grid.children[idx], msg.state);
-    refreshHand();
-  }
-  function applyHandPopoutChargeChange(msg){
-    var grid = document.getElementById('techGrid');
-    if(!grid) return;
-    var idx = msg.index;
-    if(typeof idx !== 'number' || idx < 0 || idx >= grid.children.length) return;
-    adjustTechCharges(grid.children[idx], msg.delta);
   }
   var FILTER_CATS = [
     {key:'hand', label:'Hand', options:[
@@ -1230,7 +1133,6 @@
     countEl.textContent = cards.length;
     updateHandSpread();
     updateHandSlider();
-    broadcastHandSnapshot();
   }
   /* Cards overlap by 33% when the hand is small and there is room to fan out,
      tightening to 66% as the hand fills the strip. */
@@ -2084,8 +1986,6 @@
     function v(id){ var el = document.getElementById(id); return el ? el.value : ''; }
     return {
       shipName: v('shipName'),
-      captain: v('captain'),
-      commissioned: v('commissioned'),
       shipClass: v('shipClass'),
       dcHex: v('dcHex'),
       stats: {
@@ -2106,8 +2006,6 @@
       if(el && val !== undefined) el.value = val;
     }
     set('shipName', json.shipName);
-    set('captain', json.captain);
-    set('commissioned', json.commissioned);
     set('shipClass', json.shipClass);
     set('dcHex', json.dcHex);
     var s = json.stats || {};
@@ -2155,7 +2053,6 @@
     input.click();
   }
   (function(){
-    setupHandChannel();
     var cards = document.querySelectorAll('.tech-card');
     for(var i=0;i<cards.length;i++){
       setTechDeploy(cards[i].querySelector('.tdepbtn'), cards[i].querySelector('.tdepbtn').getAttribute('data-deploy'));
