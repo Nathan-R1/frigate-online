@@ -636,6 +636,18 @@ function moveObject(type, id, x, y) {
   if (type === 'piece') renderPieces(); else renderChips();
   queue('mv:' + id, { action: 'move', type: type, id: id, x: x, y: y });
 }
+function deleteObject(type, id) {
+  var list = type === 'piece' ? state.pieces : state.chips;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === id) {
+      list.splice(i, 1);
+      break;
+    }
+  }
+  if (sel && sel.type === type && sel.id === id) sel = null;
+  if (type === 'piece') renderPieces(); else renderChips();
+  queue('del:' + id, { action: 'delete', type: type, id: id });
+}
 
 /* ===== networking ===== */
 var pending = { order: [], map: {} };
@@ -653,6 +665,7 @@ function actionKey(act) {
     case 'move':    return 'mv:' + act.id;
     case 'counter': return 'ct:' + act.type + ':' + act.id + ':' + act.which;
     case 'exhaust': return 'ex:' + act.id;
+    case 'delete':  return 'del:' + act.id;
     case 'ping':    return 'pg:' + act.x + ',' + act.y + ',' + act.color;
   }
   return 'act:' + act.action + ':' + Math.random();
@@ -1114,6 +1127,18 @@ window.addEventListener('keydown', function (e) {
     e.preventDefault();
     toggleMenu();
     return;
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    var tgt = e.target;
+    var tag = tgt && tgt.tagName ? tgt.tagName.toUpperCase() : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (tgt && tgt.isContentEditable)) return;
+    if (sel && rulesPopup.classList.contains('hidden') &&
+        classInfoPopup.classList.contains('hidden') &&
+        popupEl.classList.contains('hidden')) {
+      e.preventDefault();
+      deleteObject(sel.type, sel.id);
+      return;
+    }
   }
   if (e.key === 'Escape') {
     if (!rulesPopup.classList.contains('hidden')) { rulesPopup.classList.add('hidden'); return; }
