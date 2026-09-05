@@ -93,14 +93,6 @@ color:var(--ink);
 .subline input:focus{
 border-bottom-color:var(--cyan);
   }
-.dc-badge{
-
-    display:flex;align-items:center;gap:12px;
-    padding:8px 16px;
-    border:1px solid var(--line-bright);
-    background:var(--panel);
-  
-  }
 .dc-hex{
 
     width:46px;height:46px;position:relative;
@@ -114,12 +106,6 @@ border-bottom-color:var(--cyan);
   }
 .dc-hex:focus{
 outline:none;
-  }
-.dc-label{
-font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--ink-mid);text-transform:uppercase;
-  }
-.dc-word{
-font-family:var(--disp);font-size:13px;letter-spacing:.08em;color:var(--ink);
   }
 /* ===== grid layout ===== */
   .grid{
@@ -176,7 +162,6 @@ min-width:0;
       grid-template-columns:1fr;
       gap:12px;
     }
-    .dc-badge{justify-content:space-between;}
     .shiptitle .kind,.shiptitle .dash,.shiptitle input.name{font-size:24px;}
     .shiptitle input.name{min-width:0;width:100%;}
     .stat-strip{grid-template-columns:repeat(3,1fr);gap:8px;}
