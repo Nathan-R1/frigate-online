@@ -1030,6 +1030,16 @@ window.addEventListener('pointerdown', handScheduleMirror);
 
 /* ===== keyboard ===== */
 window.addEventListener('keydown', function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    saveChanges();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+    e.preventDefault();
+    refresh();
+    return;
+  }
   if (e.key === 'Escape') {
     if (!rulesPopup.classList.contains('hidden')) { rulesPopup.classList.add('hidden'); return; }
     if (!classInfoPopup.classList.contains('hidden')) { closeClassInfo(); return; }
