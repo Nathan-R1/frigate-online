@@ -830,12 +830,16 @@
   }
   function broadcastHullStats(){
     if(!HULL_CHANNEL) return;
+    var names = ['Cyber','Diplomacy','Engineering','Leadership','Logistics','Navigation','Piloting','Sensors','Science'];
+    var sk = {};
+    var i;
+    for(i = 0; i < names.length; i++) sk[names[i]] = skillValue(names[i]);
     HULL_CHANNEL.postMessage({ t:'stats', name: statStr('shipName'), dc: statStr('dcHex'), stats:{
       hull:   { cur: statVal('hullCur'),   max: statVal('hullMax') },
       shield: { cur: statVal('shieldCur'), max: statVal('shieldMax') },
       energy: { cur: statVal('energyCur'), max: statVal('energyMax') },
       speed:  { cur: statVal('speedCur'),  max: statVal('speedMax') }
-    }});
+    }, skills: sk });
   }
   function setTechType(el, key){
     var meta = techTypeMeta(key);

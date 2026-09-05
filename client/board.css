@@ -63,6 +63,7 @@ input[type=number]:focus { outline: none; border-color: #35d0e0; }
   border-bottom: 1px solid #1f2a38;
 }
 .hull-stats-bar.hidden-stats { display: none; }
+.hull-stats-bar.detailed-stats { height: 88px; }
 
 /* ===== side panel ===== */
 .main { flex: 1; display: flex; min-height: 0; position: relative; }
