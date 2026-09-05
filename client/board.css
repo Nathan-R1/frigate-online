@@ -155,3 +155,44 @@ body.resizing #playerFrame { pointer-events: none; }
 .choose img { width: 56px; height: 56px; object-fit: contain; }
 .pop-foot { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #7f8fa0; }
 #popReload { background: none; border: 1px solid #26374a; color: #8fa4b8; padding: 4px 10px; border-radius: 4px; cursor: pointer; font: 600 12px 'Rajdhani', sans-serif; }
+
+.settings-wrap { position: relative; margin-left: 8px; display: flex; align-items: center; }
+.settings-cog { font-size: 15px; line-height: 1; padding: 6px 10px; width: auto; }
+.settings-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 70;
+  background: #0e141c; border: 1px solid #22303f; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .6); min-width: 140px; padding: 6px;
+}
+.settings-menu.hidden { display: none; }
+.settings-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; color: #dfe6ee; cursor: pointer;
+  font: 600 13px 'Rajdhani', sans-serif; letter-spacing: 1px;
+  padding: 8px 10px; border-radius: 4px;
+}
+.settings-item:hover { background: #0d141c; color: #35d0e0; }
+
+.rules-panel { width: 440px; }
+.rules-body { overflow-y: auto; color: #c6d2de; font-size: 13.5px; line-height: 1.55; }
+.rules-body h4 {
+  margin: 14px 0 6px; font: 700 12px 'Orbitron', sans-serif; letter-spacing: 2px;
+  color: #35d0e0; text-transform: uppercase;
+}
+.rules-body h4:first-child { margin-top: 0; }
+.rules-body ul { margin: 0 0 8px; padding-left: 18px; }
+.rules-body ul ul { margin-bottom: 0; }
+.rules-body li { margin: 4px 0; }
+.rules-body b { color: #dfe6ee; }
+
+:root {
+  --icon-shield: #215f8c;
+  --icon-energy: #764795;
+  --icon-amber: #a06a17;
+  --icon-cyan: #0e8f83;
+}
+.kw-icon {
+  width: 15px; height: 15px;
+  display: inline-block;
+  vertical-align: -3px;
+  margin: 0 1px 0 2px;
+}
