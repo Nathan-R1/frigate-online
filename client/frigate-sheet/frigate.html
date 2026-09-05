@@ -1,0 +1,2239 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Starship Dossier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/frigate.css">
+</head>
+<body>
+<nav class="menu-bar">
+  <div class="menu-brand">Starship Dossier</div>
+  <div class="menu-actions">
+    <button type="button" class="menu-toggle" id="handPopoutLaunchBtn" onclick="openHandPopout()">⧉ Hand Window</button>
+    <button type="button" class="menu-toggle" onclick="exportSheet()">⇩ Export</button>
+    <button type="button" class="menu-toggle" onclick="importSheet()">⇧ Import</button>
+    <button type="button" id="themeToggle" class="menu-toggle" onclick="toggleTheme()">☀ Light Mode</button>
+  </div>
+</nav>
+<div class="sheet">
+
+  <!-- HEADER -->
+  <div class="topbar">
+    <div>
+      <div class="classline">Fleet Registry &nbsp;·&nbsp; Vessel Dossier</div>
+      <div class="shiptitle">
+        <span class="kind">Frigate</span>
+        <span class="dash">—</span>
+        <input class="name" id="shipName" type="text" placeholder="SHIP NAME" value="">
+      </div>
+      <div class="subline">
+        <span>CAPTAIN: <input id="captain" type="text" placeholder="—" value=""></span>
+        <span>COMMISSIONED: <input id="commissioned" type="text" placeholder="—" value=""></span>
+      </div>
+    </div>
+    <div class="dc-badge">
+      <input class="dc-hex" id="dcHex" type="text" value="6" maxlength="2" title="Difficulty Class Check">
+      <div>
+        <div class="dc-label">Difficulty</div>
+        <div class="dc-word">Class Check</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 1 -->
+  <div class="grid">
+
+    <!-- CLASSIFICATION / STATS -->
+    <div class="panel">
+      <div class="bl"></div><div class="br"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="eyebrow" style="margin-bottom:0;">Hull Classification</div>
+        <div class="slot-controls">
+          <button type="button" class="slot-btn panel-collapse-btn" onclick="togglePanelCollapse(this)" title="Collapse section">👁</button>
+        </div>
+      </div>
+      <div class="class-select">
+        <select id="shipClass" onchange="onShipClassChange()">
+          <option selected>Unclassified</option>
+          <option>Support Class</option>
+          <option>Jump Class</option>
+          <option>Striker Class</option>
+          <option>Discovery Class</option>
+          <option>Bulwark Class</option>
+        </select>
+        <button type="button" class="info-btn" onclick="openClassInfo()" title="Show class details">i</button>
+      </div>
+
+      <div class="class-body">
+      <div class="stat-strip">
+        <div class="stat hull">
+          <svg class="icon dec" onclick="decrementStat('hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <div class="val"><input id="hullCur" value="5" maxlength="2"><span class="sep">/</span><input id="hullMax" value="5" maxlength="2"></div>
+          <div class="lbl">Hull HP</div>
+        </div>
+        <div class="stat shield">
+          <svg class="icon dec" onclick="decrementStat('shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <div class="val"><input id="shieldCur" value="6" maxlength="2"><span class="sep">/</span><input id="shieldMax" value="6" maxlength="2"></div>
+          <div class="lbl">Base Shield</div>
+        </div>
+        <div class="stat energy">
+          <svg class="icon dec" onclick="decrementStat('energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <div class="val"><input id="energyCur" value="6" maxlength="2"><span class="sep">/</span><input id="energyMax" value="6" maxlength="2"></div>
+          <div class="lbl">Energy</div>
+        </div>
+        <div class="stat">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <div class="val" style="justify-content:center"><input id="storage" value="0" maxlength="2" style="width:26px"></div>
+          <div class="lbl">Storage</div>
+        </div>
+        <div class="stat speed">
+          <svg class="icon dec" onclick="decrementStat('speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedMax" value="2" maxlength="2"></div>
+          <div class="lbl">Speed</div>
+        </div>
+      </div>
+
+      <div class="rules-block" id="turnBox">
+        <div class="rhead" onclick="toggleTurnBox(this)">At the start of your turn <span class="collapse-ind">▼</span></div>
+        <ul>
+          <li>Recharge <b>Energy</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg> <button type="button" class="rule-btn" onclick="rechargeEnergy()" title="Set energy to max">↻</button></li>
+          <li>Refresh any exhausted <b>Technologies</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>, <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> or <b>Deployables</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> <button type="button" class="rule-btn" onclick="refreshAllTechs()" title="Refresh all exhausted techs, modules and deployables">↻</button></li>
+          <li>Draw 5 cards from your Deck. Play 1 <b>Technology</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> (* see Science). Discard the remainder.</li>
+          <li>Move any <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> (up to <b>Speed</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> distance)</li>
+          <li>Destroy any <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> that do not meet their requirements</li>
+        </ul>
+      </div>
+
+      <div class="rules-block" id="duringBox">
+        <div class="rhead" onclick="toggleTurnBox(this)">During your turn <span class="collapse-ind">▼</span></div>
+        <ul>
+          <li>Activate <b>Technologies</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>, <b>Deployable</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> or <b>Module</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> effects (pay Energy where required)
+            <ul class="sub">
+              <li>Unless otherwise noted, a Technology, Deployable or Module cannot use its passive or activate when Exhausted.</li>
+            </ul>
+          </li>
+          <li>When you Create <b>Deployables</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> and <b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> you place them on the board
+            <ul class="sub">
+              <li><b>Modules</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> cannot share the space with other objects. They can be built in any empty space that meets their Requirements.</li>
+              <li><b>Deployables</b><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg> can share a location with objects. They can be built in any adjacent space to your ship.</li>
+              <li>Unless otherwise noted, "Adjacent" means horizontally/vertically adjacent NOT diagonal.</li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+      </div>
+    </div>
+
+    <!-- SKILLS -->
+    <div class="panel skills-panel">
+      <div class="bl"></div><div class="br"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="eyebrow" style="margin-bottom:0;">Crew Skills</div>
+        <div class="slot-controls">
+          <button type="button" class="slot-btn panel-collapse-btn" onclick="togglePanelCollapse(this)" title="Collapse section">👁</button>
+        </div>
+      </div>
+      <table class="skills">
+        <tr><th>Name</th><th class="pt">Points</th><th class="pt">Penalty</th></tr>
+        <tr><td>Cyber</td><td class="pt"><input id="skill-Cyber-pts" value="1"></td><td class="pt"><input id="skill-Cyber-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Diplomacy</td><td class="pt"><input id="skill-Diplomacy-pts" value="0"></td><td class="pt"><input id="skill-Diplomacy-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Engineering<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg></td><td class="pt"><input id="skill-Engineering-pts" value="3"></td><td class="pt"><input id="skill-Engineering-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Leadership<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg></td><td class="pt"><input id="skill-Leadership-pts" value="0"></td><td class="pt"><input id="skill-Leadership-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Logistics<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg></td><td class="pt"><input id="skill-Logistics-pts" value="2"></td><td class="pt"><input id="skill-Logistics-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Navigation<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></td><td class="pt"><input id="skill-Navigation-pts" value="3"></td><td class="pt"><input id="skill-Navigation-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Piloting</td><td class="pt"><input id="skill-Piloting-pts" value="3"></td><td class="pt"><input id="skill-Piloting-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Sensors<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg></td><td class="pt"><input id="skill-Sensors-pts" value="2"></td><td class="pt"><input id="skill-Sensors-pen" value="" placeholder="—"></td></tr>
+        <tr><td>Science<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></td><td class="pt"><input id="skill-Science-pts" value="-1"></td><td class="pt"><input id="skill-Science-pen" value="" placeholder="—"></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ROW 2 -->
+  <div class="row2">
+
+    <!-- TRAITS / CREW -->
+    <div class="panel">
+      <div class="bl"></div><div class="br"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="eyebrow" style="margin-bottom:0;">Traits &amp; Officers<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div class="slot-controls">
+          <button type="button" class="slot-btn panel-collapse-btn" onclick="togglePanelCollapse(this)" title="Collapse section">👁</button>
+          <button type="button" class="slot-btn" id="slotRemoveBtn" onclick="showSlotPicker(event, this, 'crewGrid', '.cname')" title="Remove a slot">−</button>
+          <div class="slot-menu-wrap">
+            <button type="button" class="slot-btn" onclick="togglePresetMenu(event)" title="Add from catalog">+</button>
+            <div class="preset-menu" id="presetMenu"></div>
+          </div>
+        </div>
+      </div>
+      <div class="crew-grid" id="crewGrid" style="margin-top:12px;">
+        <div class="crew-card">
+          <div class="ch">Slot 01</div>
+          <div class="cname-row"><input class="cname" placeholder="TRAIT / OFFICER"><span class="crew-tag-btn" data-combat="0">⚔</span></div>
+          <textarea placeholder="Effect or role..."></textarea>
+          <div class="cfoot"><span class="cticker" data-ctype="offense" title="Crew type: Offense">⚔</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TECHNOLOGIES -->
+    <div class="panel tech-panel">
+      <div class="bl"></div><div class="br"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="eyebrow" style="margin-bottom:0;">Technologies<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="slot-controls">
+          <button type="button" class="slot-btn panel-collapse-btn" onclick="togglePanelCollapse(this)" title="Collapse section">👁</button>
+          <button type="button" class="slot-btn" id="techSlotRemoveBtn" onclick="showSlotPicker(event, this, 'techGrid', '.tname')" title="Remove a slot">−</button>
+          <div class="slot-menu-wrap">
+            <button type="button" class="slot-btn" onclick="toggleTechPresetMenu(event)" title="Add from catalog">+</button>
+            <div class="preset-menu" id="techPresetMenu"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tech-grid" id="techGrid" style="margin-top:12px;">
+        <div class="tech-card" data-state="played">
+          <div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="played" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">⇅</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>
+          <div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>
+          <div class="tsecs">
+            <div class="tsec onbuild hid">
+              <div class="tsec-head"><span>On Play</span><span class="tdiamond" title="On Play energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onbuild" maxlength="2"></span></div>
+              <textarea placeholder="On Play..."></textarea>
+            </div>
+            <div class="tsec passive hid">
+              <div class="tsec-head"><span>Passive</span></div>
+              <textarea placeholder="Passive..."></textarea>
+            </div>
+            <div class="tsec onactivate hid">
+              <div class="tsec-head"><span>On Activate</span><span class="tdiamond" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onactivate" maxlength="2"></span></div>
+              <textarea placeholder="On Activate..."></textarea>
+            </div>
+          </div>
+          <div class="tfoot">
+            <span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>
+            <span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span>
+            <span class="thull hid" title="Hull"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="thull-input" maxlength="4"></span>
+            <span class="tcharges hid" title="Charges"><svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="tcharges-input" maxlength="4"></span>
+            <span class="tdepbtn" data-deploy="normal" title="Normal">⍙</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODULES / DEPLOYABLES -->
+  <div class="panel" style="margin-top:16px;">
+    <div class="bl"></div><div class="br"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <div class="eyebrow" style="margin-bottom:0;">Modules<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg> / Deployables<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg></div>
+      <div class="slot-controls">
+        <button type="button" class="slot-btn panel-collapse-btn" onclick="togglePanelCollapse(this)" title="Collapse section">👁</button>
+        <button type="button" class="slot-btn" id="modSlotRemoveBtn" onclick="showSlotPicker(event, this, 'modGrid', '.mname')" title="Remove a slot">−</button>
+        <div class="slot-menu-wrap">
+          <button type="button" class="slot-btn" onclick="toggleModPresetMenu(event)" title="Add from catalog">+</button>
+          <div class="preset-menu" id="modPresetMenu"></div>
+        </div>
+      </div>
+    </div>
+    <div class="mod-grid" id="modGrid" style="margin-top:12px;">
+      <div class="mod-card">
+        <div class="mhead"><button type="button" class="mshape-btn" data-shape="" title="Shape"></button><input class="mname" placeholder="TITLE"><button type="button" class="mexhaust-btn" data-exhaust="false" onclick="toggleModExhaust(this)" title="Exhaust this module">Exhaust</button><button type="button" class="m-delete" onclick="removeModCard(this)" title="Delete this module">🗑</button><button type="button" class="msecedit" onclick="toggleModEdit(this)" title="Edit sections">Edit</button></div>
+        <div class="msub"><input class="mreq" placeholder="REQUIREMENTS"></div>
+        <div class="msecs">
+          <div class="msec onbuild hid">
+            <div class="msec-head"><span>On Play</span></div>
+            <textarea placeholder="On Play..."></textarea>
+          </div>
+          <div class="msec passive hid">
+            <div class="msec-head"><span>Passive</span></div>
+            <textarea placeholder="Passive..."></textarea>
+          </div>
+          <div class="msec onactivate hid">
+            <div class="msec-head"><span>On Activate</span><span class="mcost" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="mcost-input" maxlength="2"></span></div>
+            <textarea placeholder="On Activate..."></textarea>
+          </div>
+        </div>
+        <div class="mfoot">
+          <span class="mticker" data-mt="offense" title="Tech type: Offense">⚔</span>
+          <button type="button" class="mtype-btn" data-mtype="module" title="Module"></button>
+          <span class="mspeed" title="Speed"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><input class="mspeed-input" maxlength="4"></span>
+          <span class="mdur" title="Duration"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="var(--icon-amber)" stroke-width="1.8"/><path d="M12 13V8M15 13h-3" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linecap="round"/><path d="M9 3h6" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="mdur-input" maxlength="4"></span>
+          <span class="mhull" title="Hull"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="mhull-input" maxlength="4"></span>
+          <span class="mcharges hid" title="Charges"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="mcharges-input" maxlength="4"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Fleet Command &nbsp;//&nbsp; Vessel Operations Manual &nbsp;//&nbsp; Sheet rev. 01</footer>
+</div>
+
+<script src="presets/tech-presets.js"></script>
+<script src="presets/crew-presets.js"></script>
+<script src="presets/mod-presets.js"></script>
+<script>
+  var HAND_CHANNEL_NAME = 'frigate-hand-sync';
+  var HAND_CHANNEL = null;
+  var HAND_INSTANCE_ID = 'hand-' + Math.random().toString(36).slice(2);
+
+  function toggleTurnBox(rhead){
+    var box = rhead.parentNode;
+    box.classList.toggle('collapsed');
+  }
+  function togglePanelCollapse(btn){
+    var panel = btn.closest('.panel');
+    if(!panel) return;
+    panel.classList.toggle('collapsed');
+    syncGridCollapse(panel.parentNode);
+  }
+  function syncGridCollapse(container){
+    if(!container || !container.classList) return;
+    if(!container.classList.contains('grid') && !container.classList.contains('row2')) return;
+    container.classList.toggle('has-collapsed', !!container.querySelector('.panel.collapsed'));
+  }
+  function rechargeEnergy(){
+    var cur = document.getElementById('energyCur');
+    var max = document.getElementById('energyMax');
+    if(cur && max) cur.value = max.value;
+  }
+  function refreshAllTechs(){
+    var techs = document.querySelectorAll('#techGrid .tech-card');
+    for(var i=0;i<techs.length;i++){
+      if(techState(techs[i]) === 'exhausted') setTechState(techs[i], 'played');
+    }
+    var mods = document.querySelectorAll('#modGrid .mod-card .mexhaust-btn');
+    for(var j=0;j<mods.length;j++){
+      applyModExhaust(mods[j].closest('.mod-card'), false);
+    }
+    refreshHand();
+  }
+  function decrementStat(id){
+    var el = document.getElementById(id);
+    if(!el) return;
+    var v = parseInt(el.value, 10);
+    if(isNaN(v)) v = 0;
+    if(v > 0) el.value = v - 1;
+  }
+  var SKILL_DESCRIPTIONS = {
+    'Engineering': 'Engineering is added to Hull HP (min. 0)',
+    'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
+    'Logistics': 'Logistics is added to Storage (min. 0)',
+    'Navigation': 'Twice Navigation is added to Speed (min. 0)',
+    'Piloting': 'Sometimes you might have to dodge!!!',
+    'Science': 'On turn 1 you may play {SCIENCE} extra Technologies (1/2 Science + Science Penalty, rounded down, min 0.)',
+    'Sensors': 'Sensor range = {SENSORS}, used to calculate the range of some effects and attacks'
+  };
+  function skillValue(skillName){
+    var pts = document.getElementById('skill-' + skillName + '-pts');
+    var pen = document.getElementById('skill-' + skillName + '-pen');
+    var ptsVal = pts ? (parseInt(pts.value,10) || 0) : 0;
+    var penVal = (pen && pen.value !== '' ? parseInt(pen.value,10) : 0);
+    if(isNaN(penVal)) penVal = 0;
+    return ptsVal + penVal;
+  }
+  function skillDescription(skillName){
+    var desc = SKILL_DESCRIPTIONS[skillName] || '';
+    desc = desc.replace(/\{SCIENCE\}/g, Math.max(0, Math.floor(skillValue('Science') / 2)));
+    desc = desc.replace(/\{SENSORS\}/g, Math.max(0, skillValue('Sensors') * 2));
+    return desc;
+  }
+  function showSkillInfo(e, btn, skillName){
+    e.stopPropagation();
+    var desc = skillDescription(skillName);
+    if(!desc) return;
+    var pop = document.getElementById('skillPopover');
+    pop.textContent = desc;
+    pop.style.display = 'block';
+    pop.style.left = '0px';
+    pop.style.top = '0px';
+    pop.style.visibility = 'hidden';
+    var pw = pop.offsetWidth;
+    var ph = pop.offsetHeight;
+    pop.style.visibility = 'visible';
+    var r = btn.getBoundingClientRect();
+    var left = r.left;
+    var top = r.bottom + 6;
+    if(left + pw > window.innerWidth - 6) left = window.innerWidth - pw - 6;
+    if(left < 6) left = 6;
+    if(top + ph > window.innerHeight - 6) top = r.top - ph - 6;
+    if(top < 6) top = 6;
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
+  function hideSkillInfo(){
+    document.getElementById('skillPopover').style.display = 'none';
+  }
+  function wireSkillTooltips(){
+    var rows = document.querySelectorAll('table.skills tr');
+    for(var i=0;i<rows.length;i++){
+      var nameCell = rows[i].querySelector('td:first-child');
+      if(!nameCell) continue;
+      if(nameCell.getAttribute('data-skill-hovered')) continue;
+      nameCell.setAttribute('data-skill-hovered', '1');
+      nameCell.addEventListener('mouseenter', (function(cell){
+        return function(e){
+          var name = cell.textContent.trim();
+          if(skillDescription(name)) showSkillInfo(e, cell, name);
+        };
+      })(nameCell));
+      nameCell.addEventListener('mouseleave', function(){
+        hideSkillInfo();
+      });
+    }
+  }
+  function updateToggleLabel(theme){
+    var btn = document.getElementById('themeToggle');
+    btn.textContent = theme === 'dark' ? '☀ Light Mode' : '☾ Dark Mode';
+  }
+  function toggleTheme(){
+    var html = document.documentElement;
+    var current = html.getAttribute('data-theme') || 'dark';
+    var next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    updateToggleLabel(next);
+    broadcastHandSnapshot();
+  }
+
+  function slotLabel(n){
+    return 'Slot ' + (n < 10 ? '0' + n : n);
+  }
+  function refreshSlotControls(){
+    var grid = document.getElementById('crewGrid');
+    document.getElementById('slotRemoveBtn').disabled = grid.children.length <= 1;
+  }
+  function addCrewSlot(){
+    var grid = document.getElementById('crewGrid');
+    var n = grid.children.length + 1;
+    var card = document.createElement('div');
+    card.className = 'crew-card';
+    card.innerHTML =
+      '<div class="ch">' + slotLabel(n) + '</div>' +
+      '<div class="cname-row"><input class="cname" placeholder="TRAIT / OFFICER"><span class="crew-tag-btn" data-combat="0">⚔</span></div>' +
+      '<textarea placeholder="Effect or role..."></textarea>' +
+      '<div class="cfoot"><span class="cticker" data-ctype="offense" title="Crew type: Offense">⚔</span></div>';
+    grid.appendChild(card);
+    refreshSlotControls();
+  }
+  function removeCrewSlot(){
+    var grid = document.getElementById('crewGrid');
+    if(grid.children.length > 1){
+      grid.removeChild(grid.lastElementChild);
+    }
+    refreshSlotControls();
+  }
+  function relabelSlots(){
+    var grid = document.getElementById('crewGrid');
+    var cards = grid.children;
+    for(var i = 0; i < cards.length; i++){
+      cards[i].querySelector('.ch').textContent = slotLabel(i + 1);
+    }
+  }
+
+  
+  var CREW_TYPES = [
+    {key:'offense', icon:'⚔', label:'Offense'},
+    {key:'defense', icon:'🛡', label:'Defense'},
+    {key:'movement', icon:'➤', label:'Movement'},
+    {key:'science', icon:'⚛︎', label:'Science'}
+  ];
+  function crewTypeIcon(key){
+    for(var i=0;i<CREW_TYPES.length;i++){ if(CREW_TYPES[i].key===key) return CREW_TYPES[i].icon; }
+    return '';
+  }
+  function crewTypeMeta(key){
+    for(var i=0;i<CREW_TYPES.length;i++){ if(CREW_TYPES[i].key===key) return CREW_TYPES[i]; }
+    return CREW_TYPES[0];
+  }
+  function stripTags(html){
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent.trim();
+  }
+  function buildPresetMenu(){
+    var menu = document.getElementById('presetMenu');
+    menu.innerHTML = '';
+    var blankItem = document.createElement('button');
+    blankItem.type = 'button';
+    blankItem.className = 'preset-item';
+    blankItem.textContent = 'Blank';
+    blankItem.onclick = function(){
+      addCrewSlot();
+      closePresetMenu();
+    };
+    menu.appendChild(blankItem);
+    CREW_PRESETS.forEach(function(p){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'preset-item';
+      var label = document.createElement('span');
+      label.textContent = p.name;
+      item.appendChild(label);
+      var firstTrailing = null;
+      if(p.combat_only){
+        var tag = document.createElement('span');
+        tag.className = 'preset-tag';
+        tag.textContent = 'combat';
+        item.appendChild(tag);
+        if(!firstTrailing) firstTrailing = tag;
+      }
+      if(p.type){
+        var ttag = document.createElement('span');
+        ttag.className = 'preset-tag preset-type';
+        ttag.textContent = crewTypeIcon(p.type);
+        item.appendChild(ttag);
+        if(!firstTrailing) firstTrailing = ttag;
+      }
+      if(firstTrailing) firstTrailing.style.marginLeft = 'auto';
+      item.onclick = function(){
+        pickPreset(p);
+        closePresetMenu();
+      };
+      menu.appendChild(item);
+    });
+  }
+  function togglePresetMenu(e){
+    e.stopPropagation();
+    document.getElementById('presetMenu').classList.toggle('open');
+  }
+  function closePresetMenu(){
+    document.getElementById('presetMenu').classList.remove('open');
+  }
+  function pickPreset(p){
+    addCrewSlot();
+    var card = document.getElementById('crewGrid').lastElementChild;
+    card.querySelector('.cname').value = p.name;
+    card.querySelector('textarea').value = stripTags(p.text_description);
+    var tag = card.querySelector('.crew-tag-btn');
+    if(p.combat_only) setCombatTag(tag, true);
+    if(p.type) setCrewType(card.querySelector('.cticker'), p.type);
+  }
+  function toggleCombatTag(el){
+    setCombatTag(el, el.getAttribute('data-combat') === '0');
+  }
+  function setCombatTag(el, on){
+    el.setAttribute('data-combat', on ? '1' : '0');
+    el.classList.toggle('on', on);
+  }
+  function setCrewType(el, key){
+    var meta = crewTypeMeta(key);
+    el.setAttribute('data-ctype', meta.key);
+    el.textContent = meta.icon;
+    el.title = 'Crew type: ' + meta.label;
+  }
+  function cycleCrewType(el){
+    var keys = CREW_TYPES.map(function(t){return t.key;});
+    var idx = keys.indexOf(el.getAttribute('data-ctype'));
+    var next = keys[(idx + 1) % keys.length];
+    setCrewType(el, next);
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('presetMenu');
+    if(menu.classList.contains('open') && !menu.contains(e.target)){
+      closePresetMenu();
+    }
+  });
+  document.getElementById('crewGrid').addEventListener('click', function(e){
+    var el = e.target.closest('.crew-tag-btn');
+    if(el) toggleCombatTag(el);
+    var c = e.target.closest('.cticker');
+    if(c) cycleCrewType(c);
+  });
+  buildPresetMenu();
+  refreshSlotControls();
+
+  /* ===== Technologies ===== */
+  var TECH_TYPES = [
+    {key:'offense', icon:'⚔', label:'Offense'},
+    {key:'defense', icon:'🛡', label:'Defense'},
+    {key:'movement', icon:'➤', label:'Movement'},
+    {key:'science', icon:'⚛︎', label:'Science'}
+  ];
+  function techTypeMeta(key){
+    for(var i=0;i<TECH_TYPES.length;i++){ if(TECH_TYPES[i].key===key) return TECH_TYPES[i]; }
+    return TECH_TYPES[0];
+  }
+  function techSlotLabel(n){ return 'Slot ' + (n < 10 ? '0' + n : n); }
+  function refreshTechSlotControls(){
+    var grid = document.getElementById('techGrid');
+    document.getElementById('techSlotRemoveBtn').disabled = grid.children.length <= 1;
+  }
+  function addTechSlot(){
+    var grid = document.getElementById('techGrid');
+    var n = grid.children.length + 1;
+    var card = document.createElement('div');
+    card.className = 'tech-card';
+    card.innerHTML =
+      '<div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="played" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">⇅</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>' +
+      '<div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>' +
+      '<div class="tsecs">' +
+        '<div class="tsec onbuild hid"><div class="tsec-head"><span>On Play</span><span class="tdiamond" title="On Play energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onbuild" maxlength="2"></span></div><textarea placeholder="On Play..."></textarea></div>' +
+        '<div class="tsec passive hid"><div class="tsec-head"><span>Passive</span></div><textarea placeholder="Passive..."></textarea></div>' +
+        '<div class="tsec onactivate hid"><div class="tsec-head"><span>On Activate</span><span class="tdiamond" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onactivate" maxlength="2"></span></div><textarea placeholder="On Activate..."></textarea></div>' +
+      '</div>' +
+      '<div class="tfoot">' +
+        '<span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>' +
+        '<span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span>' +
+        '<span class="thull hid" title="Hull"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="thull-input" maxlength="4"></span>' +
+        '<span class="tcharges hid" title="Charges"><svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="tcharges-input" maxlength="4"></span>' +
+        '<span class="tdepbtn" data-deploy="normal" title="Normal">⍙</span>' +
+      '</div>';
+    grid.appendChild(card);
+    refreshTechSections(card);
+    syncTechStateUI(card);
+    refreshTechSlotControls();
+    refreshHand();
+  }
+  function removeTechSlot(){
+    var grid = document.getElementById('techGrid');
+    if(grid.children.length > 1){
+      grid.removeChild(grid.lastElementChild);
+    }
+    refreshTechSlotControls();
+    refreshHand();
+  }
+  function removeTechCard(btn){
+    var card = btn.closest('.tech-card');
+    if(!card) return;
+    var grid = document.getElementById('techGrid');
+    if(grid.children.length <= 1){
+      addTechSlot();
+    }
+    grid.removeChild(card);
+    refreshTechSlotControls();
+    refreshHand();
+  }
+  function showSlotPicker(e, btn, gridId, nameSel){
+    e.stopPropagation();
+    var grid = document.getElementById(gridId);
+    if(grid.children.length <= 1) return;
+    var menu = document.getElementById('slotPicker');
+    menu.innerHTML = '';
+    var title = document.createElement('div');
+    title.className = 'slot-picker-title';
+    title.textContent = 'Remove which slot?';
+    menu.appendChild(title);
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      var nameEl = card.querySelector(nameSel);
+      var display = (nameEl && nameEl.value.trim()) ? nameEl.value.trim() : (gridId === 'crewGrid' ? slotLabel(i + 1) : (gridId === 'modGrid' ? modSlotLabel(i + 1) : techSlotLabel(i + 1)));
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'preset-item';
+      var span = document.createElement('span');
+      span.textContent = '#' + (i + 1) + '  ' + display;
+      item.appendChild(span);
+      item.onclick = (function(idx){
+        return function(){
+          deleteSlotAt(gridId, idx);
+          closeSlotPicker();
+        };
+      })(i);
+      menu.appendChild(item);
+    }
+    var r = btn.getBoundingClientRect();
+    menu.style.left = r.left + 'px';
+    menu.style.top = (r.bottom + 6) + 'px';
+    menu.classList.add('open');
+  }
+  function deleteSlotAt(gridId, idx){
+    var grid = document.getElementById(gridId);
+    if(grid.children.length <= 1) return;
+    var card = grid.children[idx];
+    if(card) grid.removeChild(card);
+    if(gridId === 'crewGrid'){
+      refreshSlotControls();
+      relabelSlots();
+    }else if(gridId === 'modGrid'){
+      refreshModSlotControls();
+      relabelMods();
+    }else{
+      refreshTechSlotControls();
+      refreshHand();
+    }
+  }
+  function closeSlotPicker(){
+    document.getElementById('slotPicker').classList.remove('open');
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('slotPicker');
+    if(menu.classList.contains('open') && !menu.contains(e.target)){
+      closeSlotPicker();
+    }
+  });
+  function buildTechPresetMenu(){
+    var menu = document.getElementById('techPresetMenu');
+    menu.innerHTML = '';
+    var blankItem = document.createElement('button');
+    blankItem.type = 'button';
+    blankItem.className = 'preset-item';
+    blankItem.textContent = 'Blank';
+    blankItem.onclick = function(){
+      addTechSlot();
+      closeTechPresetMenu();
+    };
+    menu.appendChild(blankItem);
+    var sorted = TECH_PRESETS.slice().sort(function(a,b){return a.name.toLowerCase().localeCompare(b.name.toLowerCase());});
+    sorted.forEach(function(p){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'preset-item';
+      var label = document.createElement('span');
+      label.textContent = p.name;
+      if((p.traits || '').indexOf('Class Tech') !== -1) label.className = 'preset-class-tech';
+      item.appendChild(label);
+      var firstTrailing = null;
+      var deploySvg = '';
+      if(p.deploy === 'module'){ deploySvg = DEPLOY_STATES[2].svg; }
+      else if(p.deploy === true || p.deploy === 'true' || p.deploy === 1 || p.deploy === '1'){ deploySvg = DEPLOY_STATES[1].svg; }
+      if(deploySvg){
+        var dtag = document.createElement('span');
+        dtag.className = 'preset-tag preset-deploy';
+        dtag.innerHTML = deploySvg;
+        item.appendChild(dtag);
+        if(!firstTrailing) firstTrailing = dtag;
+      }
+      var st = parseInt(p.storage, 10);
+      if(!isNaN(st) && st > 0){
+        var sttag = document.createElement('span');
+        sttag.className = 'preset-tag preset-storage';
+        sttag.innerHTML = '<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linejoin="round"/></svg>' + st;
+        item.appendChild(sttag);
+        if(!firstTrailing) firstTrailing = sttag;
+      }
+      var icon = document.createElement('span');
+      icon.className = 'preset-tag preset-type';
+      icon.textContent = techTypeMeta(p.tt).icon;
+      item.appendChild(icon);
+      if(!firstTrailing) firstTrailing = icon;
+      firstTrailing.style.marginLeft = 'auto';
+      item.onclick = function(){
+        pickTechPreset(p);
+        closeTechPresetMenu();
+      };
+      menu.appendChild(item);
+    });
+  }
+  function toggleTechPresetMenu(e){
+    e.stopPropagation();
+    document.getElementById('techPresetMenu').classList.toggle('open');
+  }
+  function closeTechPresetMenu(){
+    document.getElementById('techPresetMenu').classList.remove('open');
+  }
+  function pickTechPreset(p){
+    addTechFromData(p);
+  }
+  function addTechFromData(t){
+    addTechSlot();
+    var card = document.getElementById('techGrid').lastElementChild;
+    card.querySelector('.tname').value = t.name || '';
+    card.querySelector('.ttraits').value = t.traits || '';
+    card.querySelector('.tsec.onbuild textarea').value = t.onbuild || '';
+    card.querySelector('.tsec.passive textarea').value = t.passive || '';
+    card.querySelector('.tsec.onactivate textarea').value = t.onactivate || '';
+    card.querySelector('.tstorage-input').value = (t.storage !== undefined && t.storage !== null) ? t.storage : '';
+    card.querySelector('.thull-input').value = (t.hull !== undefined && t.hull !== null) ? t.hull : '';
+    card.querySelector('.tcharges-input').value = (t.charges !== undefined && t.charges !== null) ? t.charges : '';
+    card.querySelector('.tcost-onbuild').value = (t.onbuildenergy !== undefined && t.onbuildenergy !== null) ? t.onbuildenergy : '';
+    card.querySelector('.tcost-onactivate').value = (t.onactivateenergy !== undefined && t.onactivateenergy !== null) ? t.onactivateenergy : '';
+    setTechType(card.querySelector('.tticker'), t.tt);
+    setTechDeploy(card.querySelector('.tdepbtn'), t.deploy);
+    refreshTechSections(card);
+    refreshHand();
+  }
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  var TECH_STATE_ORDER = ['hand','played','exhausted','trashed'];
+  function isTechState(s){ return TECH_STATE_ORDER.indexOf(s) !== -1; }
+  function techState(card){
+    var s = card ? (card.getAttribute('data-state') || 'played') : 'played';
+    if(!isTechState(s)) s = 'played';
+    return s;
+  }
+  function setTechState(card, state){
+    if(!card) return;
+    if(!isTechState(state)) state = 'played';
+    card.setAttribute('data-state', state);
+    syncTechStateUI(card);
+  }
+  function syncTechStateUI(card){
+    if(!card) return;
+    card.classList.remove('state-hand','state-played','state-exhausted','state-trashed');
+    card.classList.add('state-' + techState(card));
+    var btn = card.querySelector('.tbuilt-btn');
+    if(btn){
+      btn.setAttribute('data-state', techState(card));
+      btn.textContent = (techState(card) === 'hand') ? '🂱' : '⇅';
+    }
+  }
+  function toggleTechState(btn){
+    var card = btn.closest ? btn.closest('.tech-card') : null;
+    if(!card) return;
+    var cur = techState(card);
+    var next = TECH_STATE_ORDER[(TECH_STATE_ORDER.indexOf(cur) + 1) % TECH_STATE_ORDER.length];
+    setTechState(card, next);
+    refreshHand();
+  }
+  function energyLabel(label, cost){
+    if(cost && cost !== '0'){
+      return label + ' <span class="hc-cost-inline">' + escapeHtml(cost) +
+        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>';
+    }
+    return label;
+  }
+  function techCardViewData(card){
+    var typeBtn = card.querySelector('.tticker');
+    var meta = techTypeMeta(typeBtn.getAttribute('data-tt'));
+    var depBtn = card.querySelector('.tdepbtn');
+    var dep = depBtn ? depBtn.getAttribute('data-deploy') : 'normal';
+    var tag;
+    if(dep === 'module'){ tag = 'Module'; }
+    else if(dep === 'deployable' || dep === 'true' || dep === '1'){ tag = 'Deployable'; }
+    else { tag = meta.label; }
+    return {
+      name: card.querySelector('.tname').value.trim(),
+      type: meta.icon,
+      tag: tag,
+      traits: card.querySelector('.ttraits').value.trim(),
+      onbuild: card.querySelector('.tsec.onbuild textarea').value,
+      passive: card.querySelector('.tsec.passive textarea').value,
+      onactivate: card.querySelector('.tsec.onactivate textarea').value,
+      onbuildenergy: card.querySelector('.tcost-onbuild').value,
+      onactivateenergy: card.querySelector('.tcost-onactivate').value,
+      charges: card.querySelector('.tcharges-input').value
+    };
+  }
+  var HAND_SORT = 'az';
+  var HAND_TYPE_ORDER = { offense:0, defense:1, movement:2, science:3 };
+
+  /* Each category holds one value; '' means the attribute is not filtered on. */
+  var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
+  function copyHandFilters(){
+    return {
+      hand: HAND_FILTERS.hand || '',
+      type: HAND_FILTERS.type || '',
+      energy: HAND_FILTERS.energy || '',
+      trait: HAND_FILTERS.trait || ''
+    };
+  }
+  function applyHandFilters(filters){
+    filters = filters || {};
+    HAND_FILTERS.hand = filters.hand || '';
+    HAND_FILTERS.type = filters.type || '';
+    HAND_FILTERS.energy = filters.energy || '';
+    HAND_FILTERS.trait = filters.trait || '';
+  }
+  function nextHandCardState(cur){
+    return (cur === 'played') ? 'exhausted' : 'played';
+  }
+  function adjustTechCharges(card, delta){
+    if(!card || !delta) return;
+    var inp = card.querySelector('.tcharges-input');
+    if(!inp) return;
+    var cur = parseInt(inp.value, 10);
+    if(isNaN(cur)) cur = 0;
+    inp.value = Math.max(0, cur + delta);
+    refreshTechSections(card);
+    var grid = document.getElementById('techGrid');
+    var gi = grid ? Array.prototype.indexOf.call(grid.children, card) : -1;
+    syncHandCardCharges(gi, inp.value);
+    if(gi >= 0) postHandMessage('sync-tech-charges', { index: gi, value: inp.value });
+  }
+  function syncHandCardCharges(gi, val){
+    var handEl = document.getElementById('hand');
+    if(!handEl) return;
+    var cards = handEl.querySelectorAll('.hand-card');
+    for(var i=0;i<cards.length;i++){
+      if(cards[i]._sourceIndex !== gi) continue;
+      var span = cards[i].querySelector('.hc-charges');
+      if(span && span.firstChild && span.firstChild.nodeType === 3){
+        span.firstChild.nodeValue = val;
+      } else {
+        refreshHand();
+      }
+      return;
+    }
+  }
+  function handCardHtml(d, state){
+    var costVal = (state === 'played') ? d.onactivateenergy : (state === 'hand' ? d.onbuildenergy : '');
+    var costHtml = (costVal && costVal !== '0')
+      ? '<span class="hc-cost">' + escapeHtml(costVal) +
+        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>'
+      : '';
+    var chargesVal = (d.charges || '').trim();
+    var chargesHtml = (chargesVal !== '')
+      ? '<span class="hc-charges">' + escapeHtml(chargesVal) +
+        '<svg viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg></span>'
+      : '';
+    return '<div class="hc-head">' + costHtml +
+        '<div class="hc-name">' + escapeHtml(d.name || 'UNTITLED TECH') + '</div>' +
+      '</div>' +
+      (d.traits ? '<div class="hc-traits">' + escapeHtml(d.traits) + '</div>' : '') +
+      '<div class="hc-secs">' +
+        (d.onbuild || d.onbuildenergy ? '<div class="hc-sec"><b>' + energyLabel('On Play', d.onbuildenergy) + '</b>' + escapeHtml(d.onbuild) + '</div>' : '') +
+        (d.passive ? '<div class="hc-sec"><b>Passive</b>' + escapeHtml(d.passive) + '</div>' : '') +
+        (d.onactivate ? '<div class="hc-sec"><b>' + energyLabel('On Activate', d.onactivateenergy) + '</b>' + escapeHtml(d.onactivate) + '</div>' : '') +
+      '</div>' +
+      '<div class="hc-foot">' +
+        '<span class="hc-tags">' + (d.type || '') +
+          '<span class="hc-state" data-state="' + state + '">' + state + '</span>' +
+        '</span>' + chargesHtml +
+      '</div>';
+  }
+  function wireHandCardInteractions(el, onActivate, roomSync){
+    var charges = el.querySelector('.hc-charges');
+    if(charges){
+      charges.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(el._onChargeDelta) el._onChargeDelta(1);
+      });
+      charges.addEventListener('contextmenu', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(el._onChargeDelta) el._onChargeDelta(-1);
+      });
+    }
+    el.addEventListener('mouseenter', function(){
+      var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
+      if(popped && popped !== el) popped.classList.remove('popped');
+      if(roomSync) roomSync();
+    });
+    el.addEventListener('mouseleave', function(){
+      if(roomSync) setTimeout(roomSync, 0);
+    });
+    el.addEventListener('click', function(){
+      var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
+      if(popped && popped !== el) popped.classList.remove('popped');
+      el.classList.toggle('popped');
+      if(roomSync) roomSync();
+    });
+    el.addEventListener('dblclick', function(e){
+      e.preventDefault();
+      if(onActivate) onActivate();
+    });
+  }
+  function canUseHandPopout(){
+    return !!(window.frigateElectron && window.frigateElectron.openHandWindow);
+  }
+  function openHandPopout(){
+    if(!canUseHandPopout()){
+      alert('Transparent hand popout requires running this sheet through the Electron wrapper.');
+      return;
+    }
+    broadcastHandSnapshot();
+    window.frigateElectron.openHandWindow();
+  }
+  function setupHandChannel(){
+    if(!window.BroadcastChannel) return;
+    HAND_CHANNEL = new BroadcastChannel(HAND_CHANNEL_NAME);
+    HAND_CHANNEL.onmessage = function(event){
+      var msg = event && event.data ? event.data : null;
+      if(!msg || msg.source === HAND_INSTANCE_ID) return;
+      if(msg.type === 'request-snapshot'){
+        broadcastHandSnapshot();
+        return;
+      }
+      if(msg.type === 'set-hand-controls'){
+        HAND_SORT = msg.handSort || 'az';
+        applyHandFilters(msg.handFilters);
+        var sortSel = document.getElementById('handSort');
+        if(sortSel) sortSel.value = HAND_SORT;
+        updateFilterUI();
+        refreshHand();
+        return;
+      }
+      if(msg.type === 'set-tech-state'){
+        applyHandPopoutStateChange(msg);
+        return;
+      }
+      if(msg.type === 'set-tech-charges'){
+        applyHandPopoutChargeChange(msg);
+      }
+    };
+  }
+  function postHandMessage(type, payload){
+    if(!HAND_CHANNEL) return;
+    var msg = payload || {};
+    msg.type = type;
+    msg.source = HAND_INSTANCE_ID;
+    HAND_CHANNEL.postMessage(msg);
+  }
+  function collectHandSnapshot(){
+    var tech = readTech();
+    for(var i=0;i<tech.length;i++){
+      tech[i].sourceIndex = i;
+    }
+    return {
+      theme: document.documentElement.getAttribute('data-theme') || 'dark',
+      shipName: (document.getElementById('shipName') || {}).value || '',
+      handSort: HAND_SORT,
+      handFilters: copyHandFilters(),
+      tech: tech
+    };
+  }
+  function broadcastHandSnapshot(){
+    if(!HAND_CHANNEL) return;
+    postHandMessage('snapshot', { snapshot: collectHandSnapshot() });
+  }
+  function applyHandPopoutStateChange(msg){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    var idx = msg.index;
+    if(typeof idx !== 'number' || idx < 0 || idx >= grid.children.length) return;
+    setTechState(grid.children[idx], msg.state);
+    refreshHand();
+  }
+  function applyHandPopoutChargeChange(msg){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    var idx = msg.index;
+    if(typeof idx !== 'number' || idx < 0 || idx >= grid.children.length) return;
+    adjustTechCharges(grid.children[idx], msg.delta);
+  }
+  var FILTER_CATS = [
+    {key:'hand', label:'Hand', options:[
+      {value:'', label:'N/A'},
+      {value:'hand', label:'In hand'},
+      {value:'nothand', label:'Not in hand'},
+      {value:'played', label:'Played'},
+      {value:'exhausted', label:'Exhausted'},
+      {value:'trashed', label:'Trash'}
+    ]},
+    {key:'type', label:'Type', options:[
+      {value:'', label:'N/A'},
+      {value:'offense', label:'Offense'},
+      {value:'defense', label:'Defense'},
+      {value:'movement', label:'Movement'},
+      {value:'science', label:'Science'}
+    ]},
+    {key:'energy', label:'Energy', options:[
+      {value:'', label:'N/A'},
+      {value:'has', label:'Has cost'},
+      {value:'none', label:'No cost'}
+    ]},
+    {key:'trait', label:'Trait', options:[
+      {value:'', label:'N/A'},
+      {value:'has', label:'Has trait'},
+      {value:'none', label:'No trait'}
+    ]}
+  ];
+  function filterCatMeta(key){
+    for(var i=0;i<FILTER_CATS.length;i++){ if(FILTER_CATS[i].key === key) return FILTER_CATS[i]; }
+    return null;
+  }
+  function filterValueLabel(key){
+    var cat = filterCatMeta(key);
+    if(!cat) return 'N/A';
+    var val = HAND_FILTERS[key];
+    for(var i=0;i<cat.options.length;i++){
+      if(cat.options[i].value === val) return cat.options[i].label;
+    }
+    return 'N/A';
+  }
+  function buildFilterMenu(){
+    var menu = document.getElementById('handFilterMenu');
+    if(!menu) return;
+    menu.innerHTML = '';
+    FILTER_CATS.forEach(function(cat){
+      var row = document.createElement('div');
+      row.className = 'filter-row';
+      row.setAttribute('data-cat', cat.key);
+
+      var name = document.createElement('span');
+      name.className = 'filter-cat';
+      name.textContent = cat.label;
+      row.appendChild(name);
+
+      var val = document.createElement('span');
+      val.className = 'filter-val';
+      row.appendChild(val);
+
+      var sel = document.createElement('select');
+      sel.setAttribute('data-cat', cat.key);
+      sel.setAttribute('aria-label', cat.label + ' filter');
+      cat.options.forEach(function(o){
+        var opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.label;
+        sel.appendChild(opt);
+      });
+      sel.value = HAND_FILTERS[cat.key];
+      sel.onchange = function(){
+        HAND_FILTERS[cat.key] = sel.value;
+        updateFilterUI();
+        refreshHand();
+      };
+      row.appendChild(sel);
+      menu.appendChild(row);
+    });
+    var clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'filter-clear';
+    clear.textContent = 'Clear all';
+    clear.onclick = clearFilters;
+    menu.appendChild(clear);
+    updateFilterUI();
+  }
+  function activeFilterCount(){
+    var n = 0;
+    for(var k in HAND_FILTERS){
+      if(HAND_FILTERS.hasOwnProperty(k) && HAND_FILTERS[k]) n++;
+    }
+    return n;
+  }
+  function updateFilterUI(){
+    var n = activeFilterCount();
+    var rows = document.querySelectorAll('#handFilterMenu .filter-row');
+    for(var i=0;i<rows.length;i++){
+      var key = rows[i].getAttribute('data-cat');
+      var valEl = rows[i].querySelector('.filter-val');
+      if(valEl) valEl.textContent = filterValueLabel(key);
+      rows[i].classList.toggle('off', !HAND_FILTERS[key]);
+      var sel = rows[i].querySelector('select');
+      if(sel) sel.value = HAND_FILTERS[key];
+    }
+    var btn = document.getElementById('handFilterBtn');
+    if(btn) btn.classList.toggle('active', n > 0);
+    var count = document.getElementById('handFilterCount');
+    if(count) count.textContent = n;
+  }
+  function clearFilters(){
+    for(var k in HAND_FILTERS){
+      if(HAND_FILTERS.hasOwnProperty(k)) HAND_FILTERS[k] = '';
+    }
+    updateFilterUI();
+    refreshHand();
+  }
+  function toggleFilterMenu(e){
+    e.stopPropagation();
+    var menu = document.getElementById('handFilterMenu');
+    if(menu) menu.classList.toggle('open');
+  }
+  function closeFilterMenu(){
+    var menu = document.getElementById('handFilterMenu');
+    if(menu) menu.classList.remove('open');
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('handFilterMenu');
+    if(menu && menu.classList.contains('open') && !menu.contains(e.target)){
+      menu.classList.remove('open');
+    }
+  });
+  function onHandSortChange(){
+    HAND_SORT = document.getElementById('handSort').value;
+    refreshHand();
+  }
+  function openHandSelect(id){
+    var sel = document.getElementById(id);
+    if(!sel) return;
+    if(sel.showPicker){
+      try{ sel.showPicker(); }catch(e){ sel.focus(); }
+    } else {
+      sel.focus();
+    }
+  }
+  function handCardPasses(card){
+    var d = techCardViewData(card);
+
+    if(HAND_FILTERS.hand){
+      var st = techState(card);
+      if(HAND_FILTERS.hand === 'nothand'){
+        if(st === 'hand') return false;
+      } else if(st !== HAND_FILTERS.hand){
+        return false;
+      }
+    }
+    if(HAND_FILTERS.type){
+      if(card.querySelector('.tticker').getAttribute('data-tt') !== HAND_FILTERS.type) return false;
+    }
+    if(HAND_FILTERS.energy){
+      var e = d.onbuildenergy;
+      var hasCost = !!(e && e.trim() !== '' && parseFloat(e) > 0);
+      if((HAND_FILTERS.energy === 'has') !== hasCost) return false;
+    }
+    if(HAND_FILTERS.trait){
+      if((HAND_FILTERS.trait === 'has') !== !!d.traits) return false;
+    }
+    return true;
+  }
+  function handSortCards(cards){
+    cards.sort(function(a,b){
+      var da = techCardViewData(a);
+      var db = techCardViewData(b);
+      if(HAND_SORT === 'trait'){
+        var ta = (da.traits || '').toLowerCase();
+        var tb = (db.traits || '').toLowerCase();
+        if(ta !== tb) return ta < tb ? -1 : 1;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      if(HAND_SORT === 'type'){
+        var oa = HAND_TYPE_ORDER[a.querySelector('.tticker').getAttribute('data-tt')];
+        var ob = HAND_TYPE_ORDER[b.querySelector('.tticker').getAttribute('data-tt')];
+        if(oa === undefined) oa = 99;
+        if(ob === undefined) ob = 99;
+        if(oa !== ob) return oa - ob;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      if(HAND_SORT === 'energy'){
+        var ea = parseFloat(da.onbuildenergy);
+        var eb = parseFloat(db.onbuildenergy);
+        if(isNaN(ea)) ea = Infinity;
+        if(isNaN(eb)) eb = Infinity;
+        if(ea !== eb) return ea - eb;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      return (da.name || '').localeCompare(db.name || '');
+    });
+  }
+  function refreshHand(){
+    var grid = document.getElementById('techGrid');
+    var handEl = document.getElementById('hand');
+    var countEl = document.getElementById('handCount');
+    if(!handEl || !countEl) return;
+    var cards = [];
+    for(var i=0;i<grid.children.length;i++){
+      if(handCardPasses(grid.children[i])) cards.push(grid.children[i]);
+    }
+    handSortCards(cards);
+    handEl.innerHTML = '';
+    if(cards.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'hand-empty';
+      empty.textContent = activeFilterCount() ? 'No techs match' : 'No techs';
+      handEl.appendChild(empty);
+    } else {
+      for(var j=0;j<cards.length;j++){
+        var d = techCardViewData(cards[j]);
+        var el = document.createElement('div');
+        el.className = 'hand-card';
+        el.setAttribute('data-state', techState(cards[j]));
+        el.innerHTML = handCardHtml(d, techState(cards[j]));
+        el._sourceIndex = Array.prototype.indexOf.call(grid.children, cards[j]);
+        el._onChargeDelta = (function(card){
+          return function(delta){
+            adjustTechCharges(card, delta);
+          };
+        })(cards[j]);
+        wireHandCardInteractions(el, (function(card){
+          return function(){
+            setTechState(card, nextHandCardState(techState(card)));
+            refreshHand();
+          };
+        })(cards[j]), syncHandRoom);
+        handEl.appendChild(el);
+      }
+    }
+    countEl.textContent = cards.length;
+    updateHandSpread();
+    updateHandSlider();
+    broadcastHandSnapshot();
+  }
+  /* Cards overlap by 33% when the hand is small and there is room to fan out,
+     tightening to 66% as the hand fills the strip. */
+  /* The layer sits flush with the card tops; it only needs the extra height
+     while a card is hovered or popped, so add it just for that moment. */
+  function syncHandRoom(){
+    var view = document.querySelector('.hand-view');
+    var strip = document.getElementById('hand');
+    if(!view || !strip) return;
+    var up = strip.querySelector('.hand-card.popped') || strip.querySelector('.hand-card:hover');
+    view.classList.toggle('roomy', !!up);
+  }
+  function updateHandSpread(){
+    var view = document.querySelector('.hand-view');
+    var strip = document.getElementById('hand');
+    if(!view || !strip) return;
+    var n = strip.querySelectorAll('.hand-card').length;
+    var cardW = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue('--hand-card-w')) || 190;
+    var loose = cardW * 0.67;   /* 33% overlap */
+    var tight = cardW * 0.34;   /* 66% overlap */
+    var step = loose;
+    if(n > 1){
+      var cs = getComputedStyle(strip);
+      var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      var avail = view.clientWidth - pad;
+      var needed = (avail - cardW) / (n - 1);
+      step = Math.max(tight, Math.min(loose, needed));
+    }
+    strip.style.setProperty('--hand-step', step + 'px');
+  }
+  /* The native scrollbar sits at the bottom edge of .hand-view, which the bar
+     covers, so scroll position is mirrored onto a slider drawn on the bar. */
+  function updateHandSlider(){
+    var view = document.querySelector('.hand-view');
+    var slider = document.getElementById('handSlider');
+    var thumb = document.getElementById('handSliderThumb');
+    if(!view || !slider || !thumb) return;
+    var sw = view.scrollWidth, cw = view.clientWidth;
+    if(sw <= cw + 1){
+      slider.classList.remove('on');
+      return;
+    }
+    slider.classList.add('on');
+    var track = slider.querySelector('.hand-slider-track');
+    var trackW = track.offsetWidth;
+    var w = Math.max(28, (cw / sw) * trackW);
+    var maxLeft = trackW - w;
+    var maxScroll = sw - cw;
+    var left = maxScroll > 0 ? (view.scrollLeft / maxScroll) * maxLeft : 0;
+    thumb.style.width = w + 'px';
+    thumb.style.left = (12 + left) + 'px';
+  }
+  function syncHandBarHeight(){
+    var bar = document.querySelector('.hand-bar');
+    if(!bar) return;
+    document.documentElement.style.setProperty('--hand-bar-h', bar.offsetHeight + 'px');
+  }
+  function wireHandSlider(){
+    var view = document.querySelector('.hand-view');
+    var slider = document.getElementById('handSlider');
+    if(!view || !slider) return;
+    syncHandBarHeight();
+    window.addEventListener('resize', syncHandBarHeight);
+    window.addEventListener('resize', updateHandSpread);
+    view.addEventListener('scroll', updateHandSlider);
+    window.addEventListener('resize', updateHandSlider);
+    var dragging = false;
+    function scrollToPointer(clientX){
+      var track = slider.querySelector('.hand-slider-track');
+      var r = track.getBoundingClientRect();
+      var thumb = document.getElementById('handSliderThumb');
+      var w = thumb.offsetWidth;
+      var maxLeft = r.width - w;
+      if(maxLeft <= 0) return;
+      var pos = clientX - r.left - w / 2;
+      pos = Math.max(0, Math.min(maxLeft, pos));
+      view.scrollLeft = (pos / maxLeft) * (view.scrollWidth - view.clientWidth);
+    }
+    slider.addEventListener('pointerdown', function(e){
+      dragging = true;
+      slider.classList.add('dragging');
+      slider.setPointerCapture(e.pointerId);
+      scrollToPointer(e.clientX);
+      e.preventDefault();
+    });
+    slider.addEventListener('pointermove', function(e){
+      if(dragging) scrollToPointer(e.clientX);
+    });
+    function endDrag(){
+      dragging = false;
+      slider.classList.remove('dragging');
+    }
+    slider.addEventListener('pointerup', endDrag);
+    slider.addEventListener('pointercancel', endDrag);
+  }
+  function toggleHand(){
+    var dock = document.getElementById('handDock');
+    var willExpand = !dock.classList.contains('expanded');
+    dock.classList.toggle('expanded', willExpand);
+    if(willExpand){
+      refreshHand();
+      setTimeout(function(){
+        updateHandSpread();
+        updateHandSlider();
+      }, 240);
+    }
+  }
+  function setTechType(el, key){
+    var meta = techTypeMeta(key);
+    el.setAttribute('data-tt', meta.key);
+    el.textContent = meta.icon;
+    el.title = 'Tech type: ' + meta.label;
+  }
+  function cycleTechType(el){
+    var keys = TECH_TYPES.map(function(t){return t.key;});
+    var idx = keys.indexOf(el.getAttribute('data-tt'));
+    var next = keys[(idx + 1) % keys.length];
+    setTechType(el, next);
+  }
+  function refreshTechSections(card){
+    if(!card) return;
+    var editing = card.classList.contains('editing');
+    var secs = card.querySelectorAll('.tsec');
+    for(var i=0;i<secs.length;i++){
+      var field = secs[i].querySelector('textarea');
+      var hasText = field && field.value.trim() !== '';
+      var diamond = secs[i].querySelector('.tdiamond');
+      var hasCost = diamond && !!diamond.querySelector('input') && diamond.querySelector('input').value.trim() !== '';
+      if(secs[i].classList.contains('onbuild')){
+        secs[i].classList.toggle('hid', !hasText && !hasCost && !editing);
+      } else {
+        secs[i].classList.toggle('hid', !hasText && !editing);
+      }
+      if(field){
+        field.disabled = !editing;
+        if(secs[i].classList.contains('onbuild')){
+          field.placeholder = editing ? 'On Play...' : '';
+        }
+      }
+        var diamond = secs[i].querySelector('.tdiamond');
+        if(diamond){
+          var inp = diamond.querySelector('input');
+          var hasVal = inp && inp.value.trim() !== '';
+          diamond.classList.toggle('hid', !hasVal && !editing);
+        }
+        var secText = field ? field.value : '';
+        var hasMod = /create\s+module/i.test(secText);
+        var hasDep = /create\s+deployable/i.test(secText);
+        secs[i].classList.toggle('dep', hasDep);
+        secs[i].classList.toggle('mod', hasMod && !hasDep);
+    }
+    var traits = card.querySelector('.ttraits');
+    if(traits){
+      traits.classList.toggle('hid', traits.value.trim() === '' && !editing);
+      traits.disabled = !editing;
+    }
+    var tname = card.querySelector('.tname');
+    if(tname){
+      tname.disabled = !editing;
+    }
+    var storage = card.querySelector('.tstorage');
+    if(storage){
+      var sInp = storage.querySelector('.tstorage-input');
+      var sVal = sInp ? parseInt(sInp.value,10) : 0;
+      var isZero = isNaN(sVal) || sVal === 0;
+      storage.classList.toggle('hid', isZero && !editing);
+      if(sInp) sInp.disabled = !editing;
+    }
+    var hull = card.querySelector('.thull');
+    if(hull){
+      var hInp = hull.querySelector('.thull-input');
+      var hEmpty = !hInp || hInp.value.trim() === '';
+      hull.classList.toggle('hid', hEmpty && !editing);
+      if(hInp) hInp.disabled = !editing;
+    }
+    var charges = card.querySelector('.tcharges');
+    if(charges){
+      var cInp = charges.querySelector('.tcharges-input');
+      var cEmpty = !cInp || cInp.value.trim() === '';
+      charges.classList.toggle('hid', cEmpty && !editing);
+      if(cInp) cInp.disabled = !editing;
+    }
+    var diamonds = card.querySelectorAll('.tdiamond input');
+    for(var d=0; d<diamonds.length; d++){
+      diamonds[d].disabled = !editing;
+    }
+  }
+  function toggleTechEdit(btn){
+    var card = btn.closest('.tech-card');
+    card.classList.toggle('editing');
+    btn.textContent = card.classList.contains('editing') ? 'Done' : 'Edit';
+    refreshTechSections(card);
+  }
+  var DEPLOY_STATES = [
+    {key:'normal', icon:'◉', svg:'', label:'Normal'},
+    {key:'deployable', icon:'⍙', svg:'<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg>', label:'Deployable'},
+    {key:'module', icon:'⬡', svg:'<svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg>', label:'Module'}
+  ];
+  function setTechDeploy(el, state){
+    var idx = 0;
+    if(typeof state === 'boolean'){ idx = state ? 1 : 0; }
+    else if(typeof state === 'number'){ idx = state; }
+    else {
+      var s = String(state);
+      if(s === 'true'){ idx = 1; }
+      else if(s === 'false' || s === ''){ idx = 0; }
+      else if(s === '1' || s === '2'){ idx = parseInt(s,10); }
+      else { for(var i=0;i<DEPLOY_STATES.length;i++){ if(DEPLOY_STATES[i].key===s){ idx=i; break; } } }
+    }
+    idx = ((idx % DEPLOY_STATES.length)+DEPLOY_STATES.length)%DEPLOY_STATES.length;
+    var meta = DEPLOY_STATES[idx];
+    el.setAttribute('data-deploy', meta.key);
+    if(meta.svg){ el.innerHTML = meta.svg; }
+    else { el.textContent = meta.icon; }
+    el.title = meta.label;
+    el.classList.toggle('on', meta.key !== 'normal');
+  }
+  function cycleTechDeploy(el){
+    var cur = 0;
+    for(var i=0;i<DEPLOY_STATES.length;i++){ if(DEPLOY_STATES[i].key===el.getAttribute('data-deploy')){ cur=i; break; } }
+    setTechDeploy(el, (cur + 1) % DEPLOY_STATES.length);
+  }
+
+  var CLASS_PRESETS = {
+    'Support Class': {
+      stats: {hull:2, shield:2, storage:2},
+      techName: 'Repulsor Unit',
+      modName: 'Repulsor Unit'
+    },
+    'Jump Class': {
+      stats: {speed:2},
+      skills: {Sensors:1},
+      techName: 'Phantom'
+    },
+    'Discovery Class': {
+      stats: {storage:2},
+      skills: {Logistics:2, Science:1},
+      techName: 'Experimental Reconnaissance'
+    },
+    'Striker Class': {
+      stats: {storage:2},
+      skills: {Leadership:2},
+      techName: 'Decomp Strikes'
+    },
+    'Bulwark Class': {
+      stats: {hull:4},
+      crewTraits: ['Citadel']
+    }
+  };
+  function classStatsSummary(stats){
+    if(!stats) return '<span>No stat increases.</span>';
+    var parts = [];
+    if(stats.hull) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.hull)) + ' Hull</span>');
+    if(stats.shield) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.shield)) + ' Shield</span>');
+    if(stats.storage) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.storage)) + ' Storage</span>');
+    if(stats.speed) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>+' + escapeHtml(String(stats.speed)) + ' Speed</span>');
+    return parts.length ? parts.join('') : '<span>No stat increases.</span>';
+  }
+  function classSkillSummary(skills){
+    if(!skills) return '';
+    var parts = [];
+    if(skills.Sensors) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg>+' + escapeHtml(String(skills.Sensors)) + ' Sensors</span>');
+    if(skills.Leadership) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round"/></svg>+' + escapeHtml(String(skills.Leadership)) + ' Leadership</span>');
+    if(skills.Logistics) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>+' + escapeHtml(String(skills.Logistics)) + ' Logistics</span>');
+    if(skills.Science) parts.push('<span class="class-stat-chip"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="11" height="15" rx="1.8" stroke="var(--icon-shield)" stroke-width="1.6"/><path d="M8 8h5M8 11h5M8 14h3" stroke="var(--icon-shield)" stroke-width="1.4" stroke-linecap="round"/><path d="M9 20h10V7" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>+' + escapeHtml(String(skills.Science)) + ' Science</span>');
+    return parts.join('');
+  }
+  function renderClassInfo(){
+    var list = document.getElementById('classInfoList');
+    if(!list) return;
+    list.innerHTML = '';
+    var order = ['Support Class', 'Jump Class', 'Striker Class', 'Discovery Class', 'Bulwark Class'];
+    for(var i = 0; i < order.length; i++){
+      var name = order[i];
+      var preset = CLASS_PRESETS[name];
+      if(!preset) continue;
+      var item = document.createElement('div');
+      item.className = 'class-info-item';
+      var skillHtml = classSkillSummary(preset.skills || null);
+      var html = '<b>' + escapeHtml(name) + '</b>' +
+        '<p><strong>Stats:</strong></p><p class="class-stat-line">' + classStatsSummary(preset.stats || null) + '</p>';
+      if(skillHtml){
+        html += '<p><strong>Crew Skills:</strong></p><p class="class-stat-line">' + skillHtml + '</p>';
+      }
+      html += '<p><strong>Tech:</strong> ' + escapeHtml(preset.techName || 'None') + '</p>';
+      if(preset.modName){
+        html += '<p><strong>Module:</strong> ' + escapeHtml(preset.modName) + '</p>';
+      }
+      if(preset.crewTraits && preset.crewTraits.length){
+        html += '<p><strong>Traits:</strong> ' + escapeHtml(preset.crewTraits.join(', ')) + '</p>';
+      }
+      item.innerHTML = html;
+      list.appendChild(item);
+    }
+  }
+  function openClassInfo(){
+    renderClassInfo();
+    var modal = document.getElementById('classInfoModal');
+    if(modal) modal.classList.add('open');
+  }
+  function closeClassInfo(){
+    var modal = document.getElementById('classInfoModal');
+    if(modal) modal.classList.remove('open');
+  }
+  function findTechByName(name){
+    for(var i=0;i<TECH_PRESETS.length;i++){
+      if(TECH_PRESETS[i].name === name) return TECH_PRESETS[i];
+    }
+    return null;
+  }
+  function findModByName(name){
+    for(var i=0;i<MOD_PRESETS.length;i++){
+      if(MOD_PRESETS[i].name === name) return MOD_PRESETS[i];
+    }
+    return null;
+  }
+  function bumpStat(id, delta){
+    var el = document.getElementById(id);
+    if(!el || delta === 0) return el ? el.value : '';
+    var num = parseInt(el.value, 10);
+    if(isNaN(num)) num = 0;
+    el.value = String(num + delta);
+    return el.value;
+  }
+  function onShipClassChange(){
+    var sel = document.getElementById('shipClass');
+    var cls = sel.options[sel.selectedIndex].text;
+    var preset = CLASS_PRESETS[cls];
+    if(!preset) return;
+    if(!confirm('Add stats and technology of this ' + cls.toLowerCase() + '?')) return;
+    var s = preset.stats || {};
+    if(s.hull){
+      bumpStat('hullCur', s.hull);
+      bumpStat('hullMax', s.hull);
+    }
+    if(s.shield){
+      bumpStat('shieldCur', s.shield);
+      bumpStat('shieldMax', s.shield);
+    }
+    if(s.storage) bumpStat('storage', s.storage);
+    if(s.speed){
+      bumpStat('speedCur', s.speed);
+      bumpStat('speedMax', s.speed);
+    }
+    var skills = preset.skills || {};
+    Object.keys(skills).forEach(function(name){
+      bumpStat('skill-' + name + '-pts', skills[name]);
+    });
+    if(preset.techName){
+      var t = findTechByName(preset.techName);
+      if(t) addTechFromData(t);
+    }
+    if(preset.modName){
+      var m = findModByName(preset.modName);
+      if(m) pickModPreset(m);
+    }
+    (preset.crewTraits || []).forEach(function(traitName){
+      var found = null;
+      for(var k = 0; k < CREW_PRESETS.length; k++){
+        if(CREW_PRESETS[k].name === traitName){ found = CREW_PRESETS[k]; break; }
+      }
+      if(found) pickPreset(found);
+    });
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('techPresetMenu');
+    if(menu.classList.contains('open') && !menu.contains(e.target)){
+      closeTechPresetMenu();
+    }
+  });
+  document.getElementById('techGrid').addEventListener('click', function(e){
+    var card = e.target.closest('.tech-card');
+    if(!card) return;
+    var editing = card.classList.contains('editing');
+    var hl = e.target.closest('.thull');
+    var ch = e.target.closest('.tcharges');
+    if(hl || ch){
+      if(editing) return;
+      var inp = (hl ? hl : ch).querySelector('input');
+      if(!inp) return;
+      var v = parseInt(inp.value, 10);
+      if(isNaN(v)) v = 0;
+      if(hl){
+        v = Math.max(0, v - 1);
+      } else {
+        v = v + 1;
+      }
+      inp.value = v;
+      refreshTechSections(card);
+      return;
+    }
+    if(!editing) return;
+    var tk = e.target.closest('.tticker');
+    if(tk){ cycleTechType(tk); return; }
+    var dp = e.target.closest('.tdepbtn');
+    if(dp){ cycleTechDeploy(dp); }
+  });
+  document.getElementById('techGrid').addEventListener('input', function(e){
+    if(e.target.closest && e.target.closest('.tech-card')){
+      refreshTechSections(e.target.closest('.tech-card'));
+    }
+  });
+  buildTechPresetMenu();
+  refreshTechSlotControls();
+
+  /* ===== Modules / Deployables ===== */
+  function modSlotLabel(n){ return 'Slot ' + (n < 10 ? '0' + n : n); }
+  function refreshModSlotControls(){
+    var grid = document.getElementById('modGrid');
+    document.getElementById('modSlotRemoveBtn').disabled = grid.children.length <= 1;
+  }
+  function addModSlot(){
+    var grid = document.getElementById('modGrid');
+    var card = document.createElement('div');
+    card.className = 'mod-card';
+    card.innerHTML =
+      '<div class="mhead"><button type="button" class="mshape-btn" data-shape="" title="Shape"></button><input class="mname" placeholder="TITLE"><button type="button" class="mexhaust-btn" data-exhaust="false" onclick="toggleModExhaust(this)" title="Exhaust this module">Exhaust</button><button type="button" class="m-delete" onclick="removeModCard(this)" title="Delete this module">🗑</button><button type="button" class="msecedit" onclick="toggleModEdit(this)" title="Edit sections">Edit</button></div>' +
+      '<div class="msub"><input class="mreq" placeholder="REQUIREMENTS"></div>' +
+      '<div class="msecs">' +
+        '<div class="msec onbuild hid"><div class="msec-head"><span>On Play</span></div><textarea placeholder="On Play..."></textarea></div>' +
+        '<div class="msec passive hid"><div class="msec-head"><span>Passive</span></div><textarea placeholder="Passive..."></textarea></div>' +
+        '<div class="msec onactivate hid"><div class="msec-head"><span>On Activate</span><span class="mcost" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="mcost-input" maxlength="2"></span></div><textarea placeholder="On Activate..."></textarea></div>' +
+      '</div>' +
+      '<div class="mfoot">' +
+        '<span class="mticker" data-mt="offense" title="Tech type: Offense">⚔</span>' +
+        '<button type="button" class="mtype-btn" data-mtype="module" title="Module"></button>' +
+        '<span class="mspeed" title="Speed"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><input class="mspeed-input" maxlength="4"></span>' +
+        '<span class="mdur" title="Duration"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="var(--icon-amber)" stroke-width="1.8"/><path d="M12 13V8M15 13h-3" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linecap="round"/><path d="M9 3h6" stroke="var(--icon-amber)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="mdur-input" maxlength="4"></span>' +
+        '<span class="mhull" title="Hull"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="mhull-input" maxlength="4"></span>' +
+        '<span class="mcharges hid" title="Charges"><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="mcharges-input" maxlength="4"></span>' +
+      '</div>';
+    grid.appendChild(card);
+    setModType(card.querySelector('.mtype-btn'), 'module');
+    setModuleShape(card.querySelector('.mshape-btn'), '');
+    refreshModSections(card);
+    refreshModSlotControls();
+  }
+  function toggleModEdit(btn){
+    var card = btn.closest('.mod-card');
+    card.classList.toggle('editing');
+    btn.textContent = card.classList.contains('editing') ? 'Done' : 'Edit';
+    refreshModSections(card);
+  }
+  function toggleModExhaust(btn){
+    var card = btn.closest('.mod-card');
+    var on = btn.getAttribute('data-exhaust') === 'true';
+    on = !on;
+    btn.setAttribute('data-exhaust', on ? 'true' : 'false');
+    btn.textContent = on ? 'Refresh' : 'Exhaust';
+    card.classList.toggle('exhausted', on);
+  }
+  function refreshModSections(card){
+    if(!card) return;
+    var editing = card.classList.contains('editing');
+    var secs = card.querySelectorAll('.msec');
+    for(var i = 0; i < secs.length; i++){
+      var field = secs[i].querySelector('textarea');
+      var hasText = field && field.value.trim() !== '';
+      secs[i].classList.toggle('hid', !hasText && !editing);
+      if(field) field.disabled = !editing;
+      var cost = secs[i].querySelector('.mcost');
+      if(cost){
+        var inp = cost.querySelector('input');
+        var hasVal = inp && inp.value.trim() !== '';
+        cost.classList.toggle('hid', !hasVal && !editing);
+        if(inp) inp.disabled = !editing;
+      }
+    }
+    var name = card.querySelector('.mname');
+    if(name) name.disabled = !editing;
+    var req = card.querySelector('.mreq');
+    if(req){
+      req.classList.toggle('hid', req.value.trim() === '' && !editing);
+      req.disabled = !editing;
+    }
+    var hull = card.querySelector('.mhull');
+    if(hull){
+      var hullInp = hull.querySelector('.mhull-input');
+      var hullEmpty = !hullInp || hullInp.value.trim() === '';
+      hull.classList.toggle('hid', hullEmpty && !editing);
+      if(hullInp) hullInp.disabled = !editing;
+    }
+    var dur = card.querySelector('.mdur');
+    if(dur){
+      var durInp = dur.querySelector('.mdur-input');
+      var durEmpty = !durInp || durInp.value.trim() === '';
+      dur.classList.toggle('hid', durEmpty && !editing);
+      if(durInp) durInp.disabled = !editing;
+    }
+    var speed = card.querySelector('.mspeed');
+    if(speed){
+      var speedInp = speed.querySelector('.mspeed-input');
+      var speedEmpty = !speedInp || speedInp.value.trim() === '';
+      speed.classList.toggle('hid', speedEmpty && !editing);
+      if(speedInp) speedInp.disabled = !editing;
+    }
+    var charges = card.querySelector('.mcharges');
+    if(charges){
+      var chInp = charges.querySelector('.mcharges-input');
+      var chEmpty = !chInp || chInp.value.trim() === '';
+      charges.classList.toggle('hid', chEmpty && !editing);
+      if(chInp) chInp.disabled = !editing;
+    }
+  }
+  function removeModSlot(){
+    var grid = document.getElementById('modGrid');
+    if(grid.children.length > 1){
+      grid.removeChild(grid.lastElementChild);
+    }
+    refreshModSlotControls();
+  }
+  function removeModCard(btn){
+    var card = btn.closest('.mod-card');
+    if(!card) return;
+    var grid = document.getElementById('modGrid');
+    if(grid.children.length <= 1){
+      addModSlot();
+    }
+    grid.removeChild(card);
+    refreshModSlotControls();
+  }
+  function setModTechType(el, key){
+    var meta = techTypeMeta(key);
+    el.setAttribute('data-mt', meta.key);
+    el.textContent = meta.icon;
+    el.title = 'Tech type: ' + meta.label;
+  }
+  function cycleModTechType(el){
+    var keys = TECH_TYPES.map(function(t){return t.key;});
+    var idx = keys.indexOf(el.getAttribute('data-mt'));
+    var next = keys[(idx + 1) % keys.length];
+    setModTechType(el, next);
+  }
+  function setModType(el, type){
+    var meta = (type === 'deployable') ? DEPLOY_STATES[1] : DEPLOY_STATES[2];
+    el.setAttribute('data-mtype', meta.key);
+    el.innerHTML = meta.svg;
+    el.title = meta.label;
+  }
+  function toggleModType(el){
+    var cur = el.getAttribute('data-mtype') === 'module' ? 'deployable' : 'module';
+    setModType(el, cur);
+  }
+  var MOD_SHAPES = [
+    {key:'', icon:'', label:'None'},
+    {key:'square', icon:'◼', label:'Square'},
+    {key:'triangle', icon:'▲', label:'Triangle'},
+    {key:'hexagon', icon:'⬡', label:'Hexagon'},
+    {key:'pentagon', icon:'⬟', label:'Pentagon'},
+    {key:'rectangle', icon:'▬', label:'Rectangle'},
+    {key:'circle', icon:'◎', label:'Circle'},
+    {key:'star', icon:'☆', label:'Star'},
+    {key:'diamond', icon:'◆', label:'Diamond'},
+    {key:'crescent', icon:'☾', label:'Crescent'},
+    {key:'arrow', icon:'➤', label:'Arrow'},
+    {key:'white-square', icon:'◻', label:'White Square'},
+    {key:'bar', icon:'▰', label:'Bar'},
+    {key:'quadrant', icon:'◖', label:'Quadrant'},
+    {key:'heart', icon:'♡', label:'Heart'},
+    {key:'cross', icon:'♰', label:'Cross'}
+  ];
+  function setModuleShape(el, key){
+    var meta = MOD_SHAPES[0];
+    for(var i = 0; i < MOD_SHAPES.length; i++){
+      if(MOD_SHAPES[i].key === key){ meta = MOD_SHAPES[i]; break; }
+    }
+    el.setAttribute('data-shape', meta.key);
+    el.textContent = meta.icon;
+    el.title = 'Shape: ' + meta.label;
+  }
+  function cycleModuleShape(el){
+    var curKey = el.getAttribute('data-shape');
+    var idx = 0;
+    for(var i = 0; i < MOD_SHAPES.length; i++){
+      if(MOD_SHAPES[i].key === curKey){ idx = i; break; }
+    }
+    setModuleShape(el, MOD_SHAPES[(idx + 1) % MOD_SHAPES.length].key);
+  }
+    function buildModPresetMenu(){
+    var menu = document.getElementById('modPresetMenu');
+    menu.innerHTML = '';
+    var blankItem = document.createElement('button');
+    blankItem.type = 'button';
+    blankItem.className = 'preset-item';
+    blankItem.textContent = 'Blank';
+    blankItem.onclick = function(){
+      addModSlot();
+      closeModPresetMenu();
+    };
+    menu.appendChild(blankItem);
+    MOD_PRESETS.forEach(function(p){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'preset-item';
+      var label = document.createElement('span');
+      label.textContent = p.name;
+      item.appendChild(label);
+      var dtag = document.createElement('span');
+      dtag.className = 'preset-tag preset-deploy';
+      dtag.innerHTML = (p.type === 'deployable') ? DEPLOY_STATES[1].svg : DEPLOY_STATES[2].svg;
+      dtag.style.marginLeft = 'auto';
+      item.appendChild(dtag);
+      item.onclick = function(){
+        pickModPreset(p);
+        closeModPresetMenu();
+      };
+      menu.appendChild(item);
+    });
+  }
+  function toggleModPresetMenu(e){
+    e.stopPropagation();
+    document.getElementById('modPresetMenu').classList.toggle('open');
+  }
+  function closeModPresetMenu(){
+    document.getElementById('modPresetMenu').classList.remove('open');
+  }
+  function pickModPreset(p){
+    addModSlot();
+    var card = document.getElementById('modGrid').lastElementChild;
+    card.querySelector('.mname').value = p.name || '';
+    card.querySelector('.mreq').value = p.req || '';
+    card.querySelector('.mhull-input').value = (p.hull !== undefined && p.hull !== null) ? p.hull : '';
+    card.querySelector('.mdur-input').value = (p.duration !== undefined && p.duration !== null) ? p.duration : '';
+    card.querySelector('.mspeed-input').value = (p.speed !== undefined && p.speed !== null) ? p.speed : '';
+    card.querySelector('.mcharges-input').value = (p.charges !== undefined && p.charges !== null) ? p.charges : '';
+    card.querySelector('.msec.onbuild textarea').value = p.onbuild || '';
+    card.querySelector('.msec.passive textarea').value = p.passive || '';
+    card.querySelector('.msec.onactivate textarea').value = p.onactivate || '';
+    card.querySelector('.mcost-input').value = (p.onactivateenergy !== undefined && p.onactivateenergy !== null) ? p.onactivateenergy : '';
+    setModType(card.querySelector('.mtype-btn'), p.type || 'module');
+    setModTechType(card.querySelector('.mticker'), p.tt || 'offense');
+    setModuleShape(card.querySelector('.mshape-btn'), p.shape || '');
+    refreshModSections(card);
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('modPresetMenu');
+    if(menu.classList.contains('open') && !menu.contains(e.target)){
+      closeModPresetMenu();
+    }
+  });
+  document.getElementById('modGrid').addEventListener('click', function(e){
+    var sh = e.target.closest('.mshape-btn');
+    if(sh){ cycleModuleShape(sh); return; }
+    var bt = e.target.closest('.mtype-btn');
+    if(bt){ toggleModType(bt); return; }
+    var mt = e.target.closest('.mticker');
+    if(mt){ cycleModTechType(mt); return; }
+    var hl = e.target.closest('.mhull, .mdur');
+    var ch = e.target.closest('.mcharges');
+    if(ch && !e.target.closest('input')){
+      var chInp = ch.querySelector('input');
+      if(chInp){
+        var cv = parseInt(chInp.value, 10);
+        if(isNaN(cv)) cv = 0;
+        chInp.value = cv + 1;
+        refreshModSections(ch.closest('.mod-card'));
+      }
+      return;
+    }
+    if(hl && !e.target.closest('input')){
+      var inp = hl.querySelector('input');
+      if(inp){
+        var v = parseInt(inp.value, 10);
+        if(isNaN(v)) v = 0;
+        inp.value = Math.max(0, v - 1);
+        refreshModSections(hl.closest('.mod-card'));
+      }
+    }
+  });
+  document.getElementById('modGrid').addEventListener('input', function(e){
+    if(e.target.closest && e.target.closest('.mod-card')){
+      refreshModSections(e.target.closest('.mod-card'));
+    }
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeClassInfo();
+  });
+  buildModPresetMenu();
+  refreshModSlotControls();
+
+  /* ===== Export / Import ===== */
+  function readMods(){
+    var grid = document.getElementById('modGrid');
+    var out = [];
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      out.push({
+        name: card.querySelector('.mname').value,
+        req: card.querySelector('.mreq').value,
+        hull: card.querySelector('.mhull-input').value,
+        duration: card.querySelector('.mdur-input').value,
+        speed: card.querySelector('.mspeed-input').value,
+        charges: card.querySelector('.mcharges-input').value,
+        onbuild: card.querySelector('.msec.onbuild textarea').value,
+        passive: card.querySelector('.msec.passive textarea').value,
+        onactivate: card.querySelector('.msec.onactivate textarea').value,
+        onactivateenergy: card.querySelector('.mcost-input').value,
+        type: card.querySelector('.mtype-btn').getAttribute('data-mtype'),
+        tt: card.querySelector('.mticker').getAttribute('data-mt'),
+        shape: card.querySelector('.mshape-btn').getAttribute('data-shape'),
+        exhaust: card.querySelector('.mexhaust-btn').getAttribute('data-exhaust') === 'true'
+      });
+    }
+    return out;
+  }
+  function applyModExhaust(card, on){
+    var btn = card.querySelector('.mexhaust-btn');
+    if(!btn) return;
+    btn.setAttribute('data-exhaust', on ? 'true' : 'false');
+    btn.textContent = on ? 'Refresh' : 'Exhaust';
+    card.classList.toggle('exhausted', on);
+  }
+  function writeMods(mods){
+    var grid = document.getElementById('modGrid');
+    var count = Array.isArray(mods) ? mods.length : 1;
+    var target = Math.max(1, count);
+    while(grid.children.length < target) addModSlot();
+    while(grid.children.length > target) removeModSlot();
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      var item = (mods && mods[i]) ? mods[i] : {};
+      card.querySelector('.mname').value = item.name || '';
+      card.querySelector('.mreq').value = item.req || '';
+      card.querySelector('.mhull-input').value = item.hull || '';
+      card.querySelector('.mdur-input').value = item.duration || '';
+      card.querySelector('.mspeed-input').value = item.speed || '';
+      card.querySelector('.mcharges-input').value = item.charges || '';
+      card.querySelector('.msec.onbuild textarea').value = item.onbuild || '';
+      card.querySelector('.msec.passive textarea').value = item.passive || '';
+      card.querySelector('.msec.onactivate textarea').value = item.onactivate || '';
+      card.querySelector('.mcost-input').value = item.onactivateenergy || '';
+      setModType(card.querySelector('.mtype-btn'), item.type || 'module');
+      setModTechType(card.querySelector('.mticker'), item.tt || 'offense');
+      setModuleShape(card.querySelector('.mshape-btn'), item.shape || '');
+      applyModExhaust(card, item.exhaust === true);
+      refreshModSections(card);
+    }
+  }
+  function readSkills(){
+    var out = {};
+    var names = ['Cyber','Diplomacy','Engineering','Leadership','Logistics','Navigation','Piloting','Sensors','Science'];
+    names.forEach(function(name){
+      out[name] = {
+        points: document.getElementById('skill-' + name + '-pts').value,
+        penalty: document.getElementById('skill-' + name + '-pen').value
+      };
+    });
+    return out;
+  }
+  function writeSkills(skills){
+    if(!skills) return;
+    Object.keys(skills).forEach(function(name){
+      var pt = document.getElementById('skill-' + name + '-pts');
+      var pe = document.getElementById('skill-' + name + '-pen');
+      if(pt) pt.value = (skills[name].points !== undefined ? skills[name].points : '');
+      if(pe) pe.value = (skills[name].penalty !== undefined ? skills[name].penalty : '');
+    });
+  }
+  function readCrew(){
+    var grid = document.getElementById('crewGrid');
+    var out = [];
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      out.push({
+        name: card.querySelector('.cname').value,
+        text: card.querySelector('textarea').value,
+        combat: card.querySelector('.crew-tag-btn').getAttribute('data-combat') === '1',
+        type: card.querySelector('.cticker').getAttribute('data-ctype')
+      });
+    }
+    return out;
+  }
+  function writeCrew(crew){
+    var grid = document.getElementById('crewGrid');
+    var count = Array.isArray(crew) ? crew.length : 1;
+    var target = Math.max(1, count);
+    while(grid.children.length < target) addCrewSlot();
+    while(grid.children.length > target) removeCrewSlot();
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      var item = (crew && crew[i]) ? crew[i] : {};
+      card.querySelector('.cname').value = item.name || '';
+      card.querySelector('textarea').value = item.text || '';
+      setCombatTag(card.querySelector('.crew-tag-btn'), item.combat === true);
+      setCrewType(card.querySelector('.cticker'), item.type);
+    }
+    relabelSlots();
+  }
+  function readTech(){
+    var grid = document.getElementById('techGrid');
+    var out = [];
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      out.push({
+        name: card.querySelector('.tname').value,
+        traits: card.querySelector('.ttraits').value,
+        onbuild: card.querySelector('.tsec.onbuild textarea').value,
+        passive: card.querySelector('.tsec.passive textarea').value,
+        onactivate: card.querySelector('.tsec.onactivate textarea').value,
+        onbuildenergy: card.querySelector('.tcost-onbuild').value,
+        onactivateenergy: card.querySelector('.tcost-onactivate').value,
+        techType: card.querySelector('.tticker').getAttribute('data-tt'),
+        storage: card.querySelector('.tstorage-input').value,
+        hull: card.querySelector('.thull-input').value,
+        charges: card.querySelector('.tcharges-input').value,
+        deploy: card.querySelector('.tdepbtn').getAttribute('data-deploy'),
+        state: techState(card)
+      });
+    }
+    return out;
+  }
+  function writeTech(tech){
+    var grid = document.getElementById('techGrid');
+    var count = Array.isArray(tech) ? tech.length : 1;
+    var target = Math.max(1, count);
+    while(grid.children.length < target) addTechSlot();
+    while(grid.children.length > target) removeTechSlot();
+    for(var i = 0; i < grid.children.length; i++){
+      var card = grid.children[i];
+      var item = (tech && tech[i]) ? tech[i] : {};
+      card.querySelector('.tname').value = item.name || '';
+      card.querySelector('.ttraits').value = item.traits || '';
+      card.querySelector('.tsec.onbuild textarea').value = item.onbuild || '';
+      card.querySelector('.tsec.passive textarea').value = item.passive || '';
+      card.querySelector('.tsec.onactivate textarea').value = item.onactivate || '';
+      card.querySelector('.tcost-onbuild').value = item.onbuildenergy || '';
+      card.querySelector('.tcost-onactivate').value = item.onactivateenergy || '';
+      card.querySelector('.tstorage-input').value = item.storage || '';
+      card.querySelector('.thull-input').value = item.hull || '';
+      card.querySelector('.tcharges-input').value = item.charges || '';
+      setTechType(card.querySelector('.tticker'), item.techType);
+      setTechDeploy(card.querySelector('.tdepbtn'), item.deploy);
+      var state = 'played';
+      if(item.state !== undefined && item.state !== null && item.state !== ''){
+        state = item.state;
+      } else if(item.exhaust === true){
+        state = 'exhausted';
+      } else if(item.built === false){
+        state = 'hand';
+      } else {
+        state = 'played';
+      }
+    if(!isTechState(state)) state = 'played';
+      setTechState(card, state);
+      refreshTechSections(card);
+    }
+    refreshHand();
+  }
+  function collectSheet(){
+    function v(id){ var el = document.getElementById(id); return el ? el.value : ''; }
+    return {
+      shipName: v('shipName'),
+      captain: v('captain'),
+      commissioned: v('commissioned'),
+      shipClass: v('shipClass'),
+      dcHex: v('dcHex'),
+      stats: {
+        hullCur: v('hullCur'), hullMax: v('hullMax'),
+        shieldCur: v('shieldCur'), shieldMax: v('shieldMax'),
+        energyCur: v('energyCur'), energyMax: v('energyMax'),
+        storage: v('storage'), speedCur: v('speedCur'), speedMax: v('speedMax')
+      },
+      skills: readSkills(),
+      crew: readCrew(),
+      tech: readTech(),
+      mods: readMods()
+    };
+  }
+  function applySheet(json){
+    function set(id, val){
+      var el = document.getElementById(id);
+      if(el && val !== undefined) el.value = val;
+    }
+    set('shipName', json.shipName);
+    set('captain', json.captain);
+    set('commissioned', json.commissioned);
+    set('shipClass', json.shipClass);
+    set('dcHex', json.dcHex);
+    var s = json.stats || {};
+    set('hullCur', s.hullCur); set('hullMax', s.hullMax);
+    set('shieldCur', s.shieldCur); set('shieldMax', s.shieldMax);
+    set('energyCur', s.energyCur); set('energyMax', s.energyMax);
+    set('storage', s.storage); set('speedCur', s.speedCur); set('speedMax', s.speedMax);
+    writeSkills(json.skills);
+    writeCrew(json.crew);
+    writeTech(json.tech);
+    writeMods(json.mods);
+  }
+  function exportSheet(){
+    var data = collectSheet();
+    var blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var name = (data.shipName || 'frigate-sheet').replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '') || 'frigate-sheet';
+    a.href = url;
+    a.download = name + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function importSheet(){
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = function(){
+      var file = input.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(e){
+        try{
+          var json = JSON.parse(e.target.result);
+          applySheet(json);
+          alert('Sheet imported successfully.');
+        }catch(err){
+          alert('Import failed: invalid JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+  (function(){
+    setupHandChannel();
+    var cards = document.querySelectorAll('.tech-card');
+    for(var i=0;i<cards.length;i++){
+      setTechDeploy(cards[i].querySelector('.tdepbtn'), cards[i].querySelector('.tdepbtn').getAttribute('data-deploy'));
+      syncTechStateUI(cards[i]);
+      refreshTechSections(cards[i]);
+    }
+    refreshHand();
+    var mods = document.querySelectorAll('.mod-card .mtype-btn');
+    for(var m=0;m<mods.length;m++){
+      setModType(mods[m], mods[m].getAttribute('data-mtype'));
+    }
+    var modShapes = document.querySelectorAll('.mod-card .mshape-btn');
+    for(var ms=0;ms<modShapes.length;ms++){
+      setModuleShape(modShapes[ms], modShapes[ms].getAttribute('data-shape'));
+    }
+    var modCards = document.querySelectorAll('.mod-card');
+    for(var mc=0;mc<modCards.length;mc++){
+      refreshModSections(modCards[mc]);
+    }
+    refreshModSlotControls();
+    wireSkillTooltips();
+    var containers = document.querySelectorAll('.grid, .row2');
+    for(var g=0;g<containers.length;g++){
+      syncGridCollapse(containers[g]);
+    }
+  })();
+</script>
+<div id="skillPopover"></div>
+<div class="preset-menu" id="slotPicker"></div>
+<div class="class-info-modal" id="classInfoModal" onclick="if(event.target===this) closeClassInfo()">
+  <div class="class-info-card">
+    <div class="class-info-head">
+      <div class="class-info-title">Class Info</div>
+      <button type="button" class="class-info-close" onclick="closeClassInfo()">Close</button>
+    </div>
+    <div class="class-info-list" id="classInfoList"></div>
+  </div>
+</div>
+<div class="hand-dock" id="handDock">
+  <div class="hand-bar">
+    <div class="hand-slider" id="handSlider">
+      <div class="hand-slider-track"></div>
+      <div class="hand-slider-thumb" id="handSliderThumb"></div>
+    </div>
+    <button type="button" class="hand-tab" id="handTab" onclick="toggleHand()">
+      <span class="hand-label">Tech Hand</span>
+      <span class="hand-count" id="handCount">0</span>
+      <span class="hand-caret">▴</span>
+    </button>
+    <div class="hand-sort">
+      <label for="handSort">Sort</label>
+      <span class="sort-wrap">
+        <select id="handSort" onchange="onHandSortChange()">
+          <option value="az">Name</option>
+          <option value="trait">Trait</option>
+          <option value="type">Type</option>
+          <option value="energy">Energy</option>
+        </select>
+        <button type="button" class="hand-icon-btn" id="handSortBtn" onclick="openHandSelect('handSort')" title="Sort hand">⇵</button>
+      </span>
+      <div class="slot-menu-wrap">
+        <button type="button" class="hand-filter-btn" id="handFilterBtn" onclick="toggleFilterMenu(event)" title="Filter hand">
+          <span class="fico" aria-hidden="true">ᯤ</span>
+          <span class="flabel">Filter</span>
+          <span class="fcount" id="handFilterCount">0</span>
+        </button>
+        <div class="preset-menu filter-menu" id="handFilterMenu"></div>
+      </div>
+    </div>
+  </div>
+  <div class="hand-view">
+    <div class="hand" id="hand"></div>
+  </div>
+</div>
+<script>
+  buildFilterMenu();
+  wireHandSlider();
+  refreshHand();
+</script>
+</body>
+</html>
