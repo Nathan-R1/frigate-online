@@ -11,23 +11,15 @@
 </head>
 <body>
 <nav class="menu-bar">
-  <div class="menu-brand">Starship Dossier</div>
+  <div class="menu-brand"><input class="name" id="shipName" type="text" placeholder="SHIP NAME" value=""></div>
   <div class="menu-actions">
     <button type="button" class="menu-toggle" onclick="exportSheet()" title="Export sheet as JSON"><span class="menu-ico" aria-hidden="true">⇩</span><span class="menu-label">Export</span></button>
     <button type="button" class="menu-toggle" onclick="importSheet()" title="Import sheet from JSON"><span class="menu-ico" aria-hidden="true">⇧</span><span class="menu-label">Import</span></button>
+    <button type="button" class="menu-toggle" onclick="toggleAllPanels()" title="Collapse or expand all sections"><span class="menu-ico" aria-hidden="true">▾</span><span class="menu-label">Collapse</span></button>
     <button type="button" id="themeToggle" class="menu-toggle" onclick="toggleTheme()" title="Switch to light mode"><span class="menu-ico" aria-hidden="true">☀</span><span class="menu-label">Light Mode</span></button>
   </div>
 </nav>
 <div class="sheet">
-
-  <!-- HEADER -->
-  <div class="topbar">
-    <div>
-      <div class="shiptitle">
-        <input class="name" id="shipName" type="text" placeholder="SHIP NAME" value="">
-      </div>
-    </div>
-  </div>
 
   <!-- ROW 1 -->
   <div class="grid">
@@ -173,7 +165,7 @@
   </div>
 
   <!-- MODULES / DEPLOYABLES -->
-  <div class="panel" style="margin-top:16px;">
+  <div class="panel mod-panel" style="margin-top:16px;">
     <div class="bl"></div><div class="br"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Modules</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg><span class="eb-text"> / Deployables</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg></div>
@@ -229,6 +221,20 @@
     if(!container || !container.classList) return;
     if(!container.classList.contains('grid') && !container.classList.contains('row2')) return;
     container.classList.toggle('has-collapsed', !!container.querySelector('.panel.collapsed'));
+  }
+  function toggleAllPanels(){
+    var panels = document.querySelectorAll('.grid > .panel, .row2 > .panel, .mod-panel');
+    var allCollapsed = true;
+    for(var i=0;i<panels.length;i++){
+      if(!panels[i].classList.contains('collapsed')){ allCollapsed = false; break; }
+    }
+    for(var j=0;j<panels.length;j++){
+      panels[j].classList.toggle('collapsed', !allCollapsed);
+    }
+    var containers = document.querySelectorAll('.grid, .row2');
+    for(var k=0;k<containers.length;k++){
+      syncGridCollapse(containers[k]);
+    }
   }
   function decrementStat(id){
     var el = document.getElementById(id);
