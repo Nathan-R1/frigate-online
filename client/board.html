@@ -883,12 +883,25 @@ sheetToggleBtn.addEventListener('click', toggleSheet);
 
 var statsToggleBtn = document.getElementById('statsToggleBtn');
 var statsBar = document.getElementById('hullStatsBar');
-function toggleStats() {
-  var hidden = statsBar.classList.toggle('hidden-stats');
-  statsToggleBtn.textContent = hidden ? 'Show Stats' : 'Hide Stats';
-  statsToggleBtn.title = hidden ? 'Show the stats bar' : 'Hide the stats bar';
+var STATS_MODES = ['hidden', 'shown', 'detailed'];
+var statsModeIdx = 1;
+function setStatsMode(idx) {
+  statsModeIdx = ((idx % STATS_MODES.length) + STATS_MODES.length) % STATS_MODES.length;
+  var mode = STATS_MODES[statsModeIdx];
+  statsBar.classList.toggle('hidden-stats', mode === 'hidden');
+  statsBar.classList.toggle('detailed-stats', mode === 'detailed');
+  if (statsBar.contentWindow) {
+    statsBar.contentWindow.postMessage({ t: 'detail', on: mode === 'detailed' }, '*');
+  }
+  statsToggleBtn.textContent = mode === 'hidden' ? 'Show Stats'
+                            : mode === 'shown' ? 'Detailed Stats'
+                            : 'Hide Stats';
+  statsToggleBtn.title = mode === 'hidden' ? 'Show the stats bar'
+                        : mode === 'shown' ? 'Show the detailed stats bar'
+                        : 'Hide the stats bar';
   closeSettingsMenu();
 }
+function toggleStats() { setStatsMode(statsModeIdx + 1); }
 statsToggleBtn.addEventListener('click', toggleStats);
 
 var CLASS_PRESETS = {
