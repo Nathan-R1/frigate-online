@@ -236,11 +236,15 @@ body.resizing #playerFrame { pointer-events: none; }
 
 :root {
   --icon-hull: #7fd88a;
-  --icon-shield: #215f8c;
+  --icon-shield: #d75b4e;
   --icon-energy: #764795;
   --icon-amber: #a06a17;
   --icon-cyan: #0e8f83;
   --cyan: #35d0e0;
+  --icon-logistics: #d4a373;
+  --icon-sensor: #e88ab4;
+  --icon-leader: #59b9e8;
+  --icon-card: #9aa7ff;
 }
 .kw-icon {
   width: 15px; height: 15px;
