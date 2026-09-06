@@ -33,6 +33,7 @@
     --icon-computer:#215f8c;
     --icon-handshake:#a06a17;
     --icon-wheel:#9c3f66;
+    --icon-card:#3f53b8;
     --bg-radial: none;
     --bg-grid-color: rgba(20,30,45,0.045);
     --mono: 'JetBrains Mono', monospace;
@@ -168,7 +169,7 @@ min-width:0;
 .stat-strip{
 
     display:grid;
-    grid-template-columns:repeat(5,1fr);
+    grid-template-columns:repeat(7,1fr);
     gap:10px;
     margin-bottom:18px;
     min-width:0;
