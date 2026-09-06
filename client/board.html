@@ -923,6 +923,7 @@ function setStatsMode(idx) {
 }
 function toggleStats() { setStatsMode(statsModeIdx + 1); }
 statsToggleBtn.addEventListener('click', toggleStats);
+setStatsMode(statsModeIdx);
 
 var topbarEl = document.querySelector('.topbar');
 var menuToggleBtn = document.getElementById('menuToggleBtn');

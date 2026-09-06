@@ -65,7 +65,7 @@
         </div>
         <div class="stat speed">
           <svg class="icon dec" onclick="incrementStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="2" maxlength="2"><output id="speedMax" class="derived">5</output></div>
+          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="2" maxlength="2"><output id="speedMax" class="derived">8</output></div>
           <div class="lbl">Speed</div>
         </div>
         <div class="stat">
@@ -75,7 +75,7 @@
         </div>
         <div class="stat">
           <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg>
-          <div class="val"><input id="sensorRangeBase" class="base-edit" value="0" maxlength="2"><output id="sensorRange" class="derived">2</output></div>
+          <div class="val"><input id="sensorRangeBase" class="base-edit" value="0" maxlength="2"><output id="sensorRange" class="derived">4</output></div>
           <div class="lbl">Sensor Range</div>
         </div>
         <div class="stat">
@@ -270,10 +270,10 @@
     'Engineering': 'Engineering is added to Hull HP (min. 0)',
     'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
     'Logistics': 'Logistics is added to Storage (min. 0)',
-    'Navigation': 'Navigation is added to Speed (min. 0)',
+    'Navigation': 'Twice Navigation is added to Speed (min. 0)',
     'Piloting': 'Sometimes you might have to dodge!!!',
     'Science': 'On turn 1 you may play {SCIENCE} extra Technologies (1/2 Science + Science Penalty, rounded down, min 0.)',
-    'Sensors': 'Sensors is added to Sensor Range (min. 0)'
+    'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
   };
   function skillValue(skillName){
     var pts = document.getElementById('skill-' + skillName + '-pts');
@@ -305,10 +305,13 @@
     setOut('hullMax',     baseNum('hullBase') + skillBonus('Engineering'));
     setOut('shieldMax',   baseNum('shieldBase'));
     setOut('energyMax',   baseNum('energyBase'));
-    setOut('speedMax',    baseNum('speedBase') + skillBonus('Navigation'));
+    setOut('speedMax',    baseNum('speedBase') + 2 * skillBonus('Navigation'));
     setOut('storageMax',  baseNum('storageBase') + skillBonus('Logistics'));
-    setOut('storageCur',  Math.max(0, outVal('storageMax') - techStorageSum()));
-    setOut('sensorRange', baseNum('sensorRangeBase') + skillBonus('Sensors'));
+    var storageTotal = outVal('storageMax') - techStorageSum();
+    setOut('storageCur', storageTotal);
+    var scEl = document.getElementById('storageCur');
+    if(scEl) scEl.classList.toggle('neg', storageTotal < 0);
+    setOut('sensorRange', baseNum('sensorRangeBase') + 2 * skillBonus('Sensors'));
     setOut('drawPlayEff', baseNum('drawPlayBase') + Math.floor(skillBonus('Science') / 2));
     setOut('drawDrawEff', baseNum('drawDrawBase') + skillBonus('Cyber'));
   }

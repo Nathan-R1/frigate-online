@@ -335,6 +335,9 @@ display:none;
 .panel.editing .stat-strip .val .derived-of{
 display:none;
   }
+.stat .val output.neg{
+color:var(--red);
+  }
 .stat .lbl{
 
     margin-top:5px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;
