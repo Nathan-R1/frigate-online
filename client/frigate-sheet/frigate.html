@@ -941,7 +941,11 @@
       hull:   { cur: statVal('hullCur'),   max: outVal('hullMax') },
       shield: { cur: statVal('shieldCur'), max: outVal('shieldMax') },
       energy: { cur: statVal('energyCur'), max: outVal('energyMax') },
-      speed:  { cur: statVal('speedCur'),  max: outVal('speedMax') }
+      speed:  { cur: statVal('speedCur'),  max: outVal('speedMax') },
+      storage:{ cur: outVal('storageCur'), max: outVal('storageMax') },
+      sensorRange: outVal('sensorRange'),
+      play:   outVal('drawPlayEff'),
+      draw:   outVal('drawDrawEff')
     }, skills: sk });
   }
   function setTechType(el, key){
