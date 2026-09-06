@@ -59,15 +59,25 @@
           <div class="val"><input id="energyCur" value="6" maxlength="2"><span class="sep">/</span><input id="energyMax" value="6" maxlength="2"></div>
           <div class="lbl">Energy</div>
         </div>
+        <div class="stat speed">
+          <svg class="icon dec" onclick="incrementStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedMax" value="2" maxlength="2"></div>
+          <div class="lbl">Speed</div>
+        </div>
         <div class="stat">
           <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val" style="justify-content:center"><input id="storage" value="0" maxlength="2" style="width:26px"></div>
           <div class="lbl">Storage</div>
         </div>
-        <div class="stat speed">
-          <svg class="icon dec" onclick="incrementStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedMax" value="2" maxlength="2"></div>
-          <div class="lbl">Speed</div>
+        <div class="stat">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg>
+          <div class="val" style="justify-content:center"><input id="sensorRange" value="0" maxlength="2" style="width:26px"></div>
+          <div class="lbl">Sensor Range</div>
+        </div>
+        <div class="stat">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 6h9v14H4V6Z" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 8l5-1.5 3 13-9 2.5" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          <div class="val" style="justify-content:center"><input id="draw" value="4" maxlength="2" style="width:26px"></div>
+          <div class="lbl">Draw</div>
         </div>
       </div>
       </div>
@@ -1565,7 +1575,8 @@
         hullCur: v('hullCur'), hullMax: v('hullMax'),
         shieldCur: v('shieldCur'), shieldMax: v('shieldMax'),
         energyCur: v('energyCur'), energyMax: v('energyMax'),
-        storage: v('storage'), speedCur: v('speedCur'), speedMax: v('speedMax')
+        storage: v('storage'), speedCur: v('speedCur'), speedMax: v('speedMax'),
+        sensorRange: v('sensorRange'), draw: v('draw')
       },
       skills: readSkills(),
       crew: readCrew(),
@@ -1586,6 +1597,7 @@
     set('shieldCur', s.shieldCur); set('shieldMax', s.shieldMax);
     set('energyCur', s.energyCur); set('energyMax', s.energyMax);
     set('storage', s.storage); set('speedCur', s.speedCur); set('speedMax', s.speedMax);
+    set('sensorRange', s.sensorRange); set('draw', s.draw);
     writeSkills(json.skills);
     writeCrew(json.crew);
     writeTech(json.tech);
