@@ -66,7 +66,7 @@
         </div>
         <div class="stat">
           <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-          <div class="val" style="justify-content:center"><input id="storage" value="0" maxlength="2" style="width:26px"></div>
+          <div class="val"><input id="storageCur" value="0" maxlength="2"><span class="sep">/</span><input id="storageMax" value="0" maxlength="2"></div>
           <div class="lbl">Storage</div>
         </div>
         <div class="stat">
@@ -76,8 +76,8 @@
         </div>
         <div class="stat">
           <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 6h9v14H4V6Z" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 8l5-1.5 3 13-9 2.5" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/></svg>
-          <div class="val" style="justify-content:center"><input id="draw" value="4" maxlength="2" style="width:26px"></div>
-          <div class="lbl">Draw</div>
+          <div class="val"><input id="drawPlay" value="4" maxlength="2"><span class="sep of">of</span><input id="drawDraw" value="4" maxlength="2"></div>
+          <div class="lbl">Play/Draw</div>
         </div>
       </div>
       </div>
@@ -1043,7 +1043,10 @@
       bumpStat('shieldCur', s.shield);
       bumpStat('shieldMax', s.shield);
     }
-    if(s.storage) bumpStat('storage', s.storage);
+    if(s.storage){
+      bumpStat('storageCur', s.storage);
+      bumpStat('storageMax', s.storage);
+    }
     if(s.speed){
       bumpStat('speedCur', s.speed);
       bumpStat('speedMax', s.speed);
@@ -1575,8 +1578,8 @@
         hullCur: v('hullCur'), hullMax: v('hullMax'),
         shieldCur: v('shieldCur'), shieldMax: v('shieldMax'),
         energyCur: v('energyCur'), energyMax: v('energyMax'),
-        storage: v('storage'), speedCur: v('speedCur'), speedMax: v('speedMax'),
-        sensorRange: v('sensorRange'), draw: v('draw')
+        storageCur: v('storageCur'), storageMax: v('storageMax'), speedCur: v('speedCur'), speedMax: v('speedMax'),
+        sensorRange: v('sensorRange'), drawPlay: v('drawPlay'), drawDraw: v('drawDraw')
       },
       skills: readSkills(),
       crew: readCrew(),
@@ -1596,8 +1599,8 @@
     set('hullCur', s.hullCur); set('hullMax', s.hullMax);
     set('shieldCur', s.shieldCur); set('shieldMax', s.shieldMax);
     set('energyCur', s.energyCur); set('energyMax', s.energyMax);
-    set('storage', s.storage); set('speedCur', s.speedCur); set('speedMax', s.speedMax);
-    set('sensorRange', s.sensorRange); set('draw', s.draw);
+    set('storageCur', s.storageCur); set('storageMax', s.storageMax); set('speedCur', s.speedCur); set('speedMax', s.speedMax);
+    set('sensorRange', s.sensorRange); set('drawPlay', s.drawPlay); set('drawDraw', s.drawDraw);
     writeSkills(json.skills);
     writeCrew(json.crew);
     writeTech(json.tech);
