@@ -285,6 +285,9 @@ opacity:.65;
 .stat .val .sep{
 color:var(--ink-dim);
   }
+.stat .val .sep.of{
+font-size:8.5px;letter-spacing:.08em;padding-top:2px;
+  }
 .stat .lbl{
 
     margin-top:5px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;
