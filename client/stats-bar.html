@@ -87,6 +87,9 @@
     gap: 0; padding: 0 0 14px;
   }
   .sb-wrap.vertical .sb-skill { gap: 8px; }
+  .sb-wrap.vertical .sb-item,
+  .sb-wrap.vertical .sb-skill { min-height: 0; overflow: hidden; }
+  .sb-wrap.vertical .sb-skills { overflow: hidden; }
 </style>
 </head>
 <body>
@@ -143,7 +146,7 @@
   var skillsListEl = document.getElementById('sbSkillsList');
 
   function updateSkillsVisibility(){
-    skillsEl.classList.toggle('hidden', !(verticalOn || detailOn));
+    skillsEl.classList.toggle('hidden', !detailOn);
   }
   function buildSkills(){
     skillsListEl.innerHTML = '';
