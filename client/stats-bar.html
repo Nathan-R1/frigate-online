@@ -32,6 +32,11 @@
   .sb-item.energy .sb-num { color: var(--icon-energy); }
   .sb-item.speed .sb-num { color: var(--icon-cyan); }
   .sb-item.dc { cursor: default; }
+  .sb-item.storage .sb-num { color: var(--icon-amber); }
+  .sb-item.sensor .sb-num { color: var(--cyan); }
+  .sb-item.playdraw .sb-num { color: var(--icon-card); }
+  .sb-item.playdraw .sb-sep { color: var(--ink-dim); }
+  .sb-item.storage .sb-num.neg { color: var(--red); }
   .sb-item.dc .sb-dc-label {
     font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .18em;
     color: var(--ink-dim);
@@ -51,6 +56,10 @@
     background: #0c1117; border-top: 1px solid #1f2a38;
   }
   .sb-skills.hidden { display: none; }
+  .sb-skill-divider {
+    flex: none; width: 1px; height: 22px;
+    background: #1f2a38; overflow: hidden; white-space: nowrap;
+  }
   .sb-skill { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: default; }
   .sb-skill svg { width: 19px; height: 19px; opacity: .85; }
   .sb-skill-label { display: none; font: 600 11px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-mid); }
@@ -86,6 +95,13 @@
     flex-direction: column; align-items: center; justify-content: space-evenly;
     gap: 0; padding: 0 0 14px;
   }
+  .sb-wrap.vertical .sb-skill-divider {
+    width: auto; height: auto; background: none; overflow: visible;
+    align-self: center; flex: none;
+    font-family: var(--mono); font-weight: 600; font-size: 11px;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--ink-dim);
+    padding: 14px 0 8px;
+  }
   .sb-wrap.vertical .sb-skill { gap: 8px; }
   .sb-wrap.vertical .sb-item,
   .sb-wrap.vertical .sb-skill { min-height: 0; overflow: hidden; }
@@ -120,7 +136,6 @@
     </div>
   </div>
   <div class="sb-skills hidden" id="sbSkills">
-    <div class="sb-sec-title">SKILLS</div>
     <div class="sb-skills-list" id="sbSkillsList"></div>
   </div>
 </div>
@@ -144,12 +159,37 @@
   var sbWrap = document.getElementById('sbWrap');
   var skillsEl = document.getElementById('sbSkills');
   var skillsListEl = document.getElementById('sbSkillsList');
+  var storageItem, storageCurEl, sensorEl, playEl, drawEl;
 
   function updateSkillsVisibility(){
     skillsEl.classList.toggle('hidden', !detailOn);
   }
+  function numStr(v){
+    return (typeof v === 'number' && !isNaN(v)) ? String(v) : '–';
+  }
   function buildSkills(){
     skillsListEl.innerHTML = '';
+    function statWrap(cls, svg, body){
+      var item = document.createElement('div');
+      item.className = 'sb-item ' + cls;
+      var icon = document.createElement('span');
+      icon.innerHTML = svg;
+      item.appendChild(icon);
+      item.insertAdjacentHTML('beforeend', body);
+      skillsListEl.appendChild(item);
+      return item;
+    }
+    storageItem = statWrap('storage', '<svg viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-amber)" stroke-width="1.6" stroke-linejoin="round"/></svg>', '<span class="sb-num sb-cur">–</span>');
+    storageCurEl = storageItem.querySelector('.sb-cur');
+    var sensorItem = statWrap('sensor', '<svg viewBox="0 0 24 24" fill="none"><path d="M4 16c2.2-3 4.9-4.5 8-4.5s5.8 1.5 8 4.5" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 12.5c1.4-1.8 3.1-2.7 5-2.7s3.6.9 5 2.7" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.6" fill="var(--cyan)"/></svg>', '<span class="sb-num sb-range">–</span>');
+    sensorEl = sensorItem.querySelector('.sb-range');
+    var pdItem = statWrap('playdraw', '<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h9v14H4V6Z" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 8l5-1.5 3 13-9 2.5" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/></svg>', '<span class="sb-num sb-play">–</span><span class="sb-sep">of</span><span class="sb-num sb-draw">–</span>');
+    playEl = pdItem.querySelector('.sb-play');
+    drawEl = pdItem.querySelector('.sb-draw');
+    var divider = document.createElement('div');
+    divider.className = 'sb-skill-divider';
+    divider.textContent = 'SKILLS';
+    skillsListEl.appendChild(divider);
     for (var i = 0; i < SKILL_META.length; i++) {
       (function (m) {
         var item = document.createElement('div');
@@ -197,6 +237,15 @@
     set(s.shield, document.querySelector('.sb-item.shield'));
     set(s.energy, document.querySelector('.sb-item.energy'));
     set(s.speed,  document.querySelector('.sb-item.speed'));
+    if(s.storage){
+      var cur = s.storage.cur;
+      if(typeof cur !== 'number' || isNaN(cur)) cur = '–';
+      storageCurEl.textContent = numStr(cur);
+      storageCurEl.classList.toggle('neg', typeof cur === 'number' && cur < 0);
+    }
+    sensorEl.textContent = numStr(s.sensorRange);
+    playEl.textContent = numStr(s.play);
+    drawEl.textContent = numStr(s.draw);
     if (m.skills) { skillValues = m.skills; renderSkills(); }
     var nameEl = document.getElementById('sbName');
     if(m.name && String(m.name).length){
