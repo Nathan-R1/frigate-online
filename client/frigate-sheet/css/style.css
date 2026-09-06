@@ -20,17 +20,22 @@
     --stat-bg:var(--void);
     --crew-bg:var(--void);
     --icon-hull:#7fd88a;
-    --icon-shield:#59b9e8;
+    --icon-shield:#d75b4e;
     --icon-energy:#c98ee8;
     --icon-charged:#e88ab4;
     --icon-amber:#e8a94a;
     --icon-cyan:#4fd8c9;
+    --icon-sensor:#e88ab4;
     --icon-rocket:#7fd88a;
     --icon-skill:#e8a94a;
     --icon-computer:#59b9e8;
     --icon-handshake:#e8a94a;
     --icon-wheel:#e88ab4;
     --icon-card:#9aa7ff;
+    --icon-wrench:#e8a94a;
+    --icon-logistics:#d4a373;
+    --icon-leader:#59b9e8;
+    --icon-diplomacy:#d9a61b;
     --bg-radial:
       radial-gradient(ellipse at 20% -10%, #142032 0%, transparent 55%),
       radial-gradient(ellipse at 100% 110%, #131c2c 0%, transparent 50%);

@@ -23,17 +23,22 @@
     --dc-text:#0e8f83;
     --dc-border:#0e8f83;
     --icon-hull:#2f7a4d;
-    --icon-shield:#215f8c;
+    --icon-shield:#b8382a;
     --icon-energy:#764795;
     --icon-charged:#9c3f66;
     --icon-amber:#a06a17;
     --icon-cyan:#0e8f83;
+    --icon-sensor:#9c3f66;
     --icon-rocket:#2f7a4d;
     --icon-skill:#a06a17;
     --icon-computer:#215f8c;
     --icon-handshake:#a06a17;
     --icon-wheel:#9c3f66;
     --icon-card:#3f53b8;
+    --icon-wrench:#a06a17;
+    --icon-logistics:#8f6b45;
+    --icon-leader:#215f8c;
+    --icon-diplomacy:#8a6d08;
     --bg-radial: none;
     --bg-grid-color: rgba(20,30,45,0.045);
     --mono: 'JetBrains Mono', monospace;
@@ -124,6 +129,12 @@ border-bottom-color:var(--cyan);
   }
 .dc-hex:focus{
 outline:none;
+  }
+.dc-hex[readonly]{
+opacity:.55;cursor:default;
+  }
+.panel.editing .dc-hex[readonly]{
+opacity:.9;cursor:pointer;
   }
 /* ===== grid layout ===== */
   .grid{
