@@ -400,4 +400,53 @@ border-color:var(--cyan);color:var(--cyan);
   }
 .menu-actions{
 display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+
+  }
+.hud-adj-wrap{
+position:fixed;inset:0;z-index:1000;
+display:flex;align-items:center;justify-content:center;
+background:rgba(0,0,0,.45);
+  }
+.hud-adj-wrap.hidden{
+display:none;
+  }
+.hud-adj-card{
+background:#0e141c;border:1px solid #22303f;border-radius:14px;
+padding:22px 30px;text-align:center;
+box-shadow:0 14px 44px rgba(0,0,0,.65);
+min-width:220px;
+  }
+.hud-adj-title{
+font-family:var(--mono);font-size:12px;letter-spacing:.22em;
+color:var(--ink-mid);text-transform:uppercase;
+  }
+.hud-adj-val{
+font-family:var(--mono);font-weight:700;font-size:34px;line-height:1;
+color:var(--ink);margin:10px 0 2px;
+  }
+.hud-adj-delta{
+font-family:var(--mono);font-size:12px;color:var(--cyan);
+min-height:14px;margin-bottom:12px;
+  }
+.hud-adj-row{
+display:flex;gap:16px;justify-content:center;
+  }
+.hud-adj-btn{
+width:68px;height:68px;border-radius:50%;
+border:1px solid #22303f;background:#10161f;
+color:var(--ink);font-size:32px;line-height:1;cursor:pointer;
+touch-action:manipulation;
+  }
+.hud-adj-btn:hover{
+border-color:var(--cyan);color:var(--cyan);
+  }
+.hud-adj-ok{
+margin-top:18px;width:100%;padding:10px 0;border-radius:8px;
+border:1px solid #22303f;background:#0a0f16;
+color:var(--ink);font-family:var(--mono);font-size:12px;
+letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
+touch-action:manipulation;
+  }
+.hud-adj-ok:hover{
+border-color:var(--cyan);color:var(--cyan);
   }

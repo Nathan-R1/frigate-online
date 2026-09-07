@@ -130,6 +130,19 @@
   </div>
 </div>
 
+<div class="hud-adj-wrap hidden" id="boardHud">
+  <div class="hud-adj-card">
+    <div class="hud-adj-title" id="boardHudTitle"></div>
+    <div class="hud-adj-val" id="boardHudVal"></div>
+    <div class="hud-adj-delta" id="boardHudDelta"></div>
+    <div class="hud-adj-row">
+      <button type="button" class="hud-adj-btn hud-adj-minus" id="boardHudMinus" title="Decrease">−</button>
+      <button type="button" class="hud-adj-btn hud-adj-plus" id="boardHudPlus" title="Increase">+</button>
+    </div>
+    <button type="button" class="hud-adj-ok" id="boardHudOk">OK</button>
+  </div>
+</div>
+
 <script>
 (function () {
 'use strict';
@@ -1149,6 +1162,60 @@ window.addEventListener('message', function (e) {
   handY = r.top + (Number(m.y) || 0);
   if (!handRaf) handRaf = requestAnimationFrame(handParentMirror);
 });
+
+/* ==== floating +/- HUD, hosted here so it stays above every iframe ==== */
+var boardHud = document.getElementById('boardHud');
+var boardHudTitle = document.getElementById('boardHudTitle');
+var boardHudVal = document.getElementById('boardHudVal');
+var boardHudDelta = document.getElementById('boardHudDelta');
+var hudState = null;
+function hudClose() {
+  if (boardHud) boardHud.classList.add('hidden');
+  hudState = null;
+}
+function hudRender() {
+  if (!hudState || !boardHudVal) return;
+  boardHudTitle.textContent = hudState.title;
+  boardHudVal.textContent = String(hudState.val);
+  boardHudDelta.textContent = hudState.val === hudState.start ? '' : (hudState.val > hudState.start ? '+' : '') + (hudState.val - hudState.start);
+}
+function hudNudge(d) {
+  if (!hudState) return;
+  hudState.val = Math.max(0, hudState.val + d);
+  hudRender();
+}
+function hudCommit() {
+  if (!hudState) return;
+  var s = hudState;
+  var delta = s.val - s.start;
+  hudClose();
+  if (delta !== 0) {
+    try { s.source.postMessage({ t: 'hud', a: 'commit', id: s.id, delta: delta }, '*'); } catch (err) {}
+  }
+}
+window.addEventListener('message', function (e) {
+  var m = e.data;
+  if (!m || typeof m !== 'object' || m.t !== 'hud') return;
+  if (m.a === 'open') {
+    hudClose();
+    hudState = {
+      source: e.source,
+      id: m.id,
+      title: m.title || '',
+      start: Math.max(0, Math.floor(Number(m.start) || 0)),
+      val: Math.max(0, Math.floor(Number(m.start) || 0))
+    };
+    hudRender();
+    boardHud.classList.remove('hidden');
+  } else if (m.a === 'cancel-any') {
+    hudClose();
+  }
+});
+document.getElementById('boardHudPlus').addEventListener('click', function () { hudNudge(1); });
+document.getElementById('boardHudMinus').addEventListener('click', function () { hudNudge(-1); });
+document.getElementById('boardHudOk').addEventListener('click', hudCommit);
+boardHud.addEventListener('click', function (e) { if (e.target === boardHud) hudClose(); });
+window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && hudState) hudClose(); });
 
 /* Click-through: while the hand is expanded, the iframe only captures input
    while the cursor is over a card/bar/slider. Entering from the board, mirror

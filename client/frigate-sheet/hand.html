@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/hand.css">
+<script src="hud-adjuster.js"></script>
 </head>
 <body>
 <div class="hand-dock" id="handDock">
@@ -55,6 +56,7 @@
 <script>
 (function(){
   'use strict';
+  function isSmallScreen(){ return window.matchMedia('(max-width: 640px)').matches; }
   var TECH_TYPES = [
     {key:'offense', icon:'⚔', label:'Offense'},
     {key:'defense', icon:'🛡', label:'Defense'},
@@ -125,6 +127,16 @@
       charges.addEventListener('click', function(e){
         e.preventDefault();
         e.stopPropagation();
+        if(isSmallScreen() && typeof HudAdjuster !== 'undefined'){
+          var cur = parseInt(charges.textContent, 10);
+          if(isNaN(cur)) cur = 0;
+          HudAdjuster.open({
+            title: 'Charges',
+            start: cur,
+            commit: function(delta){ if(el._onChargeDelta) el._onChargeDelta(delta); }
+          });
+          return;
+        }
         if(el._onChargeDelta) el._onChargeDelta(1);
       });
       charges.addEventListener('contextmenu', function(e){
