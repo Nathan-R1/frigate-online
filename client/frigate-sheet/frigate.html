@@ -49,22 +49,22 @@
       <div class="class-body">
       <div class="stat-strip">
         <div class="stat hull">
-          <svg class="icon dec" onclick="incrementStat(event,'hullCur')" oncontextmenu="decrementStat(event,'hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="tapStat(event,'hullCur')" oncontextmenu="decrementStat(event,'hullCur')" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="hullCur" value="5" maxlength="2"><span class="sep">/</span><input id="hullBase" class="base-edit" value="5" maxlength="2"><output id="hullMax" class="derived">8</output></div>
           <div class="lbl">Hull HP</div>
         </div>
         <div class="stat shield">
-          <svg class="icon dec" onclick="incrementStat(event,'shieldCur')" oncontextmenu="decrementStat(event,'shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="tapStat(event,'shieldCur')" oncontextmenu="decrementStat(event,'shieldCur')" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="shieldCur" value="6" maxlength="2"><span class="sep">/</span><input id="shieldBase" class="base-edit" value="6" maxlength="2"><output id="shieldMax" class="derived">6</output></div>
           <div class="lbl">Base Shield</div>
         </div>
         <div class="stat energy">
-          <svg class="icon dec" onclick="incrementStat(event,'energyCur')" oncontextmenu="decrementStat(event,'energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="tapStat(event,'energyCur')" oncontextmenu="decrementStat(event,'energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
           <div class="val"><input id="energyCur" value="6" maxlength="2"><span class="sep">/</span><input id="energyBase" class="base-edit" value="6" maxlength="2"><output id="energyMax" class="derived">6</output></div>
           <div class="lbl">Energy</div>
         </div>
         <div class="stat speed">
-          <svg class="icon dec" onclick="incrementStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="icon dec" onclick="tapStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div class="val"><input id="speedCur" value="4" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="4" maxlength="2"><output id="speedMax" class="derived">10</output></div>
           <div class="lbl">Speed</div>
         </div>
@@ -223,6 +223,7 @@
 <script src="presets/tech-presets.js"></script>
 <script src="presets/crew-presets.js"></script>
 <script src="presets/mod-presets.js"></script>
+<script src="hud-adjuster.js"></script>
 <script>
   function togglePanelCollapse(btn){
     var panel = btn.closest('.panel');
@@ -264,6 +265,44 @@
     var v = parseInt(el.value, 10);
     if(isNaN(v)) v = 0;
     el.value = v + 1;
+  }
+  function isSmallScreen(){ return window.matchMedia('(max-width: 640px)').matches; }
+  function tapStat(e, id){
+    if(isSmallScreen() && typeof HudAdjuster !== 'undefined'){
+      if(e && e.preventDefault) e.preventDefault();
+      var el = document.getElementById(id);
+      if(!el) return;
+      var cur = parseInt(el.value, 10);
+      if(isNaN(cur)) cur = 0;
+      HudAdjuster.open({
+        title: id.replace(/Cur$/, '').toUpperCase(),
+        start: cur,
+        commit: function(delta){
+          for(var i = 0; i < Math.abs(delta); i++){
+            if(delta > 0) incrementStat(null, id);
+            else decrementStat(null, id);
+          }
+        }
+      });
+      return;
+    }
+    incrementStat(e, id);
+  }
+  function openChipHud(ev, chip, inp, cardSel, refreshFn){
+    if(ev && ev.preventDefault) ev.preventDefault();
+    var cur = parseInt(inp.value, 10);
+    if(isNaN(cur)) cur = 0;
+    HudAdjuster.open({
+      title: (chip.getAttribute('title') || 'Value').toUpperCase(),
+      start: cur,
+      commit: function(delta){
+        var v = parseInt(inp.value, 10);
+        if(isNaN(v)) v = 0;
+        inp.value = Math.max(0, v + delta);
+        var card = chip.closest(cardSel);
+        if(card && refreshFn) refreshFn(card);
+      }
+    });
   }
   var SKILL_DESCRIPTIONS = {
     'Cyber': 'Cyber is added to Draw (min. 0)',
@@ -1229,8 +1268,13 @@
     var ch = e.target.closest('.tcharges');
     if(hl || ch){
       if(editing) return;
-      var inp = (hl ? hl : ch).querySelector('input');
+      var chip = hl || ch;
+      var inp = chip.querySelector('input');
       if(!inp) return;
+      if(isSmallScreen() && typeof HudAdjuster !== 'undefined'){
+        openChipHud(e, chip, inp, '.tech-card', refreshTechSections);
+        return;
+      }
       var v = parseInt(inp.value, 10);
       if(isNaN(v)) v = 0;
       inp.value = v + 1;
@@ -1522,6 +1566,10 @@
     if(bump && !e.target.closest('input')){
       var inp = bump.querySelector('input');
       if(inp){
+        if(isSmallScreen() && typeof HudAdjuster !== 'undefined'){
+          openChipHud(e, bump, inp, '.mod-card', refreshModSections);
+          return;
+        }
         var bv = parseInt(inp.value, 10);
         if(isNaN(bv)) bv = 0;
         inp.value = bv + 1;

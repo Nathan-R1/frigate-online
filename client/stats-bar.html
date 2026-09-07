@@ -298,6 +298,7 @@
     if(m.dc !== undefined && String(m.dc) !== '') dcEl.textContent = m.dc;
   }
   var KEYS = ['hull', 'shield', 'energy', 'speed'];
+  function isSmallScreen(){ return window.matchMedia('(max-width: 640px)').matches; }
   function adjust(key, delta){
     if(ch) ch.postMessage({ t: 'adjust', key: key, delta: delta });
   }
@@ -307,13 +308,24 @@
       if (!item) return;
       item.addEventListener('click', function (e) {
         e.preventDefault();
+        if (isSmallScreen()) {
+          var numEl = item.querySelector('.sb-cur');
+          var cur = parseInt(numEl ? numEl.textContent : '', 10);
+          if (isNaN(cur)) cur = 0;
+          HudAdjuster.open({
+            title: key,
+            start: cur,
+            commit: function (delta) { adjust(key, delta); }
+          });
+          return;
+        }
         adjust(key, +1);
       });
       item.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         adjust(key, -1);
       });
-      item.title = 'Left-click +1 — right-click −1';
+      item.title = isSmallScreen() ? 'Tap to adjust' : 'Left-click +1 — right-click −1';
     })(KEYS[i]);
   }
   window.addEventListener('message', function (e) {
@@ -340,5 +352,6 @@
   setInterval(function(){ ch.postMessage({ t: 'hello', from: 'stats' }); }, 2000);
 })();
 </script>
+<script src="frigate-sheet/hud-adjuster.js"></script>
 </body>
 </html>
