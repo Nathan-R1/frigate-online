@@ -80,7 +80,11 @@
   var HAND_DATA = [];
   var HAND_CHANNEL = null;
   function nextHandCardState(cur){
-    return (cur === 'played') ? 'exhausted' : 'played';
+    if(cur === 'deck') return 'hand';
+    if(cur === 'hand') return 'played';
+    if(cur === 'played') return 'exhausted';
+    if(cur === 'exhausted') return 'played';
+    return cur;
   }
   function handCardHtml(d, state){
     var typeIcon = techTypeMeta(d.typeKey).icon;
@@ -148,10 +152,11 @@
   var FILTER_CATS = [
     {key:'hand', label:'Hand', options:[
       {value:'', label:'N/A'},
+      {value:'deck', label:'In Deck'},
       {value:'hand', label:'In hand'},
-      {value:'nothand', label:'Not in hand'},
-      {value:'played', label:'Played'},
-      {value:'exhausted', label:'Exhausted'},
+      {value:'playedexhausted', label:'Played+Exhausted'},
+      {value:'notindeckdiscard', label:'Not In Deck/Discard'},
+      {value:'discarded', label:'In Discard'},
       {value:'trashed', label:'Trash'}
     ]},
     {key:'type', label:'Type', options:[
@@ -314,11 +319,15 @@
   function handCardPasses(d){
     if(HAND_FILTERS.hand){
       var st = d.state;
-      if(HAND_FILTERS.hand === 'nothand'){
-        if(st === 'hand') return false;
-      } else if(st !== HAND_FILTERS.hand){
-        return false;
-      }
+      var sf = HAND_FILTERS.hand;
+      var ok = true;
+      if(sf === 'deck'){ ok = (st === 'deck'); }
+      else if(sf === 'hand'){ ok = (st === 'hand'); }
+      else if(sf === 'playedexhausted'){ ok = (st === 'played' || st === 'exhausted'); }
+      else if(sf === 'notindeckdiscard'){ ok = (st !== 'deck' && st !== 'discarded'); }
+      else if(sf === 'discarded'){ ok = (st === 'discarded'); }
+      else if(sf === 'trashed'){ ok = (st === 'trashed'); }
+      if(!ok) return false;
     }
     if(HAND_FILTERS.type){
       if(d.typeKey !== HAND_FILTERS.type) return false;

@@ -148,8 +148,8 @@
         </div>
       </div>
       <div class="tech-grid" id="techGrid" style="margin-top:12px;">
-        <div class="tech-card" data-state="hand">
-          <div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="hand" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>
+        <div class="tech-card" data-state="deck">
+          <div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="deck" onclick="toggleTechState(this)" title="Cycle state: deck / hand / played / exhausted / trash / discard">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>
           <div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>
           <div class="tsecs">
             <div class="tsec onbuild hid">
@@ -617,7 +617,7 @@
     var card = document.createElement('div');
     card.className = 'tech-card';
     card.innerHTML =
-      '<div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="hand" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>' +
+      '<div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="deck" onclick="toggleTechState(this)" title="Cycle state: deck / hand / played / exhausted / trash / discard">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>' +
       '<div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>' +
       '<div class="tsecs">' +
         '<div class="tsec onbuild hid"><div class="tsec-head"><span>On Play</span><span class="tdiamond" title="On Play energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onbuild" maxlength="2"></span></div><textarea placeholder="On Play..."></textarea></div>' +
@@ -633,7 +633,7 @@
       '</div>';
     grid.appendChild(card);
     refreshTechSections(card);
-    setTechState(card, 'hand');
+    setTechState(card, 'deck');
     refreshTechSlotControls();
     handBroadcast();
   }
@@ -807,27 +807,27 @@
   function escapeHtml(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-  var TECH_STATE_ORDER = ['hand','played','exhausted','trashed'];
+  var TECH_STATE_ORDER = ['deck','hand','played','exhausted','trashed','discarded'];
   function isTechState(s){ return TECH_STATE_ORDER.indexOf(s) !== -1; }
   function techState(card){
-    var s = card ? (card.getAttribute('data-state') || 'played') : 'played';
-    if(!isTechState(s)) s = 'played';
+    var s = card ? (card.getAttribute('data-state') || 'deck') : 'deck';
+    if(!isTechState(s)) s = 'deck';
     return s;
   }
   function setTechState(card, state){
     if(!card) return;
-    if(!isTechState(state)) state = 'played';
+    if(!isTechState(state)) state = 'deck';
     card.setAttribute('data-state', state);
     syncTechStateUI(card);
   }
   function syncTechStateUI(card){
     if(!card) return;
-    card.classList.remove('state-hand','state-played','state-exhausted','state-trashed');
+    card.classList.remove('state-deck','state-hand','state-played','state-exhausted','state-trashed','state-discarded');
     card.classList.add('state-' + techState(card));
     var btn = card.querySelector('.tbuilt-btn');
     if(btn){
       btn.setAttribute('data-state', techState(card));
-      btn.textContent = (techState(card) === 'hand') ? '🂱' : '⇅';
+      btn.textContent = (techState(card) === 'deck' || techState(card) === 'hand') ? '🂱' : '⇅';
     }
   }
   function toggleTechState(btn){
@@ -1672,17 +1672,17 @@
       card.querySelector('.tcharges-input').value = item.charges || '';
       setTechType(card.querySelector('.tticker'), item.techType);
       setTechDeploy(card.querySelector('.tdepbtn'), item.deploy);
-      var state = 'played';
+      var state = 'deck';
       if(item.state !== undefined && item.state !== null && item.state !== ''){
         state = item.state;
       } else if(item.exhaust === true){
         state = 'exhausted';
       } else if(item.built === false){
-        state = 'hand';
+        state = 'deck';
       } else {
-        state = 'played';
+        state = 'deck';
       }
-    if(!isTechState(state)) state = 'played';
+    if(!isTechState(state)) state = 'deck';
       setTechState(card, state);
       refreshTechSections(card);
     }

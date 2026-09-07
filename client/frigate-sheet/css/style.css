@@ -325,6 +325,18 @@ opacity:.55;
     opacity:.85;
   
   }
+.tech-card.state-deck{
+opacity:.55;
+  }
+.tech-card.state-discarded{
+
+    background:
+      linear-gradient(180deg, rgba(215,91,78,.18) 0%, rgba(215,91,78,.08) 100%),
+      var(--crew-bg);
+    border-color:var(--red-dim);
+    opacity:.9;
+  
+  }
 .tdepbtn{
 
     flex:none;cursor:pointer;font-size:14px;line-height:1;transition:opacity .15s;
@@ -352,6 +364,12 @@ color:var(--amber);border-color:var(--amber);
   }
 .tech-card.state-trashed .tbuilt-btn{
 color:var(--brown);border-color:var(--brown);
+  }
+.tech-card.state-deck .tbuilt-btn{
+color:var(--ink-dim);border-color:var(--line-bright);
+  }
+.tech-card.state-discarded .tbuilt-btn{
+color:var(--red);border-color:var(--red-dim);
   }
 .menu-bar{
 

@@ -739,6 +739,12 @@ display:inline-flex;
 .tech-card.state-hand{
 opacity:.6;
   }
+.tech-card.state-deck{
+opacity:.5;
+  }
+.tech-card.state-discarded{
+opacity:.9;
+  }
 .tech-card.editing .tsec.hid,.mod-card.editing .msec.hid{
 display:flex;
   }
@@ -923,6 +929,12 @@ opacity:.55;
   }
 .tech-card.state-hand .tbuilt-btn{
 color:var(--cyan);border-color:var(--cyan-dim);
+  }
+.tech-card.state-deck .tbuilt-btn{
+color:var(--ink-dim);border-color:var(--line-bright);
+  }
+.tech-card.state-discarded .tbuilt-btn{
+color:var(--red);border-color:var(--red-dim);
   }
 @media (max-width:640px){
     .menu-bar{border-left:none;border-right:none;border-top:none;margin-bottom:12px;padding:6px 10px;}
