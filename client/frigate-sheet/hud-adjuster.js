@@ -93,6 +93,7 @@
 
   function framedOpen(opts) {
     var id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    for (var k in pending) delete pending[k];   // an abandoned open never resolves; drop it
     pending[id] = opts || {};
     try {
       window.parent.postMessage({

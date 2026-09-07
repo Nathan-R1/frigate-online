@@ -313,7 +313,7 @@
           var cur = parseInt(numEl ? numEl.textContent : '', 10);
           if (isNaN(cur)) cur = 0;
           HudAdjuster.open({
-            title: key,
+            title: key.toUpperCase(),
             start: cur,
             commit: function (delta) { adjust(key, delta); }
           });
