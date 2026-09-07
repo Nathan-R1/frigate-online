@@ -274,3 +274,17 @@ body.resizing #playerFrame { pointer-events: none; }
   font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .04em;
   color: #dfe6ee;
 }
+
+/* ===== small screens ===== */
+@media (max-width: 880px) {
+  .topbar { flex-wrap: nowrap; gap: 10px; padding: 8px 12px; }
+  .game-title { font-size: 13px; letter-spacing: 1px; }
+  .control label { display: none; }
+  #saveBtn, #refreshBtn { font-size: 0; letter-spacing: 0; padding: 6px 11px; }
+  #saveBtn::before { content: '💾'; font-size: 16px; }
+  #refreshBtn::before { content: '⟳'; font-size: 16px; }
+  #badge { font-size: 0; letter-spacing: 0; padding: 4px 7px; }
+  #badge.on::after { content: '✅'; font-size: 15px; line-height: 1; }
+  #badge.off::after { content: '⚠️'; font-size: 14px; line-height: 1; }
+  #badge.pending::after { content: attr(data-count) ' ✴️'; font-size: 13px; line-height: 1; }
+}
