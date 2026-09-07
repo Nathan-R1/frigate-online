@@ -523,9 +523,31 @@
       menu.appendChild(item);
     });
   }
+  function positionPresetMenu(menu, trigger){
+    if(!menu || !trigger) return;
+    menu.classList.add('open');
+    menu.style.position = 'fixed';
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
+    var r = trigger.getBoundingClientRect();
+    var mw = menu.offsetWidth;
+    var mh = menu.offsetHeight;
+    var pad = 8;
+    var left = r.right - mw;
+    left = Math.max(pad, Math.min(left, window.innerWidth - pad - mw));
+    var top = r.bottom + pad;
+    top = Math.max(pad, Math.min(top, window.innerHeight - pad - mh));
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
   function togglePresetMenu(e){
     e.stopPropagation();
-    document.getElementById('presetMenu').classList.toggle('open');
+    var menu = document.getElementById('presetMenu');
+    if(menu.classList.contains('open')){
+      closePresetMenu();
+    } else {
+      positionPresetMenu(menu, e.currentTarget);
+    }
   }
   function closePresetMenu(){
     document.getElementById('presetMenu').classList.remove('open');
@@ -750,7 +772,12 @@
   }
   function toggleTechPresetMenu(e){
     e.stopPropagation();
-    document.getElementById('techPresetMenu').classList.toggle('open');
+    var menu = document.getElementById('techPresetMenu');
+    if(menu.classList.contains('open')){
+      closeTechPresetMenu();
+    } else {
+      positionPresetMenu(menu, e.currentTarget);
+    }
   }
   function closeTechPresetMenu(){
     document.getElementById('techPresetMenu').classList.remove('open');
@@ -1414,7 +1441,12 @@
   }
   function toggleModPresetMenu(e){
     e.stopPropagation();
-    document.getElementById('modPresetMenu').classList.toggle('open');
+    var menu = document.getElementById('modPresetMenu');
+    if(menu.classList.contains('open')){
+      closeModPresetMenu();
+    } else {
+      positionPresetMenu(menu, e.currentTarget);
+    }
   }
   function closeModPresetMenu(){
     document.getElementById('modPresetMenu').classList.remove('open');
