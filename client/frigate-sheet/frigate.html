@@ -148,8 +148,8 @@
         </div>
       </div>
       <div class="tech-grid" id="techGrid" style="margin-top:12px;">
-        <div class="tech-card" data-state="played">
-          <div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="played" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">⇅</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>
+        <div class="tech-card" data-state="hand">
+          <div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="hand" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>
           <div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>
           <div class="tsecs">
             <div class="tsec onbuild hid">
@@ -269,10 +269,10 @@
     'Cyber': 'Cyber is added to Draw (min. 0)',
     'Engineering': 'Engineering is added to Hull HP (min. 0)',
     'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
-    'Logistics': 'Logistics is added to Storage (min. 0)',
+    'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
     'Navigation': 'Twice Navigation is added to Speed (min. 0)',
     'Piloting': 'Sometimes you might have to dodge!!!',
-    'Science': 'On turn 1 you may play {SCIENCE} extra Technologies (1/2 Science + Science Penalty, rounded down, min 0.)',
+    'Science': 'Select {SCIENCE} cards as Starter cards. They are played before combat begins.',
     'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
   };
   function skillValue(skillName){
@@ -285,7 +285,7 @@
   }
   function skillDescription(skillName){
     var desc = SKILL_DESCRIPTIONS[skillName] || '';
-    desc = desc.replace(/\{SCIENCE\}/g, Math.max(0, Math.floor(skillValue('Science') / 2)));
+    desc = desc.replace(/\{SCIENCE\}/g, Math.max(0, skillValue('Science')));
     desc = desc.replace(/\{SENSORS\}/g, Math.max(0, skillValue('Sensors') * 2));
     return desc;
   }
@@ -595,7 +595,7 @@
     var card = document.createElement('div');
     card.className = 'tech-card';
     card.innerHTML =
-      '<div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="played" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">⇅</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>' +
+      '<div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="hand" onclick="toggleTechState(this)" title="Cycle state: hand / played / exhausted / trash">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>' +
       '<div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>' +
       '<div class="tsecs">' +
         '<div class="tsec onbuild hid"><div class="tsec-head"><span>On Play</span><span class="tdiamond" title="On Play energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onbuild" maxlength="2"></span></div><textarea placeholder="On Play..."></textarea></div>' +
@@ -611,7 +611,7 @@
       '</div>';
     grid.appendChild(card);
     refreshTechSections(card);
-    syncTechStateUI(card);
+    setTechState(card, 'hand');
     refreshTechSlotControls();
     handBroadcast();
   }
