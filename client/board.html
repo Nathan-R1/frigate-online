@@ -35,6 +35,15 @@
           <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
         </div>
       </div>
+      <div class="settings-submenu-wrap">
+        <button type="button" class="settings-item game-btn" id="gameBtn" title="Game actions">Game ▸</button>
+        <div class="settings-submenu" id="gameMenu">
+          <button type="button" class="settings-item" id="gameSaveBtn" title="Send all your pending changes to the server in one request">💾 Save</button>
+          <button type="button" class="settings-item" id="gameRefreshBtn" title="Pull the latest board state from the server">⟳ Refresh</button>
+          <button type="button" class="settings-item" id="gameColorBtn" title="Choose your colour">🎨 Colour</button>
+          <div class="settings-swatches hidden" id="gameSwatches"></div>
+        </div>
+      </div>
       <button type="button" class="settings-item" id="classInfoBtn" title="Show the class details">Class Info</button>
     </div>
   </div>
@@ -836,6 +845,23 @@ function toggleSwMenu() {
   else m.classList.add('hidden');
 }
 
+function setSwatchUI(c) {
+  actorColor = c;
+  localStorage.setItem('frigateColor', c);
+  var sels = document.querySelectorAll('.swatches');
+  var s, k;
+  for (s = 0; s < sels.length; s++) {
+    var trig = sels[s].querySelector('.sw-trigger');
+    if (trig) trig.style.background = PALETTE[c];
+    var menu = sels[s].querySelector('.sw-menu');
+    if (menu) {
+      var all = menu.querySelectorAll('.sw');
+      for (k = 0; k < all.length; k++) all[k].className = 'sw' + (all[k].getAttribute('data-c') === c ? ' on' : '');
+    }
+  }
+  closeSwMenu();
+}
+
 function buildSwatches() {
   if (PALETTE[actorColor] === undefined) actorColor = 'green';
   swatchesEl.innerHTML = '';
@@ -852,17 +878,8 @@ function buildSwatches() {
       b.style.background = PALETTE[c];
       b.title = c;
       if (c === actorColor) b.className = 'sw on';
-      b.addEventListener('click', function () {
-        actorColor = c;
-        localStorage.setItem('frigateColor', c);
-        trigger.style.background = PALETTE[c];
-        var all = menu.querySelectorAll('.sw');
-        var k;
-        for (k = 0; k < all.length; k++) all[k].className = 'sw';
-        b.className = 'sw on';
-        closeSwMenu();
-      });
       b.setAttribute('data-c', c);
+      b.addEventListener('click', function () { setSwatchUI(c); });
       menu.appendChild(b);
     })(COLOR_ORDER[i]);
   }
@@ -937,6 +954,44 @@ function toggleMenu() {
   syncVerticalRect();
 }
 menuToggleBtn.addEventListener('click', toggleMenu);
+
+var gameBtn = document.getElementById('gameBtn');
+var gameMenu = document.getElementById('gameMenu');
+gameBtn.addEventListener('click', function (e) {
+  e.stopPropagation();
+  gameMenu.classList.toggle('open');
+});
+
+document.getElementById('gameSaveBtn').addEventListener('click', function () {
+  closeSettingsMenu();
+  saveChanges();
+});
+document.getElementById('gameRefreshBtn').addEventListener('click', function () {
+  closeSettingsMenu();
+  refresh();
+});
+var gameColorBtn = document.getElementById('gameColorBtn');
+var gameSwatches = document.getElementById('gameSwatches');
+gameColorBtn.addEventListener('click', function (e) {
+  e.stopPropagation();
+  gameSwatches.classList.toggle('hidden');
+});
+function buildGameSwatches() {
+  if (!gameSwatches) return;
+  gameSwatches.innerHTML = '';
+  for (var i = 0; i < COLOR_ORDER.length; i++) {
+    (function (c) {
+      var b = el('button', 'sw');
+      b.type = 'button';
+      b.style.background = PALETTE[c];
+      b.title = c;
+      if (c === actorColor) b.className = 'sw on';
+      b.setAttribute('data-c', c);
+      b.addEventListener('click', function () { setSwatchUI(c); });
+      gameSwatches.appendChild(b);
+    })(COLOR_ORDER[i]);
+  }
+}
 
 var viewBtn = document.getElementById('viewBtn');
 var viewMenu = document.getElementById('viewMenu');
@@ -1170,7 +1225,13 @@ window.addEventListener('keydown', function (e) {
 
 /* ===== init ===== */
 (function init() {
+  if (window.matchMedia('(max-width: 880px)').matches) {
+    topbarEl.classList.add('hidden-menu');
+    menuToggleBtn.textContent = 'Show Menu';
+    menuToggleBtn.title = 'Show the top menu bar';
+  }
   buildSwatches();
+  buildGameSwatches();
   renderGrid();
   applyView();
   refreshCatalog();
