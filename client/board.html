@@ -501,7 +501,7 @@ function pinchBegin(e) {
 }
 function touchLatch() {
   touchActive = true;
-  setTimeout(function () { touchActive = false; }, 0);
+  setTimeout(function () { touchActive = false; }, 40);
 }
 boardEl.addEventListener('touchstart', function (e) {
   if (e.touches.length >= 2) {
@@ -545,6 +545,7 @@ boardEl.addEventListener('touchmove', function (e) {
   }
 }, { passive: false });
 boardEl.addEventListener('touchend', function (e) {
+  drag = null;
   if (pinch) {
     if (e.touches.length === 1) {
       var t = e.touches[0];
@@ -565,6 +566,7 @@ boardEl.addEventListener('touchend', function (e) {
   boardEl.className = '';
 }, { passive: false });
 boardEl.addEventListener('touchcancel', function () {
+  drag = null;
   pinch = null;
   touchPan = null;
   boardEl.className = '';
