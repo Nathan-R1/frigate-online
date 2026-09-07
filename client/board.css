@@ -216,10 +216,10 @@ body.resizing #playerFrame { pointer-events: none; }
   border-left: 1px solid #22303f;
 }
 .settings-submenu.open { display: block; }
-.settings-submenu-wrap:hover .settings-submenu,
-.settings-submenu-wrap:focus-within .settings-submenu { display: block; }
 .settings-submenu .settings-item { padding: 6px 10px; font-size: 12.5px; }
 .settings-submenu .settings-item:hover { background: #0d141c; color: #35d0e0; }
+.settings-swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 6px; }
+.settings-swatches.hidden { display: none; }
 .settings-grid {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 8px 10px;
