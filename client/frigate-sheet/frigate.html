@@ -890,6 +890,7 @@
       if(m.t === 'hello'){ handBroadcast(); return; }
       if(m.t === 'state'){ handleHandState(m.idx, m.state); return; }
       if(m.t === 'charge'){ handleHandCharge(m.idx, m.delta); return; }
+      if(m.t === 'newturn'){ handleNewTurn(); return; }
     };
   }
   function handBroadcast(){
@@ -927,6 +928,37 @@
     if(isNaN(cur)) cur = 0;
     inp.value = Math.max(0, cur + (parseInt(delta, 10) || 0));
     refreshTechSections(card);
+    handBroadcast();
+  }
+  function handleNewTurn(){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    var cards = [];
+    for(var i=0;i<grid.children.length;i++){ cards.push(grid.children[i]); }
+    for(i=0;i<cards.length;i++){
+      if(techState(cards[i]) === 'hand') setTechState(cards[i], 'discarded');
+    }
+    for(i=0;i<cards.length;i++){
+      if(techState(cards[i]) === 'exhausted') setTechState(cards[i], 'played');
+    }
+    var deck = [];
+    var discard = [];
+    for(i=0;i<cards.length;i++){
+      var st = techState(cards[i]);
+      if(st === 'deck') deck.push(cards[i]);
+      else if(st === 'discarded') discard.push(cards[i]);
+    }
+    var x = baseNum('drawDrawBase') + skillBonus('Cyber');
+    if(deck.length < x && discard.length > 0){
+      for(i=0;i<discard.length;i++) setTechState(discard[i], 'deck');
+      deck = deck.concat(discard);
+    }
+    for(i=deck.length - 1; i > 0; i--){
+      var r = Math.floor(Math.random() * (i + 1));
+      var tmp = deck[i]; deck[i] = deck[r]; deck[r] = tmp;
+    }
+    var n = Math.min(x, deck.length);
+    for(i=0;i<n;i++) setTechState(deck[i], 'hand');
     handBroadcast();
   }
   var HULL_CHANNEL = null;
