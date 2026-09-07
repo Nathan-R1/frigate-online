@@ -520,6 +520,25 @@ function counterDelta(ctrNode, delta) {
   ctrNode.textContent = String(v);
   queue('ct:' + type + ':' + id + ':' + which, { action: 'counter', type: type, id: id, which: which, value: v });
 }
+function openCounterHud(e, ctrNode) {
+  e.preventDefault();
+  var holder = ctrNode.parentNode;              // .piece or .chip
+  var type = holder.className.indexOf('chip') === 0 ? 'chip' : 'piece';
+  var id = holder.getAttribute('data-cid');
+  var which = ctrNode.className.indexOf('ctr-red') !== -1 ? 'red' : 'grey';
+  var cur = parseInt(ctrNode.textContent, 10);
+  if (isNaN(cur)) cur = 0;
+  hudLocalOpen(which === 'red' ? 'DMG' : 'GREY', cur, function (delta) {
+    var target = ctrNode.isConnected ? ctrNode : null;
+    if (!target) {
+      var layerEl = type === 'piece' ? piecesEl : chipsEl;
+      if (layerEl) {
+        target = layerEl.querySelector('.' + type + '[data-cid="' + id + '"] .ctr-' + which);
+      }
+    }
+    if (target) counterDelta(target, delta);
+  });
+}
 function toggleExhaust(node) {
   var id = node.getAttribute('data-cid');
   var obj = findObj('piece', id);
@@ -536,6 +555,10 @@ function wireCounters(layer) {
     var c = findCtr(e.target);
     if (!c) return;
     e.stopPropagation();
+    if (isSmallScreen()) {
+      openCounterHud(e, c);
+      return;
+    }
     counterDelta(c, +1);
   });
   layer.addEventListener('contextmenu', function (e) {
@@ -1184,15 +1207,31 @@ function hudNudge(d) {
   hudState.val = Math.max(0, hudState.val + d);
   hudRender();
 }
+function hudRelease(s) {
+  if (typeof s.local === 'function') { s.local(s.delta); }
+  else if (s.source) {
+    try { s.source.postMessage({ t: 'hud', a: 'commit', id: s.id, delta: s.delta }, '*'); } catch (err) {}
+  }
+}
 function hudCommit() {
   if (!hudState) return;
   var s = hudState;
   var delta = s.val - s.start;
   hudClose();
-  if (delta !== 0) {
-    try { s.source.postMessage({ t: 'hud', a: 'commit', id: s.id, delta: delta }, '*'); } catch (err) {}
-  }
+  if (delta !== 0) { s.delta = delta; hudRelease(s); }
 }
+function hudLocalOpen(title, start, commitFn) {
+  hudClose();
+  hudState = {
+    source: null, id: null, local: commitFn,
+    title: title,
+    start: Math.max(0, Math.floor(Number(start) || 0)),
+    val: Math.max(0, Math.floor(Number(start) || 0))
+  };
+  hudRender();
+  boardHud.classList.remove('hidden');
+}
+function isSmallScreen() { return window.matchMedia('(max-width: 640px)').matches; }
 window.addEventListener('message', function (e) {
   var m = e.data;
   if (!m || typeof m !== 'object' || m.t !== 'hud') return;

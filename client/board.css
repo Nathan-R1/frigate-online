@@ -180,6 +180,7 @@ body.resizing #playerFrame { pointer-events: none; }
   padding: 2px 4px; cursor: pointer; opacity: 0; transition: opacity .12s;
 }
 .piece:hover .ctr, .chip:hover .ctr { opacity: 1; }
+.piece.selected .ctr, .chip.selected .ctr { opacity: 1; }
 .ctr-red { top: 2px; left: 2px; background: rgba(196, 44, 54, .92); border: 1px solid rgba(255, 255, 255, .25); }
 .ctr-grey { top: 2px; right: 2px; background: rgba(112, 124, 136, .95); border: 1px solid rgba(255, 255, 255, .25); }
 
