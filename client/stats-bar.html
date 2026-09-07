@@ -106,6 +106,29 @@
   .sb-wrap.vertical .sb-item,
   .sb-wrap.vertical .sb-skill { min-height: 0; overflow: hidden; }
   .sb-wrap.vertical .sb-skills { overflow: hidden; }
+  @media (max-width: 640px){
+    .sb-wrap:not(.vertical) .sb-left { padding-left: 8px; }
+    .sb-wrap:not(.vertical) .sb-name { display: none; }
+    .sb-wrap:not(.vertical) .sb-skills { height: clamp(24px, 6.5vw, 38px); }
+    .sb-wrap:not(.vertical) .sb-skill-divider { height: clamp(12px, 5vw, 18px); }
+    .sb-wrap:not(.vertical) .sb-center { gap: clamp(6px, calc(-30px + 10vw), 34px); }
+    .sb-wrap:not(.vertical) .sb-item { gap: clamp(2px, calc(-7px + 2.5vw), 9px); }
+    .sb-wrap:not(.vertical) .sb-item svg { width: clamp(11px, calc(-2px + 3.57vw), 21px); height: clamp(11px, calc(-2px + 3.57vw), 21px); }
+    .sb-wrap:not(.vertical) .sb-num { font-size: clamp(11px, calc(1px + 2.86vw), 19px); }
+    .sb-wrap:not(.vertical) .sb-sep { font-size: clamp(9px, calc(2.5vw), 16px); }
+    .sb-wrap:not(.vertical) .sb-dc-label { font-size: clamp(9px, calc(4px + 1.4vw), 13px); letter-spacing: .08em; }
+    .sb-wrap:not(.vertical) .sb-dc-val { font-size: clamp(11px, calc(1px + 2.86vw), 19px); }
+    .sb-wrap:not(.vertical) .sb-skills-list { gap: clamp(4px, calc(-4px + 2.9vw), 12px); }
+    .sb-wrap:not(.vertical) .sb-skill { gap: clamp(2px, calc(-1px + 0.75vw), 4px); }
+    .sb-wrap:not(.vertical) .sb-skill svg { width: clamp(10px, calc(5px + 1.4vw), 14px); height: clamp(10px, calc(5px + 1.4vw), 14px); }
+    .sb-wrap:not(.vertical) .sb-skill-num { font-size: clamp(10px, calc(7px + 0.75vw), 12px); }
+    .sb-wrap:not(.vertical) .sb-skill-divider { width: 2px; font-size: 0; }
+  }
+  @media (max-width: 430px){
+    .sb-wrap:not(.vertical) .sb-skills-list { gap: 3px; }
+    .sb-wrap:not(.vertical) .sb-item.dc .sb-dc-label { display: none; }
+    .sb-wrap:not(.vertical) .sb-skill-divider { display: none; }
+  }
 </style>
 </head>
 <body>

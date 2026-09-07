@@ -108,7 +108,8 @@ position:relative;display:inline-flex;align-items:center;
       opacity:0;border:0;padding:0;z-index:2;
     }
     .hand-sort .hand-icon-btn{display:inline-flex;}
-  
+    .hand-newturn .nt-label{display:none;}
+
   }
 /* ===== hand filter menu ===== */
   .hand-filter-btn{
