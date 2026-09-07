@@ -155,7 +155,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 body.resizing #playerFrame { pointer-events: none; }
 
 /* ===== board ===== */
-#board { flex: 1; position: relative; overflow: hidden; cursor: grab; }
+#board { flex: 1; position: relative; overflow: hidden; cursor: grab; touch-action: none; }
 #board.dragging { cursor: grabbing; }
 #world {
   position: absolute; left: 0; top: 0; transform-origin: 0 0;

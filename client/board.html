@@ -426,6 +426,7 @@ function canMoveTo(type, id, x, y) {
 /* ===== interactions on the board ===== */
 var drag = null;
 boardEl.addEventListener('mousedown', function (e) {
+  if (touchActive) return;
   if (e.button === 1) {           // middle-click = ping
     e.preventDefault();
     var cell = clientToCell(e.clientX, e.clientY);
@@ -441,6 +442,7 @@ boardEl.addEventListener('mousedown', function (e) {
 });
 
 window.addEventListener('mousemove', function (e) {
+  if (touchActive) return;
   if (!drag) return;
   var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
@@ -453,6 +455,7 @@ window.addEventListener('mousemove', function (e) {
 });
 
 window.addEventListener('mouseup', function (e) {
+  if (touchActive) return;
   if (!drag) return;
   var wasDrag = drag.moved;
   drag = null;
@@ -471,6 +474,101 @@ boardEl.addEventListener('wheel', function (e) {
   view.y = my - (my - view.y) * (z / view.zoom);
   view.zoom = z;
   applyView();
+}, { passive: false });
+
+/* ===== touch: single-finger pan + two-finger pinch zoom ===== */
+var touchActive = false;   // true while a touch gesture that is panning/zooming is running
+var touchPan = null;       // { id, sx, sy, ox, oy, moved }
+var pinch = null;          // { d0, mx, my, vx, vy, vz }
+function touchDist(a, b) {
+  var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function touchBoardPt(t) {
+  var r = boardEl.getBoundingClientRect();
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+function pinchBegin(e) {
+  var a = e.touches[0], b = e.touches[1];
+  var pa = touchBoardPt(a), pb = touchBoardPt(b);
+  pinch = {
+    d0: touchDist(a, b),
+    mx: (pa.x + pb.x) / 2,
+    my: (pa.y + pb.y) / 2,
+    vx: view.x, vy: view.y, vz: view.zoom
+  };
+  touchPan = null;
+}
+function touchLatch() {
+  touchActive = true;
+  setTimeout(function () { touchActive = false; }, 0);
+}
+boardEl.addEventListener('touchstart', function (e) {
+  if (e.touches.length >= 2) {
+    pinchBegin(e);
+    touchActive = true;
+    return;
+  }
+  if (e.touches.length === 1 && !pinch) {
+    var t = e.touches[0];
+    touchPan = { id: t.identifier, sx: t.clientX, sy: t.clientY, ox: view.x, oy: view.y, moved: false };
+  }
+}, { passive: false });
+boardEl.addEventListener('touchmove', function (e) {
+  if (pinch && e.touches.length >= 2) {
+    e.preventDefault();
+    var a = e.touches[0], b = e.touches[1];
+    var d = touchDist(a, b);
+    var pa = touchBoardPt(a), pb = touchBoardPt(b);
+    var mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+    var z = clamp(pinch.vz * (d / pinch.d0), MIN_ZOOM, MAX_ZOOM);
+    var r = z / pinch.vz;
+    var tx = mx - pinch.mx, ty = my - pinch.my;
+    view.x = mx - (mx - (pinch.vx + tx)) * r;
+    view.y = my - (my - (pinch.vy + ty)) * r;
+    view.zoom = z;
+    applyView();
+    return;
+  }
+  if (e.touches.length === 1 && touchPan && !pinch) {
+    var t = e.touches[0];
+    if (t.identifier !== touchPan.id) return;
+    var dx = t.clientX - touchPan.sx, dy = t.clientY - touchPan.sy;
+    if (!touchPan.moved && Math.abs(dx) + Math.abs(dy) > 6) touchPan.moved = true;
+    if (!touchPan.moved) return;
+    e.preventDefault();
+    touchActive = true;
+    view.x = touchPan.ox + dx;
+    view.y = touchPan.oy + dy;
+    boardEl.className = 'dragging';
+    applyView();
+  }
+}, { passive: false });
+boardEl.addEventListener('touchend', function (e) {
+  if (pinch) {
+    if (e.touches.length === 1) {
+      var t = e.touches[0];
+      pinch = null;
+      touchPan = { id: t.identifier, sx: t.clientX, sy: t.clientY, ox: view.x, oy: view.y, moved: true };
+      touchLatch();
+      return;
+    }
+    if (e.touches.length >= 2) return;   // one finger lifted, pinch continues
+    touchLatch();
+    pinch = null;
+    touchPan = null;
+    boardEl.className = '';
+    return;
+  }
+  if (touchPan && touchPan.moved) touchLatch();
+  touchPan = null;
+  boardEl.className = '';
+}, { passive: false });
+boardEl.addEventListener('touchcancel', function () {
+  pinch = null;
+  touchPan = null;
+  boardEl.className = '';
+  touchActive = false;
 }, { passive: false });
 
 function handleClick(cx, cy) {
@@ -552,6 +650,7 @@ function wireCounters(layer) {
     if (findCtr(e.target)) e.stopPropagation();   // don't start a pan drag
   });
   layer.addEventListener('click', function (e) {
+    if (touchActive) return;
     var c = findCtr(e.target);
     if (!c) return;
     e.stopPropagation();
