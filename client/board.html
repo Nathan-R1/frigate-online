@@ -1077,6 +1077,22 @@ window.addEventListener('message', function (e) {
   syncVerticalRect();
 });
 
+/* The sheet (frigate.html) relays its own pointer position because, while the
+   hand is pass-through, moves over the sheet-covered left strip are delivered
+   to the sheet's document, not the board's — so the mirror never wakes the
+   hand there. Map the sheet-relative coords into parent space and reuse the
+   same mirror logic. */
+var sheetFrame = document.getElementById('playerFrame');
+window.addEventListener('message', function (e) {
+  if (!sheetFrame || e.source !== sheetFrame.contentWindow) return;
+  var m = e.data;
+  if (!m || typeof m !== 'object' || m.t !== 'sheetpe') return;
+  var r = sheetFrame.getBoundingClientRect();
+  handX = r.left + (Number(m.x) || 0);
+  handY = r.top + (Number(m.y) || 0);
+  if (!handRaf) handRaf = requestAnimationFrame(handParentMirror);
+});
+
 /* Click-through: while the hand is expanded, the iframe only captures input
    while the cursor is over a card/bar/slider. Entering from the board, mirror
    the pointer into the hand document to know when to wake the iframe up. */
