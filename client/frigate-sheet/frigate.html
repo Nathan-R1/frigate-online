@@ -1804,7 +1804,18 @@
     };
     input.click();
   }
+  var sheetPeRaf = 0;
+  function relaySheetPointer(e){
+    if(sheetPeRaf) return;
+    var x = e.clientX, y = e.clientY;
+    sheetPeRaf = requestAnimationFrame(function(){
+      sheetPeRaf = 0;
+      try{ window.parent.postMessage({ t:'sheetpe', x: x, y: y }, '*'); }catch(err){}
+    });
+  }
   (function(){
+    document.addEventListener('pointermove', relaySheetPointer);
+    document.addEventListener('pointerdown', relaySheetPointer);
     var cards = document.querySelectorAll('.tech-card');
     for(var i=0;i<cards.length;i++){
       setTechDeploy(cards[i].querySelector('.tdepbtn'), cards[i].querySelector('.tdepbtn').getAttribute('data-deploy'));
