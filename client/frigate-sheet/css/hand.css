@@ -228,6 +228,12 @@ color:var(--cyan);border-color:var(--cyan-dim);
 .hc-state[data-state="trashed"]{
 color:var(--brown);border-color:var(--brown);
   }
+.hc-state[data-state="deck"]{
+color:var(--ink-dim);border-color:var(--line-bright);
+  }
+.hc-state[data-state="discarded"]{
+color:var(--red);border-color:var(--red-dim);
+  }
 .hand-card[data-state="trashed"]{
 
     background:
@@ -241,6 +247,18 @@ color:var(--brown);border-color:var(--brown);
     background:
       linear-gradient(180deg, rgba(0,0,0,.34) 0%, rgba(0,0,0,.34) 100%),
       linear-gradient(180deg, var(--panel) 0%, var(--panel-alt) 100%);
+  
+  }
+.hand-card[data-state="deck"]{
+opacity:.65;
+  
+  }
+.hand-card[data-state="discarded"]{
+
+    background:
+      linear-gradient(180deg, rgba(215,91,78,.20) 0%, rgba(215,91,78,.10) 100%),
+      linear-gradient(180deg, var(--panel) 0%, var(--panel-alt) 100%);
+    border-color:var(--red-dim);
   
   }
 .hand-view{
