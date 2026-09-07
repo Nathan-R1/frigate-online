@@ -12,6 +12,7 @@
 <body>
 <div class="hand-dock" id="handDock">
   <div class="hand-bar">
+    <button type="button" class="hand-newturn" id="handNewTurnBtn" onclick="sendNewTurn()" title="New Turn: restore exhausted techs and draw (4 + Cyber) from deck">⟳ New Turn</button>
     <div class="hand-slider" id="handSlider">
       <div class="hand-slider-track"></div>
       <div class="hand-slider-thumb" id="handSliderThumb"></div>
@@ -79,11 +80,16 @@
   var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
   var HAND_DATA = [];
   var HAND_CHANNEL = null;
-  function nextHandCardState(cur){
+  function hasTrashKeyword(d){
+    return !!(d && /Trash\./.test((d.onbuild || '') + ' ' + (d.passive || '') + ' ' + (d.onactivate || '')));
+  }
+  function nextHandCardState(cur, d){
     if(cur === 'deck') return 'hand';
     if(cur === 'hand') return 'played';
-    if(cur === 'played') return 'exhausted';
+    if(cur === 'played') return hasTrashKeyword(d) ? 'trashed' : 'exhausted';
     if(cur === 'exhausted') return 'played';
+    if(cur === 'trashed') return 'deck';
+    if(cur === 'discarded') return 'deck';
     return cur;
   }
   function handCardHtml(d, state){
@@ -148,6 +154,9 @@
   }
   function send(msg){
     if(HAND_CHANNEL) HAND_CHANNEL.postMessage(msg);
+  }
+  function sendNewTurn(){
+    send({ t:'newturn' });
   }
   var FILTER_CATS = [
     {key:'hand', label:'Hand', options:[
@@ -399,11 +408,12 @@
             send({ t:'charge', idx: idx, delta: delta });
           };
         })(items[j].idx);
-        wireHandCardInteractions(el, (function(idx, state){
+        wireHandCardInteractions(el, (function(idx, d){
+          var state = d.state;
           return function(){
-            send({ t:'state', idx: idx, state: nextHandCardState(state) });
+            send({ t:'state', idx: idx, state: nextHandCardState(state, d) });
           };
-        })(items[j].idx, items[j].d.state), syncHandRoom);
+        })(items[j].idx, items[j].d), syncHandRoom);
         handEl.appendChild(el);
       }
     }
@@ -627,6 +637,7 @@
   window.openHandSelect = openHandSelect;
   window.toggleFilterMenu = toggleFilterMenu;
   window.cycleHandAlign = cycleHandAlign;
+  window.sendNewTurn = sendNewTurn;
 })();
 </script>
 </body>

@@ -934,7 +934,7 @@ color:var(--cyan);border-color:var(--cyan-dim);
 color:var(--ink-dim);border-color:var(--line-bright);
   }
 .tech-card.state-discarded .tbuilt-btn{
-color:var(--red);border-color:var(--red-dim);
+color:var(--amber);border-color:var(--amber);
   }
 @media (max-width:640px){
     .menu-bar{border-left:none;border-right:none;border-top:none;margin-bottom:12px;padding:6px 10px;}

@@ -319,9 +319,9 @@ opacity:.55;
 .tech-card.state-trashed{
 
     background:
-      linear-gradient(180deg, rgba(154,102,54,.26) 0%, rgba(154,102,54,.15) 100%),
+      linear-gradient(180deg, rgba(215,91,78,.22) 0%, rgba(215,91,78,.12) 100%),
       var(--crew-bg);
-    border-color:var(--brown);
+    border-color:var(--red-dim);
     opacity:.85;
   
   }
@@ -331,9 +331,9 @@ opacity:.55;
 .tech-card.state-discarded{
 
     background:
-      linear-gradient(180deg, rgba(215,91,78,.18) 0%, rgba(215,91,78,.08) 100%),
+      linear-gradient(180deg, rgba(232,169,74,.22) 0%, rgba(232,169,74,.12) 100%),
       var(--crew-bg);
-    border-color:var(--red-dim);
+    border-color:var(--amber);
     opacity:.9;
   
   }
@@ -363,13 +363,13 @@ border-color:var(--cyan);color:var(--cyan);
 color:var(--amber);border-color:var(--amber);
   }
 .tech-card.state-trashed .tbuilt-btn{
-color:var(--brown);border-color:var(--brown);
+color:var(--red);border-color:var(--red-dim);
   }
 .tech-card.state-deck .tbuilt-btn{
 color:var(--ink-dim);border-color:var(--line-bright);
   }
 .tech-card.state-discarded .tbuilt-btn{
-color:var(--red);border-color:var(--red-dim);
+color:var(--amber);border-color:var(--amber);
   }
 .menu-bar{
 
