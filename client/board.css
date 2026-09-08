@@ -345,3 +345,14 @@ body.resizing #playerFrame { pointer-events: none; }
   #badge.off::after { content: '⚠️'; font-size: 14px; line-height: 1; }
   #badge.pending::after { content: attr(data-count) ' ✴️'; font-size: 13px; line-height: 1; }
 }
+
+/* thin screens: the sheet drops below the board as a bottom panel instead of a left sidebar */
+@media (max-width: 640px){
+  .main { flex-direction: column; }
+  .player-panel {
+    width: 100%; min-width: 0; height: 33%; order: 2;
+    border-right: 0; border-top: 1px solid #1f2a38;
+  }
+  #board { order: 1; }
+  .player-resizer { display: none; }
+}
