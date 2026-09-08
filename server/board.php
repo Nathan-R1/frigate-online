@@ -6,6 +6,9 @@
  * GET  board.php?pieces    -> autoscanned list from pieces/images/*.png
  * POST board.php           -> one JSON action: resize | create | move | counter | exhaust | ping | delete
  *
+ * Pings are persistent per-player markers stored as a color-keyed map
+ * (one ping per color, replaced on each new ping, no TTL expiry).
+ *
  * The board state lives in board-state.json. Writes are serialised with flock
  * and saved atomically (temp file + rename) so the state can never be half-written.
  */
@@ -20,7 +23,7 @@ define('STATE_FILE', __DIR__ . '/board-state.json');
 define('IMAGES_DIR', __DIR__ . '/../client/pieces/images');
 define('BOARD_VERSION', 8);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
 define('MAX_SIZE', 40);
-define('PING_TTL', 4);
+
 
 $VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping', 'delete');
 $VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink');
@@ -47,12 +50,13 @@ function normalize(&$s) {
     if (!isset($s['rev']) || !is_numeric($s['rev'])) $s['rev'] = 0;
     $s['rev'] = (int)$s['rev'];
     $s['grid']['size'] = max(1, min(MAX_SIZE, (int)$s['grid']['size']));
-    $now = time();
-    $kept = array();
-    foreach ($s['pings'] as $p) {
-        if ($now - (int)$p['t'] <= PING_TTL) $kept[] = $p;
+    $pings = array();
+    foreach ($s['pings'] as $c => $p) {
+        if (!is_array($p)) continue;
+        $p = array('x' => (float)$p['x'], 'y' => (float)$p['y']);
+        $pings[$c] = $p;
     }
-    $s['pings'] = $kept;
+    $s['pings'] = $pings;
 }
 
 function readStateFile() {
@@ -139,10 +143,15 @@ function cellBlocked($s, $type, $x, $y) {
 function actResize(&$s, $a) {
     $size = max(1, min(MAX_SIZE, (int)$a['size']));
     $s['grid']['size'] = $size;
-    foreach (array('pieces', 'chips', 'pings') as $k) {
+    foreach (array('pieces', 'chips') as $k) {
         $s[$k] = array_values(array_filter($s[$k], function ($o) use ($size) {
             return (int)$o['x'] < $size && (int)$o['y'] < $size;
         }));
+    }
+    foreach ($s['pings'] as $c => $p) {
+        if ($p['x'] < 0 || $p['y'] < 0 || $p['x'] >= $size || $p['y'] >= $size) {
+            unset($s['pings'][$c]);
+        }
     }
     return null;
 }
@@ -251,9 +260,10 @@ function actPing(&$s, $a) {
     $color = $a['color'];
     if (!in_array($color, $GLOBALS['VALID_COLORS'], true)) return array('error' => 'bad color');
     $sx = $s['grid']['size'];
-    $x = (int)$a['x']; $y = (int)$a['y'];
-    if (!coordOk($x, $sx) || !coordOk($y, $sx)) return array('error' => 'out of bounds');
-    $s['pings'][] = array('color' => $color, 'x' => $x, 'y' => $y, 't' => time());
+    if (!is_numeric($a['x']) || !is_numeric($a['y'])) return array('error' => 'bad coords');
+    $x = (float)$a['x']; $y = (float)$a['y'];
+    if ($x < 0 || $y < 0 || $x >= $sx || $y >= $sx) return array('error' => 'out of bounds');
+    $s['pings'][$color] = array('x' => $x, 'y' => $y);
     return null;
 }
 
