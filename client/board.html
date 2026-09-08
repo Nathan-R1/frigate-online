@@ -175,7 +175,7 @@ var popListEl = document.getElementById('popList');
 var popCellEl = document.getElementById('popCell');
 var popStatusEl = document.getElementById('popStatus');
 
-var state = { rev: 0, grid: { size: 18 }, pieces: [], chips: [], pings: [] };
+var state = { rev: 0, grid: { size: 18 }, pieces: [], chips: [], pings: {} };
 var actorColor = localStorage.getItem('frigateColor') || 'green';
 var sel = null;                      // { type: 'piece'|'chip', id: ... }
 var view = { x: 0, y: 0, zoom: 1 };
@@ -373,20 +373,19 @@ function renderChips() {
 
 /* ===== pings ===== */
 function renderPing(color, x, y, animate) {
-  var key = color;
   var moved = false;
-  if (pingPos[key] && (pingPos[key].x !== x || pingPos[key].y !== y)) moved = true;
-  var d = pingEls[key];
+  if (pingPos[color] && (pingPos[color].x !== x || pingPos[color].y !== y)) moved = true;
+  var d = pingEls[color];
   if (!d) {
     d = el('div', 'ping');
     d.style.background = PALETTE[color] || '#9aa4ae';
     pingsEl.appendChild(d);
-    pingEls[key] = d;
+    pingEls[color] = d;
     moved = true;                       // appearing counts as a move for animation
   }
   d.style.left = cellPx(x) + 'px';
   d.style.top = cellPx(y) + 'px';
-  pingPos[key] = { x: x, y: y };
+  pingPos[color] = { x: x, y: y };
   if (animate && moved) playPingBloom(d);
 }
 
@@ -466,7 +465,7 @@ boardEl.addEventListener('mousedown', function (e) {
     var c = clientToBoard(e.clientX, e.clientY);
     if (c.x >= 0 && c.y >= 0 && c.x < state.grid.size && c.y < state.grid.size) {
       placeLocalPing(c.x, c.y);
-      queue('ping:' + actorColor, { action: 'ping', x: c.x, y: c.y, color: actorColor });
+      queue('pg:' + actorColor, { action: 'ping', x: c.x, y: c.y, color: actorColor });
     }
     return;
   }
