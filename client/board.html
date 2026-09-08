@@ -984,7 +984,7 @@ function applyServer(s) {
     state.chips = s.chips || [];
     renderChips();
   }
-  if (sel && !findObj(sel.type, sel.id)) { sel = null; renderPieces(); renderChips(); }
+  if (sel && !findObj(sel.type, sel.id)) { sel = null; clearLos(); hideDist(); renderPieces(); renderChips(); }
   var srv = s.pings || {};
   var col;
   for (col in srv) {
