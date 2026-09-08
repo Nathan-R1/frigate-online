@@ -51,9 +51,9 @@ function normalize(&$s) {
     $s['grid']['size'] = max(1, min(MAX_SIZE, (int)$s['grid']['size']));
     $pings = array();
     foreach ($s['pings'] as $c => $p) {
-        if (!is_array($p)) continue;
-        $p = array('x' => (float)$p['x'], 'y' => (float)$p['y']);
-        $pings[$c] = $p;
+        if (!is_array($p) || !isset($p['x']) || !isset($p['y'])) continue;
+        if (!is_numeric($p['x']) || !is_numeric($p['y'])) continue;
+        $pings[$c] = array('x' => (float)$p['x'], 'y' => (float)$p['y']);
     }
     $s['pings'] = $pings;
 }
