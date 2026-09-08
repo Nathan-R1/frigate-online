@@ -167,6 +167,7 @@ var piecesEl = document.getElementById('pieces');
 var chipsEl = document.getElementById('chips');
 var pingsEl = document.getElementById('pings');
 var losEl = document.getElementById('los');
+var lastLosKey = '';
 var badgeEl = document.getElementById('badge');
 var saveBtn = document.getElementById('saveBtn');
 var refreshBtn = document.getElementById('refreshBtn');
@@ -456,7 +457,7 @@ function renderLos(fromX, fromY) {
     }
   }
 }
-function clearLos() { losEl.innerHTML = ''; }
+function clearLos() { losEl.innerHTML = ''; lastLosKey = ''; }
 
 function updateLosOnHover(cx, cy) {
   if (touchActive) return;
@@ -465,7 +466,10 @@ function updateLosOnHover(cx, cy) {
   var inGrid = c.x >= 0 && c.y >= 0 && c.x < size && c.y < size;
   var pieceSel = sel && sel.type === 'piece';
   var from = pieceSel ? findObj('piece', sel.id) : null;
-  if (from && inGrid) renderLos(from.x, from.y);
+  var key = from && inGrid ? from.id + ',' + c.x + ',' + c.y : '';
+  if (key === lastLosKey) return;
+  lastLosKey = key;
+  if (key) renderLos(from.x, from.y);
   else clearLos();
 }
 
