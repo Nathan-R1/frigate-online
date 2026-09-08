@@ -162,19 +162,15 @@ min-width:0;
   .row2 > .panel{
 min-width:0;
   }
-/* collapsed panels break out of their row and drop below */
+/* a collapsed panel drops the grid to a single column; the panel itself
+   folds in place (source order kept) so an early section stays above
+   the following ones instead of jumping below them */
   .grid:has(> .panel.collapsed),
   .row2:has(> .panel.collapsed),
   .grid.has-collapsed,
   .row2.has-collapsed{
 
     grid-template-columns:1fr;
-  
-  }
-.grid > .panel.collapsed,
-  .row2 > .panel.collapsed{
-
-    order:2;
   
   }
 .stat-strip{
