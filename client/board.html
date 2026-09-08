@@ -152,7 +152,7 @@
 var CELL = 72;                       // px per grid cell — keep in sync with #world background-size
 var CHIP = Math.round(CELL / 4);     // chip footprint = 1/4 cell
 var MIN_ZOOM = 0.35, MAX_ZOOM = 3;
-var PING_TTL = 4000;
+
 var COLOR_ORDER = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
 var PALETTE = {
   red: '#e04a4a', orange: '#f09030', yellow: '#e8cf50',
@@ -184,7 +184,8 @@ var activeCreateType = 'piece';
 var pieceCatalog = [];               // [{file, label}]
 var masterImages = {};               // file -> Image
 var tintCache = {};                  // file|color -> dataURL
-var shownPings = {};                 // dedupe key -> time
+var pingEls = {};      // color -> element for that color's marker
+var pingPos = {};      // color -> {x, y} last-rendered marker position
 var synced = false;
 var lastSync = null;
 
@@ -371,13 +372,39 @@ function renderChips() {
 }
 
 /* ===== pings ===== */
-function showPing(color, x, y) {
-  var d = el('div', 'ping');
+function renderPing(color, x, y, animate) {
+  var key = color;
+  var moved = false;
+  if (pingPos[key] && (pingPos[key].x !== x || pingPos[key].y !== y)) moved = true;
+  var d = pingEls[key];
+  if (!d) {
+    d = el('div', 'ping');
+    d.style.background = PALETTE[color] || '#9aa4ae';
+    pingsEl.appendChild(d);
+    pingEls[key] = d;
+    moved = true;                       // appearing counts as a move for animation
+  }
   d.style.left = cellPx(x) + 'px';
   d.style.top = cellPx(y) + 'px';
-  d.style.background = PALETTE[color] || '#9aa4ae';
-  pingsEl.appendChild(d);
-  setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, PING_TTL);
+  pingPos[key] = { x: x, y: y };
+  if (animate && moved) playPingBloom(d);
+}
+
+function playPingBloom(d) {
+  d.classList.remove('bloom');
+  void d.offsetWidth;                    // force reflow so the animation restarts
+  d.classList.add('bloom');
+}
+
+function placeLocalPing(x, y) {
+  renderPing(actorColor, x, y, false);   // you know where you clicked; no bloom
+}
+
+function removePing(color) {
+  var d = pingEls[color];
+  if (d && d.parentNode) d.parentNode.removeChild(d);
+  delete pingEls[color];
+  delete pingPos[color];
 }
 
 /* ===== selection / move ===== */
@@ -436,11 +463,10 @@ boardEl.addEventListener('mousedown', function (e) {
   if (touchActive) return;
   if (e.button === 1) {           // middle-click = ping
     e.preventDefault();
-    var cell = clientToCell(e.clientX, e.clientY);
-    if (cell.x >= 0 && cell.y >= 0 && cell.x < state.grid.size && cell.y < state.grid.size) {
-      shownPings[cell.x + ',' + cell.y + ',' + Date.now() + ',' + actorColor] = Date.now();
-      showPing(actorColor, cell.x, cell.y);
-      queue('pg:' + cell.x + ',' + cell.y + ',' + actorColor, { action: 'ping', x: cell.x, y: cell.y, color: actorColor });
+    var c = clientToBoard(e.clientX, e.clientY);
+    if (c.x >= 0 && c.y >= 0 && c.x < state.grid.size && c.y < state.grid.size) {
+      placeLocalPing(c.x, c.y);
+      queue('ping:' + actorColor, { action: 'ping', x: c.x, y: c.y, color: actorColor });
     }
     return;
   }
@@ -819,7 +845,7 @@ function actionKey(act) {
     case 'counter': return 'ct:' + act.type + ':' + act.id + ':' + act.which;
     case 'exhaust': return 'ex:' + act.id;
     case 'delete':  return 'del:' + act.id;
-    case 'ping':    return 'pg:' + act.x + ',' + act.y + ',' + act.color;
+    case 'ping':    return 'pg:' + act.color;
   }
   return 'act:' + act.action + ':' + Math.random();
 }
@@ -880,22 +906,15 @@ function applyServer(s) {
     renderChips();
   }
   if (sel && !findObj(sel.type, sel.id)) { sel = null; renderPieces(); renderChips(); }
-  var now = Date.now();
-  var i;
-  if (s.pings) {
-    for (i = 0; i < s.pings.length; i++) {
-      var p = s.pings[i];
-      var key = p.x + ',' + p.y + ',' + p.t + ',' + p.color;
-      if (!shownPings[key]) {
-        shownPings[key] = now;
-        showPing(p.color, p.x, p.y);
-      }
+  var srv = s.pings || {};
+  var col;
+  for (col in srv) {
+    if (srv.hasOwnProperty(col) && srv[col] && !isNaN(srv[col].x) && !isNaN(srv[col].y)) {
+      renderPing(col, srv[col].x, srv[col].y, true);
     }
   }
-  // prune the dedupe set periodically
-  var keys = Object.keys(shownPings);
-  for (i = 0; i < keys.length; i++) {
-    if (now - shownPings[keys[i]] > 60000) delete shownPings[keys[i]];
+  for (col in pingEls) {
+    if (pingEls.hasOwnProperty(col) && !(col in srv)) removePing(col);
   }
   state.rev = s.rev || 0;
 }
