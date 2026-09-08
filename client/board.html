@@ -383,16 +383,38 @@ function renderPing(color, x, y, animate) {
   if (pingPos[color] && (pingPos[color].x !== x || pingPos[color].y !== y)) moved = true;
   var d = pingEls[color];
   if (!d) {
+    if (pingPos[color] && !moved) return;   // already shown and faded at this spot
     d = el('div', 'ping');
     d.style.background = PALETTE[color] || '#9aa4ae';
     pingsEl.appendChild(d);
     pingEls[color] = d;
-    moved = true;                       // appearing counts as a move for animation
+    moved = true;                           // appearing counts as a move for animation
   }
   d.style.left = cellPx(x) + 'px';
   d.style.top = cellPx(y) + 'px';
   pingPos[color] = { x: x, y: y };
-  if (animate && moved) playPingBloom(d);
+  if (animate && moved) {
+    playPingBloom(d);
+    schedulePingFade(color, 1500);          // appears, then fades out
+  }
+}
+
+function schedulePingFade(color, delay) {
+  var d = pingEls[color];
+  if (!d) return;
+  var at = pingPos[color] ? { x: pingPos[color].x, y: pingPos[color].y } : null;
+  setTimeout(function () {
+    if (pingEls[color] !== d || d.fading) return;
+    if (!at || !pingPos[color] || pingPos[color].x !== at.x || pingPos[color].y !== at.y) return;
+    d.fading = true;
+    d.classList.add('fadeout');
+  }, delay);
+  setTimeout(function () {
+    if (pingEls[color] !== d) return;
+    if (at && pingPos[color] && (pingPos[color].x !== at.x || pingPos[color].y !== at.y)) return;
+    if (d.parentNode) d.parentNode.removeChild(d);
+    delete pingEls[color];
+  }, delay + 1000);
 }
 
 function playPingBloom(d) {
@@ -955,7 +977,7 @@ function saveChanges() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch: batch })
   }).then(function (r) { return r.json(); }).then(function (data) {
-    if (data && data.ok && data.state) { synced = true; applyServer(data.state); }
+    if (data && data.ok && data.state) { synced = true; schedulePingFade(actorColor, 0); applyServer(data.state); }
     else { synced = false; requeue(batch); }
   }).catch(function () {
     synced = false;
