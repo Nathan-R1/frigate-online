@@ -64,6 +64,7 @@
       <div id="pieces" class="layer"></div>
       <div id="chips" class="layer"></div>
       <div id="pings" class="layer"></div>
+      <div id="los" class="layer"></div>
     </div>
   </div>
   <iframe class="hand-slot" id="handSlot" src="frigate-sheet/hand.html" title="Tech Hand"></iframe>
@@ -165,6 +166,7 @@ var worldEl = document.getElementById('world');
 var piecesEl = document.getElementById('pieces');
 var chipsEl = document.getElementById('chips');
 var pingsEl = document.getElementById('pings');
+var losEl = document.getElementById('los');
 var badgeEl = document.getElementById('badge');
 var saveBtn = document.getElementById('saveBtn');
 var refreshBtn = document.getElementById('refreshBtn');
@@ -406,6 +408,67 @@ function removePing(color) {
   delete pingPos[color];
 }
 
+/* ===== line of sight ===== */
+function lineBlocked(sx, sy, tx, ty) {
+  var x0 = sx + 0.5, y0 = sy + 0.5, x1 = tx + 0.5, y1 = ty + 0.5;
+  var dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  var stepX = x0 < x1 ? 1 : -1, stepY = y0 < y1 ? 1 : -1;
+  var err = dx + dy;
+  var cx = sx, cy = sy;
+  while (true) {
+    if ((cx !== sx || cy !== sy) && (cx !== tx || cy !== ty)) {
+      if (occupancy(cx, cy) === 'piece') return true;
+    }
+    if (cx === tx && cy === ty) break;
+    var e2 = 2 * err;
+    var stepped = false;
+    if (e2 >= dy) { err += dy; cx += stepX; stepped = true; }
+    if (e2 <= dx) { err += dx; cy += stepY; stepped = true; }
+    if (!stepped) break;
+  }
+  return false;
+}
+
+function visibleCells(fromX, fromY) {
+  var size = state.grid.size;
+  var vis = [];
+  for (var i = 0; i < size; i++) {
+    vis[i] = [];
+    for (var j = 0; j < size; j++) vis[i][j] = !lineBlocked(fromX, fromY, i, j);
+  }
+  return vis;
+}
+
+function renderLos(fromX, fromY) {
+  var size = state.grid.size;
+  losEl.innerHTML = '';
+  var vis = visibleCells(fromX, fromY);
+  for (var i = 0; i < size; i++) {
+    for (var j = 0; j < size; j++) {
+      if (!vis[i][j]) {
+        var s = el('div', 'shade');
+        s.style.left = cellPx(i) + 'px';
+        s.style.top = cellPx(j) + 'px';
+        s.style.width = CELL + 'px';
+        s.style.height = CELL + 'px';
+        losEl.appendChild(s);
+      }
+    }
+  }
+}
+function clearLos() { losEl.innerHTML = ''; }
+
+function updateLosOnHover(cx, cy) {
+  if (touchActive) return;
+  var c = clientToCell(cx, cy);
+  var size = state.grid.size;
+  var inGrid = c.x >= 0 && c.y >= 0 && c.x < size && c.y < size;
+  var pieceSel = sel && sel.type === 'piece';
+  var from = pieceSel ? findObj('piece', sel.id) : null;
+  if (from && inGrid) renderLos(from.x, from.y);
+  else clearLos();
+}
+
 /* ===== selection / move ===== */
 function findObj(type, id) {
   var list = type === 'piece' ? state.pieces : state.chips;
@@ -433,6 +496,7 @@ function setSelection(next) {
   } else {
     sel = next;
   }
+  clearLos();
   renderPieces();
   renderChips();
 }
@@ -475,6 +539,7 @@ boardEl.addEventListener('mousedown', function (e) {
 
 window.addEventListener('mousemove', function (e) {
   if (touchActive) return;
+  updateLosOnHover(e.clientX, e.clientY);
   if (!drag) return;
   var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
@@ -822,7 +887,7 @@ function deleteObject(type, id) {
       break;
     }
   }
-  if (sel && sel.type === type && sel.id === id) sel = null;
+  if (sel && sel.type === type && sel.id === id) { sel = null; clearLos(); }
   if (type === 'piece') renderPieces(); else renderChips();
   queue('del:' + id, { action: 'delete', type: type, id: id });
 }
@@ -1476,7 +1541,7 @@ window.addEventListener('keydown', function (e) {
     if (!classInfoPopup.classList.contains('hidden')) { closeClassInfo(); return; }
     if (!popupEl.classList.contains('hidden')) { hideCreate(); return; }
     if (!swatchesEl.querySelector('.sw-menu').classList.contains('hidden')) { closeSwMenu(); return; }
-    if (sel) { sel = null; renderPieces(); renderChips(); }
+    if (sel) { sel = null; renderPieces(); renderChips(); clearLos(); }
   }
 });
 
