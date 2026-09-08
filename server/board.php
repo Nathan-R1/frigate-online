@@ -24,7 +24,6 @@ define('IMAGES_DIR', __DIR__ . '/../client/pieces/images');
 define('BOARD_VERSION', 8);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
 define('MAX_SIZE', 40);
 
-
 $VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping', 'delete');
 $VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink');
 $PACKET_LIMIT  = 65536;
@@ -260,10 +259,8 @@ function actPing(&$s, $a) {
     $color = $a['color'];
     if (!in_array($color, $GLOBALS['VALID_COLORS'], true)) return array('error' => 'bad color');
     $sx = $s['grid']['size'];
-    if (!is_numeric($a['x']) || !is_numeric($a['y'])) return array('error' => 'bad coords');
-    $x = (float)$a['x']; $y = (float)$a['y'];
-    if ($x < 0 || $y < 0 || $x >= $sx || $y >= $sx) return array('error' => 'out of bounds');
-    $s['pings'][$color] = array('x' => $x, 'y' => $y);
+    if (!coordOk($a['x'], $sx) || !coordOk($a['y'], $sx)) return array('error' => 'out of bounds');
+    $s['pings'][$color] = array('x' => (float)$a['x'], 'y' => (float)$a['y']);
     return null;
 }
 
