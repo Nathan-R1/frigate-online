@@ -493,7 +493,7 @@ function updateLosOnHover(cx, cy) {
   var inGrid = c.x >= 0 && c.y >= 0 && c.x < size && c.y < size;
   var pieceSel = sel && sel.type === 'piece';
   var from = pieceSel ? findObj('piece', sel.id) : null;
-  var key = from && inGrid ? from.id + ',' + c.x + ',' + c.y : '';
+  var key = from && inGrid ? from.id + ',' + from.x + ',' + from.y + ',' + c.x + ',' + c.y : '';
   if (key === lastLosKey) return;
   lastLosKey = key;
   if (key) showDist(Math.abs(c.x - from.x) + Math.abs(c.y - from.y));
@@ -1005,6 +1005,10 @@ function applyServer(s) {
   if (arrSig(s.pieces) !== arrSig(state.pieces)) {
     state.pieces = s.pieces || [];
     renderPieces();
+    if (sel && sel.type === 'piece') {
+      var movedSel = findObj('piece', sel.id);
+      if (movedSel) renderLos(movedSel.x, movedSel.y);   // keep vision live if a remote move changed it
+    }
   }
   if (arrSig(s.chips) !== arrSig(state.chips)) {
     state.chips = s.chips || [];
