@@ -279,11 +279,17 @@ function renderGrid() {
 function applyView() {
   worldEl.style.transform = 'translate(' + view.x + 'px,' + view.y + 'px) scale(' + view.zoom + ')';
 }
-function clientToCell(cx, cy) {
+function clientToBoard(cx, cy) {
   var r = boardEl.getBoundingClientRect();
   var wx = (cx - r.left - view.x) / view.zoom;
   var wy = (cy - r.top - view.y) / view.zoom;
-  return { x: Math.floor(wx / CELL), y: Math.floor(wy / CELL) };
+  return { x: wx / CELL, y: wy / CELL };
+}
+function clientToCell(cx, cy) {
+  var c = clientToBoard(cx, cy);
+  c.x = Math.floor(c.x);
+  c.y = Math.floor(c.y);
+  return c;
 }
 
 /* ===== rendering the objects ===== */
