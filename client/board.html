@@ -496,13 +496,8 @@ function updateLosOnHover(cx, cy) {
   var key = from && inGrid ? from.id + ',' + c.x + ',' + c.y : '';
   if (key === lastLosKey) return;
   lastLosKey = key;
-  if (key) {
-    renderLos(from.x, from.y);
-    showDist(Math.abs(c.x - from.x) + Math.abs(c.y - from.y));
-  } else {
-    clearLos();
-    hideDist();
-  }
+  if (key) showDist(Math.abs(c.x - from.x) + Math.abs(c.y - from.y));
+  else hideDist();
 }
 
 /* ===== selection / move ===== */
@@ -534,6 +529,10 @@ function setSelection(next) {
   }
   clearLos();
   hideDist();
+  if (sel && sel.type === 'piece') {
+    var from = findObj(sel.type, sel.id);
+    if (from) renderLos(from.x, from.y);
+  }
   renderPieces();
   renderChips();
 }
@@ -913,7 +912,12 @@ function moveObject(type, id, x, y) {
   var obj = findObj(type, id);
   if (!obj) return;
   obj.x = x; obj.y = y;
-  if (type === 'piece') renderPieces(); else renderChips();
+  if (type === 'piece') {
+    renderPieces();
+    if (sel && sel.type === 'piece' && sel.id === id) renderLos(obj.x, obj.y);
+  } else {
+    renderChips();
+  }
   queue('mv:' + id, { action: 'move', type: type, id: id, x: x, y: y });
 }
 function deleteObject(type, id) {

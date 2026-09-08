@@ -213,7 +213,7 @@ body.resizing #playerFrame { pointer-events: none; }
 }
 @keyframes bf { 0% { opacity: 1; } 100% { opacity: 0; } }
 
-#los .shade { position: absolute; background: rgba(0, 0, 0, .55); }
+#los .shade { position: absolute; background: rgba(0, 0, 0, .5); }
 
 .dist-readout {
   position: fixed; right: 14px; bottom: 56px; z-index: 90;
