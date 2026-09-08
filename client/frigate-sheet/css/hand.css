@@ -390,7 +390,18 @@ margin-right:0;
     box-shadow:0 18px 40px rgba(0,0,0,.6);
     border-color:var(--cyan);
     z-index:500;
-  
+
+  }
+/* "click" pop mode: hovering a card must not raise it, only .popped (set by
+   a click) does. A popped card must keep its raised pose even while hovered,
+   so exclude .popped from the override. */
+.pop-click .hand-card:not(.popped):hover{
+
+    transform:none;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);
+    border-color:var(--line-bright);
+    z-index:auto;
+
   }
 .hand-card .hc-head{
 

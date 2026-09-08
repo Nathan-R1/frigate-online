@@ -33,6 +33,7 @@
           <button type="button" class="settings-item" id="sheetToggleBtn" title="Hide the player sheet panel">Hide Sheet</button>
           <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
           <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
+          <button type="button" class="settings-item" id="cardPopToggleBtn" title="Cards pop up on hover. Toggle to only pop them up when clicked.">Hover</button>
         </div>
       </div>
       <div class="settings-submenu-wrap">
@@ -1162,6 +1163,29 @@ function toggleVertical() {
 verticalToggleBtn.addEventListener('click', toggleVertical);
 window.addEventListener('resize', syncVerticalRect);
 
+var cardPopToggleBtn = document.getElementById('cardPopToggleBtn');
+var cardPopMode = 'hover';
+function applyCardPopToggle() {
+  cardPopToggleBtn.textContent = cardPopMode === 'click' ? 'Click' : 'Hover';
+  cardPopToggleBtn.title = cardPopMode === 'click'
+    ? 'Cards only pop up when clicked. Toggle to pop them on hover.'
+    : 'Cards pop up on hover. Toggle to only pop them up when clicked.';
+}
+function sendCardPopMode() {
+  var hf = document.getElementById('handSlot');
+  if (hf && hf.contentWindow) {
+    hf.contentWindow.postMessage({ t: 'view', mode: cardPopMode }, '*');
+  }
+}
+function toggleCardPop() {
+  cardPopMode = cardPopMode === 'click' ? 'hover' : 'click';
+  applyCardPopToggle();
+  sendCardPopMode();
+  closeSettingsMenu();
+}
+applyCardPopToggle();
+cardPopToggleBtn.addEventListener('click', toggleCardPop);
+
 statsBar.addEventListener('load', function () {
   if (!statsBar.contentWindow) return;
   statsBar.contentWindow.postMessage({ t: 'vertical', on: statsBar.classList.contains('vertical-stats') }, '*');
@@ -1267,6 +1291,8 @@ window.addEventListener('message', function (e) {
     if (handSlot.classList.contains('expanded')) {
       handFrame.style.pointerEvents = m.on ? 'auto' : 'none';
     }
+  } else if (m.t === 'hand-ready') {
+    sendCardPopMode();
   }
   syncVerticalRect();
 });

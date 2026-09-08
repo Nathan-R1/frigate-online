@@ -82,6 +82,7 @@
   var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
   var HAND_DATA = [];
   var HAND_CHANNEL = null;
+  var POP_MODE = 'hover';
   function hasTrashKeyword(d){
     return !!(d && /Trash\./.test((d.onbuild || '') + ' ' + (d.passive || '') + ' ' + (d.onactivate || '')));
   }
@@ -146,6 +147,7 @@
       });
     }
     el.addEventListener('mouseenter', function(){
+      if(POP_MODE === 'click') return;
       var popped = el.parentNode ? el.parentNode.querySelector('.hand-card.popped') : null;
       if(popped && popped !== el) popped.classList.remove('popped');
       if(roomSync) roomSync();
@@ -480,7 +482,8 @@
     var view = document.querySelector('.hand-view');
     var strip = document.getElementById('hand');
     if(!view || !strip) return;
-    var up = strip.querySelector('.hand-card.popped') || strip.querySelector('.hand-card:hover');
+    var up = strip.querySelector('.hand-card.popped') ||
+             (POP_MODE === 'hover' ? strip.querySelector('.hand-card:hover') : null);
     view.classList.toggle('roomy', !!up);
     reportHandSize();
   }
@@ -618,6 +621,17 @@
     }
     hello();
   }
+  function setPopMode(mode){
+    POP_MODE = (mode === 'click') ? 'click' : 'hover';
+    var root = document.documentElement;
+    if(root.classList) root.classList.toggle('pop-click', POP_MODE === 'click');
+    syncHandRoom();
+  }
+  window.addEventListener('message', function(e){
+    var m = e.data;
+    if(!m || typeof m !== 'object' || m.t !== 'view') return;
+    setPopMode(m.mode);
+  });
   var peRaf = 0;
   var lastPE = null;
   function trackHandPointer(e){
@@ -642,6 +656,7 @@
   applyHandAlign();
   updateAlignUI();
   initChannel();
+  try{ window.parent.postMessage({ t:'hand-ready' }, '*'); }catch(e){}
 
   /* inline onclick/onchange attributes resolve against the global scope */
   window.toggleHand = toggleHand;
