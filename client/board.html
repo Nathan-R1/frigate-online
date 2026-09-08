@@ -145,6 +145,8 @@
   </div>
 </div>
 
+<div id="distReadout" class="dist-readout hidden"></div>
+
 <script>
 (function () {
 'use strict';
@@ -167,6 +169,7 @@ var piecesEl = document.getElementById('pieces');
 var chipsEl = document.getElementById('chips');
 var pingsEl = document.getElementById('pings');
 var losEl = document.getElementById('los');
+var distEl = document.getElementById('distReadout');
 var lastLosKey = '';
 var badgeEl = document.getElementById('badge');
 var saveBtn = document.getElementById('saveBtn');
@@ -458,6 +461,8 @@ function renderLos(fromX, fromY) {
   }
 }
 function clearLos() { losEl.innerHTML = ''; lastLosKey = ''; }
+function showDist(d) { distEl.textContent = String(d); distEl.classList.remove('hidden'); }
+function hideDist() { distEl.classList.add('hidden'); }
 
 function updateLosOnHover(cx, cy) {
   if (touchActive) return;
@@ -469,8 +474,13 @@ function updateLosOnHover(cx, cy) {
   var key = from && inGrid ? from.id + ',' + c.x + ',' + c.y : '';
   if (key === lastLosKey) return;
   lastLosKey = key;
-  if (key) renderLos(from.x, from.y);
-  else clearLos();
+  if (key) {
+    renderLos(from.x, from.y);
+    showDist(Math.abs(c.x - from.x) + Math.abs(c.y - from.y));
+  } else {
+    clearLos();
+    hideDist();
+  }
 }
 
 /* ===== selection / move ===== */
@@ -501,6 +511,7 @@ function setSelection(next) {
     sel = next;
   }
   clearLos();
+  hideDist();
   renderPieces();
   renderChips();
 }
@@ -891,7 +902,7 @@ function deleteObject(type, id) {
       break;
     }
   }
-  if (sel && sel.type === type && sel.id === id) { sel = null; clearLos(); }
+  if (sel && sel.type === type && sel.id === id) { sel = null; clearLos(); hideDist(); }
   if (type === 'piece') renderPieces(); else renderChips();
   queue('del:' + id, { action: 'delete', type: type, id: id });
 }
@@ -1545,7 +1556,7 @@ window.addEventListener('keydown', function (e) {
     if (!classInfoPopup.classList.contains('hidden')) { closeClassInfo(); return; }
     if (!popupEl.classList.contains('hidden')) { hideCreate(); return; }
     if (!swatchesEl.querySelector('.sw-menu').classList.contains('hidden')) { closeSwMenu(); return; }
-    if (sel) { sel = null; renderPieces(); renderChips(); clearLos(); }
+    if (sel) { sel = null; renderPieces(); renderChips(); clearLos(); hideDist(); }
   }
 });
 
