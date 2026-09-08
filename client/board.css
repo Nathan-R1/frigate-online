@@ -197,10 +197,15 @@ body.resizing #playerFrame { pointer-events: none; }
   pointer-events: none; opacity: 1;
 }
 .ping.bloom { animation: pingbloom .9s ease-out forwards; }
+.ping.fadeout { animation: pingfade .9s ease-in forwards; }
 @keyframes pingbloom {
   0% { opacity: 0; transform: scale(.4); }
   40% { opacity: 1; transform: scale(1.15); }
   100% { opacity: 1; transform: scale(1); }
+}
+@keyframes pingfade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 .blockflash {
   position: absolute; border: 2px solid rgba(255, 70, 70, .8); background: rgba(255, 70, 70, .12);
