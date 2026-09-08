@@ -208,6 +208,8 @@ body.resizing #playerFrame { pointer-events: none; }
 }
 @keyframes bf { 0% { opacity: 1; } 100% { opacity: 0; } }
 
+#los .shade { position: absolute; background: rgba(0, 0, 0, .55); }
+
 /* ===== create popup ===== */
 .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .overlay.hidden { display: none; }
