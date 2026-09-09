@@ -60,7 +60,7 @@
         </div>
         <div class="stat speed">
           <svg class="icon dec" onclick="tapStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div class="val"><input id="speedCur" value="4" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="4" maxlength="2"><output id="speedMax" class="derived">10</output></div>
+          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="2" maxlength="2"><output id="speedMax" class="derived">2</output></div>
           <div class="lbl">Speed</div>
         </div>
         <div class="stat">
@@ -328,7 +328,7 @@
     'Engineering': 'Engineering is added to Hull HP (min. 0)',
     'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
     'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
-    'Navigation': 'Twice Navigation is added to Speed (min. 0)',
+    'Navigation': 'Navigation is added to Speed (min. 0)',
     'Piloting': 'Sometimes you might have to dodge!!!',
     'Science': 'Select {SCIENCE} cards as Starter cards. They are played before combat begins.',
     'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
@@ -362,7 +362,7 @@
   function updateDerivedStats(){
     setOut('hullMax',     baseNum('hullBase') + skillBonus('Engineering'));
     setOut('shieldMax',   baseNum('shieldBase'));
-    setOut('speedMax',    baseNum('speedBase') + 2 * skillBonus('Navigation'));
+    setOut('speedMax',    baseNum('speedBase') + skillBonus('Navigation'));
     setOut('storageMax',  baseNum('storageBase') + skillBonus('Logistics'));
     var storageTotal = outVal('storageMax') - techStorageSum();
     setOut('storageCur', storageTotal);
