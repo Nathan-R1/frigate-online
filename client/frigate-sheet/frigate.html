@@ -997,7 +997,10 @@
     }
     var n = Math.min(x, deck.length);
     for(i=0;i<n;i++) setTechState(deck[i], 'hand');
+    var eCur = document.getElementById('energyCur');
+    if(eCur) eCur.value = String(outVal('energyMax'));
     handBroadcast();
+    broadcastHullStats();
   }
   var HULL_CHANNEL = null;
   function initHullStats(){

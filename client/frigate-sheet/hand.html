@@ -175,10 +175,10 @@
   var FILTER_CATS = [
     {key:'hand', label:'Hand', options:[
       {value:'', label:'N/A'},
+      {value:'actionable', label:'Actionable'},
       {value:'deck', label:'In Deck'},
       {value:'hand', label:'In hand'},
       {value:'playedexhausted', label:'Played+Exhausted'},
-      {value:'notindeckdiscard', label:'Not In Deck/Discard'},
       {value:'discarded', label:'In Discard'},
       {value:'trashed', label:'Trash'}
     ]},
@@ -347,7 +347,7 @@
       if(sf === 'deck'){ ok = (st === 'deck'); }
       else if(sf === 'hand'){ ok = (st === 'hand'); }
       else if(sf === 'playedexhausted'){ ok = (st === 'played' || st === 'exhausted'); }
-      else if(sf === 'notindeckdiscard'){ ok = (st !== 'deck' && st !== 'discarded'); }
+      else if(sf === 'actionable'){ ok = (st !== 'deck' && st !== 'discarded' && st !== 'trashed'); }
       else if(sf === 'discarded'){ ok = (st === 'discarded'); }
       else if(sf === 'trashed'){ ok = (st === 'trashed'); }
       if(!ok) return false;
