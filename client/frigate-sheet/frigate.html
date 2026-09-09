@@ -279,6 +279,7 @@
     var v = parseInt(el.value, 10);
     if(isNaN(v)) v = 0;
     if(v > 0) el.value = v - 1;
+    scheduleSheetAutosave();
   }
   function incrementStat(e, id){
     if(e && e.preventDefault) e.preventDefault();
@@ -287,6 +288,7 @@
     var v = parseInt(el.value, 10);
     if(isNaN(v)) v = 0;
     el.value = v + 1;
+    scheduleSheetAutosave();
   }
   function isSmallScreen(){ return window.matchMedia('(max-width: 640px)').matches; }
   function tapStat(e, id){
@@ -887,6 +889,7 @@
     if(!isTechState(state)) state = 'deck';
     card.setAttribute('data-state', state);
     syncTechStateUI(card);
+    scheduleSheetAutosave();
   }
   function syncTechStateUI(card){
     if(!card) return;
@@ -1031,6 +1034,7 @@
     if(eCur) eCur.value = String(outVal('energyMax'));
     handBroadcast();
     broadcastHullStats();
+    scheduleSheetAutosave();
   }
   var HULL_CHANNEL = null;
   function initHullStats(){
@@ -1053,6 +1057,7 @@
     if(isNaN(v)) v = 0;
     el.value = Math.max(0, v + (parseInt(delta, 10) || 0));
     broadcastHullStats();
+    scheduleSheetAutosave();
   }
   function statVal(id){
     var el = document.getElementById(id);
@@ -1850,6 +1855,21 @@
     writeMods(json.mods);
     updateDerivedStats();
   }
+  var SHEET_STORE_KEY = 'frigateSheet';
+  var autosaveTimer = null;
+  function saveSheetLocal(){
+    try { localStorage.setItem(SHEET_STORE_KEY, JSON.stringify(collectSheet())); } catch(e){}
+  }
+  function scheduleSheetAutosave(){
+    if(autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(saveSheetLocal, 500);
+  }
+  function restoreSheetLocal(){
+    try {
+      var raw = localStorage.getItem(SHEET_STORE_KEY);
+      if(raw) applySheet(JSON.parse(raw));
+    }catch(e){}
+  }
   function exportSheet(){
     var data = collectSheet();
     var blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -1896,6 +1916,14 @@
   (function(){
     document.addEventListener('pointermove', relaySheetPointer);
     document.addEventListener('pointerdown', relaySheetPointer);
+    restoreSheetLocal();
+    document.addEventListener('input', scheduleSheetAutosave);
+    document.addEventListener('change', scheduleSheetAutosave);
+    window.addEventListener('beforeunload', saveSheetLocal);
+    window.addEventListener('pagehide', saveSheetLocal);
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'hidden') saveSheetLocal();
+    });
     var cards = document.querySelectorAll('.tech-card');
     for(var i=0;i<cards.length;i++){
       setTechDeploy(cards[i].querySelector('.tdepbtn'), cards[i].querySelector('.tdepbtn').getAttribute('data-deploy'));
