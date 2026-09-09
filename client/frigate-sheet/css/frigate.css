@@ -24,7 +24,6 @@
     --dc-border:#0e8f83;
     --icon-hull:#2f7a4d;
     --icon-shield:#b8382a;
-    --icon-energy:#764795;
     --icon-charged:#9c3f66;
     --icon-amber:#a06a17;
     --icon-cyan:#0e8f83;
@@ -357,9 +356,6 @@ color:var(--icon-hull);
 .stat.shield .val{
 color:var(--icon-shield);
   }
-.stat.energy .val{
-color:var(--icon-energy);
-  }
 .stat.speed .val{
 color:var(--cyan);
   }
@@ -424,18 +420,6 @@ color:var(--ink);font-weight:600;
     font-size:13px;color:var(--ink-mid);
     list-style:circle;margin-bottom:1px;
   
-  }
-.rule-btn{
-
-    display:inline-flex;align-items:center;justify-content:center;
-    width:22px;height:22px;margin-left:4px;padding:0;
-    background:var(--stat-bg);border:1px solid var(--line-bright);
-    color:var(--icon-energy);font-family:var(--mono);font-size:14px;line-height:1;
-    cursor:pointer;vertical-align:middle;
-  
-  }
-.rule-btn:hover{
-border-color:var(--cyan);color:var(--cyan);
   }
 .info-btn{
 
@@ -788,29 +772,6 @@ display:none;
   }
 .tdepbtn.on{
 opacity:1;
-  }
-.tdiamond,.mcost{
-
-    display:flex;align-items:center;justify-content:center;gap:3px;
-    width:24px;height:24px;
-    border:1px solid var(--icon-energy);color:var(--icon-energy);
-    transform:rotate(45deg);
-  
-  }
-.tdiamond.hid,.mcost.hid{
-display:none;
-  }
-.tdiamond .ticon,.tdiamond input,.mcost .ticon,.mcost input{
-transform:rotate(-45deg);
-  }
-.tdiamond .ticon,.mcost .ticon{
-width:11px;height:11px;flex:none;
-  }
-.tdiamond input,.mcost input{
-
-    width:13px;text-align:center;font-family:var(--mono);font-weight:700;font-size:11px;color:var(--icon-energy);
-    background:transparent;border:none;padding:0;
-  
   }
 /* ===== modules / deployables panel ===== */
   .mod-grid{

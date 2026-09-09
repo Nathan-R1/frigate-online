@@ -29,7 +29,6 @@
   .sb-sep { font-family: var(--mono); font-weight: 600; font-size: 16px; color: var(--ink-dim); line-height: 1; }
   .sb-item.hull .sb-num { color: var(--icon-hull); }
   .sb-item.shield .sb-num { color: var(--icon-shield); }
-  .sb-item.energy .sb-num { color: var(--icon-energy); }
   .sb-item.speed .sb-num { color: var(--icon-cyan); }
   .sb-item.dc { cursor: default; }
   .sb-item.storage .sb-num { color: var(--icon-logistics); }
@@ -143,10 +142,6 @@
       </div>
       <div class="sb-item shield">
         <svg viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-        <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
-      </div>
-      <div class="sb-item energy">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
         <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
       </div>
       <div class="sb-item speed">
@@ -274,7 +269,6 @@
     var s = m.stats || {};
     set(s.hull,   document.querySelector('.sb-item.hull'));
     set(s.shield, document.querySelector('.sb-item.shield'));
-    set(s.energy, document.querySelector('.sb-item.energy'));
     set(s.speed,  document.querySelector('.sb-item.speed'));
     if(s.storage){
       var cur = s.storage.cur;
@@ -297,7 +291,7 @@
     var dcEl = document.getElementById('sbDc');
     if(m.dc !== undefined && String(m.dc) !== '') dcEl.textContent = m.dc;
   }
-  var KEYS = ['hull', 'shield', 'energy', 'speed'];
+  var KEYS = ['hull', 'shield', 'speed'];
   function isSmallScreen(){ return window.matchMedia('(max-width: 640px)').matches; }
   function adjust(key, delta){
     if(ch) ch.postMessage({ t: 'adjust', key: key, delta: delta });

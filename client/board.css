@@ -310,7 +310,6 @@ body.resizing #playerFrame { pointer-events: none; }
 :root {
   --icon-hull: #7fd88a;
   --icon-shield: #d75b4e;
-  --icon-energy: #764795;
   --icon-amber: #a06a17;
   --icon-cyan: #0e8f83;
   --cyan: #35d0e0;

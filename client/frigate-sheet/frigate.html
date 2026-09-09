@@ -58,11 +58,6 @@
           <div class="val"><input id="shieldCur" value="6" maxlength="2"><span class="sep">/</span><input id="shieldBase" class="base-edit" value="6" maxlength="2"><output id="shieldMax" class="derived">6</output></div>
           <div class="lbl">Base Shield</div>
         </div>
-        <div class="stat energy">
-          <svg class="icon dec" onclick="tapStat(event,'energyCur')" oncontextmenu="decrementStat(event,'energyCur')" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-          <div class="val"><input id="energyCur" value="6" maxlength="2"><span class="sep">/</span><input id="energyBase" class="base-edit" value="6" maxlength="2"><output id="energyMax" class="derived">6</output></div>
-          <div class="lbl">Energy</div>
-        </div>
         <div class="stat speed">
           <svg class="icon dec" onclick="tapStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div class="val"><input id="speedCur" value="4" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="4" maxlength="2"><output id="speedMax" class="derived">10</output></div>
@@ -153,7 +148,7 @@
           <div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>
           <div class="tsecs">
             <div class="tsec onbuild hid">
-              <div class="tsec-head"><span>On Play</span><span class="tdiamond" title="On Play energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onbuild" maxlength="2"></span></div>
+              <div class="tsec-head"><span>On Play</span></div>
               <textarea placeholder="On Play..."></textarea>
             </div>
             <div class="tsec passive hid">
@@ -161,7 +156,7 @@
               <textarea placeholder="Passive..."></textarea>
             </div>
             <div class="tsec onactivate hid">
-              <div class="tsec-head"><span>On Activate</span><span class="tdiamond" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onactivate" maxlength="2"></span></div>
+              <div class="tsec-head"><span>On Activate</span></div>
               <textarea placeholder="On Activate..."></textarea>
             </div>
           </div>
@@ -204,7 +199,7 @@
             <textarea placeholder="Passive..."></textarea>
           </div>
           <div class="msec onactivate hid">
-            <div class="msec-head"><span>On Activate</span><span class="mcost" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="mcost-input" maxlength="2"></span></div>
+            <div class="msec-head"><span>On Activate</span></div>
             <textarea placeholder="On Activate..."></textarea>
           </div>
         </div>
@@ -367,7 +362,6 @@
   function updateDerivedStats(){
     setOut('hullMax',     baseNum('hullBase') + skillBonus('Engineering'));
     setOut('shieldMax',   baseNum('shieldBase'));
-    setOut('energyMax',   baseNum('energyBase'));
     setOut('speedMax',    baseNum('speedBase') + 2 * skillBonus('Navigation'));
     setOut('storageMax',  baseNum('storageBase') + skillBonus('Logistics'));
     var storageTotal = outVal('storageMax') - techStorageSum();
@@ -378,7 +372,7 @@
     setOut('drawPlayEff', baseNum('drawPlayBase') + Math.floor(skillBonus('Science') / 2));
     setOut('drawDrawEff', baseNum('drawDrawBase') + skillBonus('Cyber'));
   }
-  var DERIVED_BASE_IDS = ['hullBase','shieldBase','energyBase','speedBase','storageBase','sensorRangeBase','drawPlayBase','drawDrawBase'];
+  var DERIVED_BASE_IDS = ['hullBase','shieldBase','speedBase','storageBase','sensorRangeBase','drawPlayBase','drawDrawBase'];
   function toggleStatsEdit(){
     var btn = document.getElementById('editStatsBtn');
     var panel = btn.closest('.panel');
@@ -691,9 +685,9 @@
       '<div class="thead"><input class="tname" placeholder="TECH NAME"><button type="button" class="tbuilt-btn" data-state="deck" onclick="toggleTechState(this)" title="Cycle state: deck / hand / played / exhausted / trash / discard">🂱</button><button type="button" class="t-delete" onclick="removeTechCard(this)" title="Delete this tech">🗑</button><button type="button" class="tsecedit" onclick="toggleTechEdit(this)" title="Edit sections">Edit</button></div>' +
       '<div class="tsub"><input class="ttraits" placeholder="TRAITS"></div>' +
       '<div class="tsecs">' +
-        '<div class="tsec onbuild hid"><div class="tsec-head"><span>On Play</span><span class="tdiamond" title="On Play energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onbuild" maxlength="2"></span></div><textarea placeholder="On Play..."></textarea></div>' +
+        '<div class="tsec onbuild hid"><div class="tsec-head"><span>On Play</span></div><textarea placeholder="On Play..."></textarea></div>' +
         '<div class="tsec passive hid"><div class="tsec-head"><span>Passive</span></div><textarea placeholder="Passive..."></textarea></div>' +
-        '<div class="tsec onactivate hid"><div class="tsec-head"><span>On Activate</span><span class="tdiamond" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tcost-onactivate" maxlength="2"></span></div><textarea placeholder="On Activate..."></textarea></div>' +
+        '<div class="tsec onactivate hid"><div class="tsec-head"><span>On Activate</span></div><textarea placeholder="On Activate..."></textarea></div>' +
       '</div>' +
       '<div class="tfoot">' +
         '<span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>' +
@@ -866,8 +860,6 @@
     card.querySelector('.tstorage-input').value = (t.storage !== undefined && t.storage !== null) ? t.storage : '';
     card.querySelector('.thull-input').value = (t.hull !== undefined && t.hull !== null) ? t.hull : '';
     card.querySelector('.tcharges-input').value = (t.charges !== undefined && t.charges !== null) ? t.charges : '';
-    card.querySelector('.tcost-onbuild').value = (t.onbuildenergy !== undefined && t.onbuildenergy !== null) ? t.onbuildenergy : '';
-    card.querySelector('.tcost-onactivate').value = (t.onactivateenergy !== undefined && t.onactivateenergy !== null) ? t.onactivateenergy : '';
     setTechType(card.querySelector('.tticker'), t.tt);
     setTechDeploy(card.querySelector('.tdepbtn'), t.deploy);
     refreshTechSections(card);
@@ -926,8 +918,6 @@
       onbuild: card.querySelector('.tsec.onbuild textarea').value,
       passive: card.querySelector('.tsec.passive textarea').value,
       onactivate: card.querySelector('.tsec.onactivate textarea').value,
-      onbuildenergy: card.querySelector('.tcost-onbuild').value,
-      onactivateenergy: card.querySelector('.tcost-onactivate').value,
       charges: card.querySelector('.tcharges-input').value
     };
   }
@@ -943,8 +933,6 @@
         onbuild: c.querySelector('.tsec.onbuild textarea').value,
         passive: c.querySelector('.tsec.passive textarea').value,
         onactivate: c.querySelector('.tsec.onactivate textarea').value,
-        onbuildenergy: c.querySelector('.tcost-onbuild').value,
-        onactivateenergy: c.querySelector('.tcost-onactivate').value,
         charges: c.querySelector('.tcharges-input').value,
         state: techState(c)
       });
@@ -968,26 +956,12 @@
     if(!HAND_CHANNEL) return;
     HAND_CHANNEL.postMessage({ t:'snapshot', cards: handTechSnapshot() });
   }
-  function techCostNum(card, cls){
-    var inp = card ? card.querySelector(cls) : null;
-    if(!inp) return 0;
-    var v = parseFloat(inp.value);
-    return (isNaN(v) || v <= 0) ? 0 : v;
-  }
   function handleHandState(idx, state){
     var grid = document.getElementById('techGrid');
     var card = grid ? grid.children[idx] : null;
     if(!card || !isTechState(state)) return;
-    var from = techState(card);
-    var cost = 0;
-    if(from === 'hand' && state === 'played'){
-      cost = techCostNum(card, '.tcost-onbuild');
-    } else if(from === 'played' && state === 'exhausted'){
-      cost = techCostNum(card, '.tcost-onactivate');
-    }
     setTechState(card, state);
     handBroadcast();
-    if(cost > 0) adjustHullCur('energy', -cost);
   }
   function handleHandCharge(idx, delta){
     var grid = document.getElementById('techGrid');
@@ -1030,8 +1004,6 @@
     }
     var n = Math.min(x, deck.length);
     for(i=0;i<n;i++) setTechState(deck[i], 'hand');
-    var eCur = document.getElementById('energyCur');
-    if(eCur) eCur.value = String(outVal('energyMax'));
     handBroadcast();
     broadcastHullStats();
     scheduleSheetAutosave();
@@ -1050,7 +1022,7 @@
     setInterval(broadcastHullStats, 750);
   }
   function adjustHullCur(key, delta){
-    if(['hull','shield','energy','speed'].indexOf(key) === -1) return;
+    if(['hull','shield','speed'].indexOf(key) === -1) return;
     var el = document.getElementById(key + 'Cur');
     if(!el) return;
     var v = parseInt(el.value, 10);
@@ -1077,7 +1049,6 @@
     HULL_CHANNEL.postMessage({ t:'stats', name: statStr('shipName'), dc: statStr('dcHex'), stats:{
       hull:   { cur: statVal('hullCur'),   max: outVal('hullMax') },
       shield: { cur: statVal('shieldCur'), max: outVal('shieldMax') },
-      energy: { cur: statVal('energyCur'), max: outVal('energyMax') },
       speed:  { cur: statVal('speedCur'),  max: outVal('speedMax') },
       storage:{ cur: outVal('storageCur'), max: outVal('storageMax') },
       sensorRange: outVal('sensorRange'),
@@ -1104,25 +1075,13 @@
     for(var i=0;i<secs.length;i++){
       var field = secs[i].querySelector('textarea');
       var hasText = field && field.value.trim() !== '';
-      var diamond = secs[i].querySelector('.tdiamond');
-      var hasCost = diamond && !!diamond.querySelector('input') && diamond.querySelector('input').value.trim() !== '';
-      if(secs[i].classList.contains('onbuild')){
-        secs[i].classList.toggle('hid', !hasText && !hasCost && !editing);
-      } else {
-        secs[i].classList.toggle('hid', !hasText && !editing);
-      }
+      secs[i].classList.toggle('hid', !hasText && !editing);
       if(field){
         field.disabled = !editing;
         if(secs[i].classList.contains('onbuild')){
           field.placeholder = editing ? 'On Play...' : '';
         }
       }
-        var diamond = secs[i].querySelector('.tdiamond');
-        if(diamond){
-          var inp = diamond.querySelector('input');
-          var hasVal = inp && inp.value.trim() !== '';
-          diamond.classList.toggle('hid', !hasVal && !editing);
-        }
         var secText = field ? field.value : '';
         var hasMod = /create\s+module/i.test(secText);
         var hasDep = /create\s+deployable/i.test(secText);
@@ -1159,10 +1118,6 @@
       var cEmpty = !cInp || cInp.value.trim() === '';
       charges.classList.toggle('hid', cEmpty && !editing);
       if(cInp) cInp.disabled = !editing;
-    }
-    var diamonds = card.querySelectorAll('.tdiamond input');
-    for(var d=0; d<diamonds.length; d++){
-      diamonds[d].disabled = !editing;
     }
   }
   function toggleTechEdit(btn){
@@ -1364,7 +1319,7 @@
       '<div class="msecs">' +
         '<div class="msec onbuild hid"><div class="msec-head"><span>On Play</span></div><textarea placeholder="On Play..."></textarea></div>' +
         '<div class="msec passive hid"><div class="msec-head"><span>Passive</span></div><textarea placeholder="Passive..."></textarea></div>' +
-        '<div class="msec onactivate hid"><div class="msec-head"><span>On Activate</span><span class="mcost" title="On Activate energy"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="mcost-input" maxlength="2"></span></div><textarea placeholder="On Activate..."></textarea></div>' +
+        '<div class="msec onactivate hid"><div class="msec-head"><span>On Activate</span></div><textarea placeholder="On Activate..."></textarea></div>' +
       '</div>' +
       '<div class="mfoot">' +
         '<span class="mticker" data-mt="offense" title="Tech type: Offense">⚔</span>' +
@@ -1403,13 +1358,6 @@
       var hasText = field && field.value.trim() !== '';
       secs[i].classList.toggle('hid', !hasText && !editing);
       if(field) field.disabled = !editing;
-      var cost = secs[i].querySelector('.mcost');
-      if(cost){
-        var inp = cost.querySelector('input');
-        var hasVal = inp && inp.value.trim() !== '';
-        cost.classList.toggle('hid', !hasVal && !editing);
-        if(inp) inp.disabled = !editing;
-      }
     }
     var name = card.querySelector('.mname');
     if(name) name.disabled = !editing;
@@ -1576,7 +1524,6 @@
     card.querySelector('.msec.onbuild textarea').value = p.onbuild || '';
     card.querySelector('.msec.passive textarea').value = p.passive || '';
     card.querySelector('.msec.onactivate textarea').value = p.onactivate || '';
-    card.querySelector('.mcost-input').value = (p.onactivateenergy !== undefined && p.onactivateenergy !== null) ? p.onactivateenergy : '';
     setModType(card.querySelector('.mtype-btn'), p.type || 'module');
     setModTechType(card.querySelector('.mticker'), p.tt || 'offense');
     setModuleShape(card.querySelector('.mshape-btn'), p.shape || '');
@@ -1653,7 +1600,6 @@
         onbuild: card.querySelector('.msec.onbuild textarea').value,
         passive: card.querySelector('.msec.passive textarea').value,
         onactivate: card.querySelector('.msec.onactivate textarea').value,
-        onactivateenergy: card.querySelector('.mcost-input').value,
         type: card.querySelector('.mtype-btn').getAttribute('data-mtype'),
         tt: card.querySelector('.mticker').getAttribute('data-mt'),
         shape: card.querySelector('.mshape-btn').getAttribute('data-shape'),
@@ -1687,7 +1633,6 @@
       card.querySelector('.msec.onbuild textarea').value = item.onbuild || '';
       card.querySelector('.msec.passive textarea').value = item.passive || '';
       card.querySelector('.msec.onactivate textarea').value = item.onactivate || '';
-      card.querySelector('.mcost-input').value = item.onactivateenergy || '';
       setModType(card.querySelector('.mtype-btn'), item.type || 'module');
       setModTechType(card.querySelector('.mticker'), item.tt || 'offense');
       setModuleShape(card.querySelector('.mshape-btn'), item.shape || '');
@@ -1756,8 +1701,6 @@
         onbuild: card.querySelector('.tsec.onbuild textarea').value,
         passive: card.querySelector('.tsec.passive textarea').value,
         onactivate: card.querySelector('.tsec.onactivate textarea').value,
-        onbuildenergy: card.querySelector('.tcost-onbuild').value,
-        onactivateenergy: card.querySelector('.tcost-onactivate').value,
         techType: card.querySelector('.tticker').getAttribute('data-tt'),
         storage: card.querySelector('.tstorage-input').value,
         hull: card.querySelector('.thull-input').value,
@@ -1782,8 +1725,6 @@
       card.querySelector('.tsec.onbuild textarea').value = item.onbuild || '';
       card.querySelector('.tsec.passive textarea').value = item.passive || '';
       card.querySelector('.tsec.onactivate textarea').value = item.onactivate || '';
-      card.querySelector('.tcost-onbuild').value = item.onbuildenergy || '';
-      card.querySelector('.tcost-onactivate').value = item.onactivateenergy || '';
       card.querySelector('.tstorage-input').value = item.storage || '';
       card.querySelector('.thull-input').value = item.hull || '';
       card.querySelector('.tcharges-input').value = item.charges || '';
@@ -1814,7 +1755,6 @@
       stats: {
         hullCur: v('hullCur'), hullBase: v('hullBase'),
         shieldCur: v('shieldCur'), shieldBase: v('shieldBase'),
-        energyCur: v('energyCur'), energyBase: v('energyBase'),
         speedCur: v('speedCur'), speedBase: v('speedBase'),
         storageBase: v('storageBase'),
         sensorRangeBase: v('sensorRangeBase'),
@@ -1841,8 +1781,6 @@
     set('hullBase', pick(s, 'hullBase', 'hullMax'));
     set('shieldCur', s.shieldCur);
     set('shieldBase', pick(s, 'shieldBase', 'shieldMax'));
-    set('energyCur', s.energyCur);
-    set('energyBase', pick(s, 'energyBase', 'energyMax'));
     set('speedCur', s.speedCur);
     set('speedBase', pick(s, 'speedBase', 'speedMax'));
     set('storageBase', pick(s, 'storageBase', 'storageMax'));
