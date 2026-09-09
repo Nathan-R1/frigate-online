@@ -29,5 +29,5 @@ var TECH_PRESETS = [
     {name:'Grav Jet', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to add 2 charge token to this card OR remove 2 charge tokens to immediately Move any Modules up to 2.', tt:'science', onactivateenergy:'1', storage:'0', charges:'0', deploy:false},
     {name:'SU Scanners', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to identify the location of any Stealth Objects in sensor range.', tt:'science', onactivateenergy:'2', storage:'0', deploy:false},
     {name:'Ramming Sheilds', traits:'Class Tech', onbuild:'', passive:'You may move into spaces occupied by Modules. When you do, make an Engineering Check. If you beat the enemy’s ship DC you may move the enemy module 1 and deal 1 hull dmg to it. If you fail the check you are returned to your space.', onactivate:'', tt:'offense', onbuildenergy:'2', onactivateenergy:'', storage:'0', deploy:false},
-    {name:'Boost', traits:'', onbuild:'Play 2 more, Trash.', passive:'', onactivate:'', tt:'science', onbuildenergy:'2', onactivateenergy:'', storage:'0', deploy:false}
+    {name:'Boost', traits:'', onbuild:'Play 2 more, Discard.', passive:'', onactivate:'', tt:'science', onbuildenergy:'2', onactivateenergy:'', storage:'0', deploy:false}
   ];
