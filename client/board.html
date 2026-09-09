@@ -1088,6 +1088,24 @@ gridInput.addEventListener('change', function () {
 var playerPanel = document.querySelector('.player-panel');
 var playerResizer = document.getElementById('playerResizer');
 
+/* ===== persist UI view preferences across refreshes ===== */
+var VIEW_STORE_KEY = 'frigateView';
+function loadViewState() {
+  try { return JSON.parse(localStorage.getItem(VIEW_STORE_KEY)) || {}; } catch (e) { return {}; }
+}
+function saveViewState() {
+  try {
+    localStorage.setItem(VIEW_STORE_KEY, JSON.stringify({
+      sheet: playerPanel && playerPanel.classList.contains('hidden-sheet') ? 1 : 0,
+      stats: STATS_MODES[statsModeIdx],
+      menu: topbarEl && topbarEl.classList.contains('hidden-menu') ? 1 : 0,
+      vertical: statsBar && statsBar.classList.contains('vertical-stats') ? 1 : 0,
+      cardPop: cardPopMode || 'hover',
+      width: (playerPanel && playerPanel.style.width) || ''
+    }));
+  } catch (e) {}
+}
+
 playerResizer.addEventListener('mousedown', function (e) {
   e.preventDefault();
   var startX = e.clientX;
@@ -1103,6 +1121,7 @@ playerResizer.addEventListener('mousedown', function (e) {
     document.body.classList.remove('resizing');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    saveViewState();
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -1184,10 +1203,14 @@ document.getElementById('settingsBtn').addEventListener('click', function (e) {
 document.getElementById('rulesBtn').addEventListener('click', openRules);
 
 var sheetToggleBtn = document.getElementById('sheetToggleBtn');
-function toggleSheet() {
-  var hidden = playerPanel.classList.toggle('hidden-sheet');
+function setSheetHidden(hidden) {
+  playerPanel.classList.toggle('hidden-sheet', hidden);
   sheetToggleBtn.textContent = hidden ? 'Show Sheet' : 'Hide Sheet';
   sheetToggleBtn.title = hidden ? 'Show the player sheet panel' : 'Hide the player sheet panel';
+}
+function toggleSheet() {
+  setSheetHidden(!playerPanel.classList.contains('hidden-sheet'));
+  saveViewState();
   closeSettingsMenu();
 }
 sheetToggleBtn.addEventListener('click', toggleSheet);
@@ -1195,7 +1218,11 @@ sheetToggleBtn.addEventListener('click', toggleSheet);
 var statsToggleBtn = document.getElementById('statsToggleBtn');
 var statsBar = document.getElementById('hullStatsBar');
 var STATS_MODES = ['hidden', 'shown', 'detailed'];
-var statsModeIdx = 1;
+var statsModeIdx = (function () {
+  var s = loadViewState();
+  for (var i = 0; i < STATS_MODES.length; i++) { if (STATS_MODES[i] === s.stats) return i; }
+  return 1;
+})();
 function setStatsMode(idx) {
   statsModeIdx = ((idx % STATS_MODES.length) + STATS_MODES.length) % STATS_MODES.length;
   var mode = STATS_MODES[statsModeIdx];
@@ -1212,18 +1239,22 @@ function setStatsMode(idx) {
                         : 'Hide the stats bar';
   closeSettingsMenu();
 }
-function toggleStats() { setStatsMode(statsModeIdx + 1); }
+function toggleStats() { setStatsMode(statsModeIdx + 1); saveViewState(); }
 statsToggleBtn.addEventListener('click', toggleStats);
 setStatsMode(statsModeIdx);
 
 var topbarEl = document.querySelector('.topbar');
 var menuToggleBtn = document.getElementById('menuToggleBtn');
-function toggleMenu() {
-  var hidden = topbarEl.classList.toggle('hidden-menu');
+function setMenuHidden(hidden) {
+  topbarEl.classList.toggle('hidden-menu', hidden);
   menuToggleBtn.textContent = hidden ? 'Show Menu' : 'Hide Menu';
   menuToggleBtn.title = hidden ? 'Show the top menu bar' : 'Hide the top menu bar';
-  closeSettingsMenu();
   syncVerticalRect();
+}
+function toggleMenu() {
+  setMenuHidden(!topbarEl.classList.contains('hidden-menu'));
+  saveViewState();
+  closeSettingsMenu();
 }
 menuToggleBtn.addEventListener('click', toggleMenu);
 
@@ -1280,18 +1311,22 @@ function syncVerticalRect() {
   statsBar.style.bottom = 'auto';
   statsBar.style.height = Math.max(0, window.innerHeight - top - 46) + 'px';
 }
-function toggleVertical() {
-  var v = statsBar.classList.toggle('vertical-stats');
-  verticalToggleBtn.textContent = v ? 'Horizontal' : 'Vertical';
-  verticalToggleBtn.title = v ? 'Show the stats bar horizontally at the top' : 'Show the stats bar vertically along the right edge';
-  if (!v) {
+function setVertical(on) {
+  statsBar.classList.toggle('vertical-stats', on);
+  verticalToggleBtn.textContent = on ? 'Horizontal' : 'Vertical';
+  verticalToggleBtn.title = on ? 'Show the stats bar horizontally at the top' : 'Show the stats bar vertically along the right edge';
+  if (!on) {
     statsBar.style.top = '';
     statsBar.style.bottom = '';
     statsBar.style.height = '';
   } else {
     syncVerticalRect();
   }
-  if (statsBar.contentWindow) statsBar.contentWindow.postMessage({ t: 'vertical', on: v }, '*');
+  if (statsBar.contentWindow) statsBar.contentWindow.postMessage({ t: 'vertical', on: on }, '*');
+}
+function toggleVertical() {
+  setVertical(!statsBar.classList.contains('vertical-stats'));
+  saveViewState();
   closeSettingsMenu();
 }
 verticalToggleBtn.addEventListener('click', toggleVertical);
@@ -1315,10 +1350,22 @@ function toggleCardPop() {
   cardPopMode = cardPopMode === 'click' ? 'hover' : 'click';
   applyCardPopToggle();
   sendCardPopMode();
+  saveViewState();
   closeSettingsMenu();
 }
 applyCardPopToggle();
 cardPopToggleBtn.addEventListener('click', toggleCardPop);
+
+/* restore persisted view preferences (survives hard refresh via localStorage) */
+(function restoreView() {
+  var s = loadViewState();
+  if (s.sheet) setSheetHidden(true);
+  if (s.menu) setMenuHidden(true);
+  if (s.vertical) setVertical(true);
+  if (s.cardPop) cardPopMode = (s.cardPop === 'click') ? 'click' : 'hover';
+  applyCardPopToggle();
+  if (s.width) playerPanel.style.width = s.width;
+})();
 
 statsBar.addEventListener('load', function () {
   if (!statsBar.contentWindow) return;

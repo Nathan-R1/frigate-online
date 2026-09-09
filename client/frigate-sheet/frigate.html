@@ -230,6 +230,7 @@
     if(!panel) return;
     panel.classList.toggle('collapsed');
     syncGridCollapse(panel.parentNode);
+    savePanelCollapse();
   }
   function syncGridCollapse(container){
     if(!container || !container.classList) return;
@@ -249,6 +250,27 @@
     for(var k=0;k<containers.length;k++){
       syncGridCollapse(containers[k]);
     }
+    savePanelCollapse();
+  }
+  function savePanelCollapse(){
+    try {
+      var ps = document.querySelectorAll('.grid > .panel, .row2 > .panel, .mod-panel');
+      var arr = [];
+      for(var i=0;i<ps.length;i++) arr.push(ps[i].classList.contains('collapsed') ? '1' : '0');
+      localStorage.setItem('frigatePanels', arr.join(''));
+    }catch(e){}
+  }
+  function restorePanelCollapse(){
+    try {
+      var s = localStorage.getItem('frigatePanels');
+      if(!s) return;
+      var ps = document.querySelectorAll('.grid > .panel, .row2 > .panel, .mod-panel');
+      for(var i=0;i<ps.length && i<s.length;i++){
+        if(s.charAt(i) === '1') ps[i].classList.add('collapsed');
+      }
+      var cs = document.querySelectorAll('.grid, .row2');
+      for(var k=0;k<cs.length;k++) syncGridCollapse(cs[k]);
+    }catch(e){}
   }
   function decrementStat(e, id){
     if(e && e.preventDefault) e.preventDefault();
@@ -463,6 +485,14 @@
     var next = current === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     updateToggleLabel(next);
+    try { localStorage.setItem('frigateTheme', next); } catch(e){}
+  }
+  function applySavedTheme(){
+    var saved;
+    try { saved = localStorage.getItem('frigateTheme'); } catch(e){ saved = null; }
+    var theme = (saved === 'light') ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateToggleLabel(theme);
   }
 
   function slotLabel(n){
@@ -1896,6 +1926,8 @@
     for(var g=0;g<containers.length;g++){
       syncGridCollapse(containers[g]);
     }
+    applySavedTheme();
+    restorePanelCollapse();
   })();
 </script>
 <div id="skillPopover"></div>
