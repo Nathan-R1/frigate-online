@@ -429,16 +429,6 @@ font-size:11px;line-height:1.3;color:var(--ink);white-space:pre-wrap;
 .hand-card .hc-sec b{
 display:block;font-family:var(--mono);font-size:8.5px;color:var(--ink-dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:1px;
   }
-.hand-card .hc-sec b .hc-cost-inline{
-
-    display:inline-flex;align-items:center;gap:2px;text-transform:none;
-    font-weight:700;font-size:10px;color:var(--icon-energy);letter-spacing:0;
-    margin-left:4px;vertical-align:middle;
-  
-  }
-.hand-card .hc-sec b .hc-cost-inline svg{
-width:11px;height:11px;flex:none;
-  }
 .hand-card .hc-foot{
 
     display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -450,19 +440,6 @@ width:11px;height:11px;flex:none;
     display:flex;align-items:center;
     font-size:16px;line-height:1;
   
-  }
-.hand-card .hc-cost{
-
-    flex:none;
-    display:flex;align-items:center;justify-content:center;gap:2px;
-    font-family:var(--mono);font-weight:700;font-size:12px;color:var(--icon-energy);
-    border:1px solid var(--icon-energy);
-    padding:1px 4px;
-    line-height:1.1;
-  
-  }
-.hand-card .hc-cost svg{
-width:13px;height:13px;flex:none;
   }
 .hand-card .hc-charges{
 

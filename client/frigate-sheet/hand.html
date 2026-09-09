@@ -30,7 +30,6 @@
           <option value="az">Name</option>
           <option value="trait">Trait</option>
           <option value="type">Type</option>
-          <option value="energy">Energy</option>
         </select>
         <button type="button" class="hand-icon-btn" id="handSortBtn" onclick="openHandSelect('handSort')" title="Sort hand">⇵</button>
       </span>
@@ -70,16 +69,9 @@
   function escapeHtml(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-  function energyLabel(label, cost){
-    if(cost && cost !== '0'){
-      return label + ' <span class="hc-cost-inline">' + escapeHtml(cost) +
-        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>';
-    }
-    return label;
-  }
   var HAND_SORT = 'az';
   var HAND_TYPE_ORDER = { offense:0, defense:1, movement:2, science:3 };
-  var HAND_FILTERS = { hand:'', type:'', energy:'', trait:'' };
+  var HAND_FILTERS = { hand:'', type:'', trait:'' };
   var HAND_DATA = [];
   var HAND_CHANNEL = null;
   var POP_MODE = 'hover';
@@ -97,24 +89,19 @@
   }
   function handCardHtml(d, state){
     var typeIcon = techTypeMeta(d.typeKey).icon;
-    var costVal = (state === 'played') ? d.onactivateenergy : (state === 'hand' ? d.onbuildenergy : '');
-    var costHtml = (costVal && costVal !== '0')
-      ? '<span class="hc-cost">' + escapeHtml(costVal) +
-        '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="var(--icon-energy)" stroke-width="1.8" stroke-linejoin="round"/></svg></span>'
-      : '';
     var chargesVal = (d.charges || '').trim();
     var chargesHtml = (chargesVal !== '')
       ? '<span class="hc-charges">' + escapeHtml(chargesVal) +
         '<svg viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg></span>'
       : '';
-    return '<div class="hc-head">' + costHtml +
+    return '<div class="hc-head">' +
         '<div class="hc-name">' + escapeHtml(d.name || 'UNTITLED TECH') + '</div>' +
       '</div>' +
       (d.traits ? '<div class="hc-traits">' + escapeHtml(d.traits) + '</div>' : '') +
       '<div class="hc-secs">' +
-        (d.onbuild || d.onbuildenergy ? '<div class="hc-sec"><b>' + energyLabel('On Play', d.onbuildenergy) + '</b>' + escapeHtml(d.onbuild) + '</div>' : '') +
+        (d.onbuild ? '<div class="hc-sec"><b>On Play</b>' + escapeHtml(d.onbuild) + '</div>' : '') +
         (d.passive ? '<div class="hc-sec"><b>Passive</b>' + escapeHtml(d.passive) + '</div>' : '') +
-        (d.onactivate ? '<div class="hc-sec"><b>' + energyLabel('On Activate', d.onactivateenergy) + '</b>' + escapeHtml(d.onactivate) + '</div>' : '') +
+        (d.onactivate ? '<div class="hc-sec"><b>On Activate</b>' + escapeHtml(d.onactivate) + '</div>' : '') +
       '</div>' +
       '<div class="hc-foot">' +
         '<span class="hc-tags">' + escapeHtml(typeIcon) +
@@ -188,11 +175,6 @@
       {value:'defense', label:'Defense'},
       {value:'movement', label:'Movement'},
       {value:'science', label:'Science'}
-    ]},
-    {key:'energy', label:'Energy', options:[
-      {value:'', label:'N/A'},
-      {value:'has', label:'Has cost'},
-      {value:'none', label:'No cost'}
     ]},
     {key:'trait', label:'Trait', options:[
       {value:'', label:'N/A'},
@@ -355,11 +337,6 @@
     if(HAND_FILTERS.type){
       if(d.typeKey !== HAND_FILTERS.type) return false;
     }
-    if(HAND_FILTERS.energy){
-      var e = d.onbuildenergy;
-      var hasCost = !!(e && e.trim() !== '' && parseFloat(e) > 0);
-      if((HAND_FILTERS.energy === 'has') !== hasCost) return false;
-    }
     if(HAND_FILTERS.trait){
       if((HAND_FILTERS.trait === 'has') !== !!d.traits) return false;
     }
@@ -380,14 +357,6 @@
         if(oa === undefined) oa = 99;
         if(ob === undefined) ob = 99;
         if(oa !== ob) return oa - ob;
-        return (da.name || '').localeCompare(db.name || '');
-      }
-      if(HAND_SORT === 'energy'){
-        var ea = parseFloat(da.onbuildenergy);
-        var eb = parseFloat(db.onbuildenergy);
-        if(isNaN(ea)) ea = Infinity;
-        if(isNaN(eb)) eb = Infinity;
-        if(ea !== eb) return ea - eb;
         return (da.name || '').localeCompare(db.name || '');
       }
       return (da.name || '').localeCompare(db.name || '');
@@ -457,8 +426,7 @@
         }
         if(od.name !== nd.name || od.typeKey !== nd.typeKey ||
            od.traits !== nd.traits || od.onbuild !== nd.onbuild ||
-           od.onbuildenergy !== nd.onbuildenergy || od.passive !== nd.passive ||
-           od.onactivate !== nd.onactivate || od.onactivateenergy !== nd.onactivateenergy ||
+           od.passive !== nd.passive || od.onactivate !== nd.onactivate ||
            od.state !== nd.state){
           render = true;
           break;

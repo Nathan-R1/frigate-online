@@ -21,7 +21,6 @@
     --crew-bg:var(--void);
     --icon-hull:#7fd88a;
     --icon-shield:#d75b4e;
-    --icon-energy:#c98ee8;
     --icon-charged:#e88ab4;
     --icon-amber:#e8a94a;
     --icon-cyan:#4fd8c9;
@@ -236,10 +235,10 @@ display:block;
 background:var(--stat-bg);color:var(--cyan);
   }
 .preset-item .preset-class-tech{
-color:var(--icon-energy);
+color:var(--icon-charged);
   }
 .preset-item:hover .preset-class-tech{
-color:var(--icon-energy);
+color:var(--icon-charged);
   }
 .preset-tag{
 
@@ -344,9 +343,6 @@ opacity:.55;
   }
 .tech-card.editing .tdepbtn{
 opacity:1;
-  }
-.tdiamond{
-margin-left:auto;flex:none;
   }
 .tbuilt-btn{
 
