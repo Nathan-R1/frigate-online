@@ -450,11 +450,17 @@ display:block;font-family:var(--mono);font-size:8.5px;color:var(--ink-dim);lette
     border:1px solid var(--icon-charged);
     padding:1px 4px;
     line-height:1.1;
+    transition:transform .12s ease, filter .12s ease;
   
   }
 .hand-card .hc-charges svg{
 width:13px;height:13px;flex:none;
   }
+.hand-card .hc-charges:hover{
+  transform:scale(1.15);
+  filter:brightness(1.35) saturate(1.15);
+  box-shadow:0 0 6px var(--icon-charged);
+}
 .hand-empty{
 
     align-self:center;font-family:var(--mono);font-size:11px;letter-spacing:.2em;
