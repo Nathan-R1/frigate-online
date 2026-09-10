@@ -80,10 +80,17 @@
   function hasTrashKeyword(d){
     return !!(d && /Trash\./.test((d.onbuild || '') + ' ' + (d.passive || '') + ' ' + (d.onactivate || '')));
   }
+  function hasDiscardKeyword(d){
+    return !!(d && /Discard\./.test((d.onbuild || '') + ' ' + (d.passive || '') + ' ' + (d.onactivate || '')));
+  }
   function nextHandCardState(cur, d){
     if(cur === 'deck') return 'hand';
     if(cur === 'hand') return 'played';
-    if(cur === 'played') return hasTrashKeyword(d) ? 'trashed' : 'exhausted';
+    if(cur === 'played'){
+      if(hasTrashKeyword(d)) return 'trashed';
+      if(hasDiscardKeyword(d)) return 'discarded';
+      return 'exhausted';
+    }
     if(cur === 'exhausted') return 'played';
     if(cur === 'trashed') return 'deck';
     if(cur === 'discarded') return 'deck';
