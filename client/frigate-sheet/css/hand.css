@@ -450,7 +450,7 @@ display:block;font-family:var(--mono);font-size:8.5px;color:var(--ink-dim);lette
     border:1px solid var(--icon-charged);
     padding:1px 4px;
     line-height:1.1;
-    transition:transform .12s ease, filter .12s ease;
+    transition:transform .12s ease, filter .12s ease, box-shadow .12s ease;
   
   }
 .hand-card .hc-charges svg{
