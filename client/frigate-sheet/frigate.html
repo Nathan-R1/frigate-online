@@ -369,7 +369,7 @@
     var scEl = document.getElementById('storageCur');
     if(scEl) scEl.classList.toggle('neg', storageTotal < 0);
     setOut('sensorRange', baseNum('sensorRangeBase') + 2 * skillBonus('Sensors'));
-    setOut('drawPlayEff', baseNum('drawPlayBase') + Math.floor(skillBonus('Science') / 2));
+    setOut('drawPlayEff', baseNum('drawPlayBase'));
     setOut('drawDrawEff', baseNum('drawDrawBase') + skillBonus('Cyber'));
   }
   var DERIVED_BASE_IDS = ['hullBase','shieldBase','speedBase','storageBase','sensorRangeBase','drawPlayBase','drawDrawBase'];

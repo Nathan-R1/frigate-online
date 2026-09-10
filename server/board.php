@@ -25,7 +25,7 @@ define('BOARD_VERSION', 8);   // bump when behaviour changes; returned as "v" in
 define('MAX_SIZE', 40);
 
 $VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping', 'delete');
-$VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink');
+$VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'grey');
 $PACKET_LIMIT  = 65536;
 
 function respond($data) {
@@ -177,7 +177,7 @@ function actCreate(&$s, $a) {
         'x'         => $x,
         'y'         => $y,
         'buttons'   => array('red' => 0, 'grey' => 0),
-        'exhausted' => 1,
+        'exhausted' => isset($a['exhausted']) ? ((int)$a['exhausted'] ? 1 : 0) : 1,
     );
     return null;
 }
