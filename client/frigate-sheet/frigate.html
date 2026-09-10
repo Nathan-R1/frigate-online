@@ -977,6 +977,7 @@
   }
   window.addEventListener('message', function(e){
     var m = e.data;
+    if(e.source !== window.parent) return;
     if(!m || typeof m !== 'object' || m.t !== 'deckall') return;
     deckAllCards();
   });

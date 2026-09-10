@@ -1298,6 +1298,7 @@ document.getElementById('gameAsteroidsBtn').addEventListener('click', function (
 });
 document.getElementById('gameDeckAllBtn').addEventListener('click', function () {
   closeSettingsMenu();
+  if(!window.confirm('Return all cards to your deck and reset their charges to 0?')) return;
   var pf = document.getElementById('playerFrame');
   if (pf && pf.contentWindow) {
     pf.contentWindow.postMessage({ t: 'deckall' }, '*');
