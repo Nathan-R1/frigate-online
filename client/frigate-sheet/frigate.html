@@ -950,11 +950,15 @@
       if(m.t === 'state'){ handleHandState(m.idx, m.state); return; }
       if(m.t === 'charge'){ handleHandCharge(m.idx, m.delta); return; }
       if(m.t === 'newturn'){ handleNewTurn(); return; }
+      if(m.t === 'endturn'){ handleEndTurn(); return; }
     };
   }
   function handBroadcast(){
     if(!HAND_CHANNEL) return;
     HAND_CHANNEL.postMessage({ t:'snapshot', cards: handTechSnapshot() });
+  }
+  function boardSaveRefresh(){
+    try{ window.parent.postMessage({ t:'turn-op' }, '*'); }catch(e){}
   }
   function handleHandState(idx, state){
     var grid = document.getElementById('techGrid');
@@ -981,9 +985,6 @@
     var cards = [];
     for(var i=0;i<grid.children.length;i++){ cards.push(grid.children[i]); }
     for(i=0;i<cards.length;i++){
-      if(techState(cards[i]) === 'hand') setTechState(cards[i], 'discarded');
-    }
-    for(i=0;i<cards.length;i++){
       if(techState(cards[i]) === 'exhausted') setTechState(cards[i], 'played');
     }
     var deck = [];
@@ -1007,6 +1008,22 @@
     handBroadcast();
     broadcastHullStats();
     scheduleSheetAutosave();
+    boardSaveRefresh();
+    if(HAND_CHANNEL) HAND_CHANNEL.postMessage({ t:'turn', phase:'end' });
+  }
+  function handleEndTurn(){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    var cards = [];
+    for(var i=0;i<grid.children.length;i++){ cards.push(grid.children[i]); }
+    for(i=0;i<cards.length;i++){
+      if(techState(cards[i]) === 'hand') setTechState(cards[i], 'discarded');
+    }
+    handBroadcast();
+    broadcastHullStats();
+    scheduleSheetAutosave();
+    boardSaveRefresh();
+    if(HAND_CHANNEL) HAND_CHANNEL.postMessage({ t:'turn', phase:'new' });
   }
   var HULL_CHANNEL = null;
   function initHullStats(){

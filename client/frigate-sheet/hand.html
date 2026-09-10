@@ -165,8 +165,29 @@
   function send(msg){
     if(HAND_CHANNEL) HAND_CHANNEL.postMessage(msg);
   }
+  var TURN_PHASE = 'new';
+  function updateTurnButton(){
+    var btn = document.getElementById('handNewTurnBtn');
+    if(!btn) return;
+    var end = TURN_PHASE === 'end';
+    var label = btn.querySelector('.nt-label');
+    if(label) label.textContent = end ? 'End Turn' : 'New Turn';
+    btn.title = end
+      ? 'End Turn: move hand techs to discard'
+      : 'New Turn: restore exhausted techs and draw (4 + Cyber) from deck';
+  }
+  function setTurnPhase(phase){
+    TURN_PHASE = (phase === 'end') ? 'end' : 'new';
+    updateTurnButton();
+  }
   function sendNewTurn(){
-    send({ t:'newturn' });
+    if(TURN_PHASE === 'end'){
+      send({ t:'endturn' });
+      setTurnPhase('new');
+    } else {
+      send({ t:'newturn' });
+      setTurnPhase('end');
+    }
   }
   var FILTER_CATS = [
     {key:'hand', label:'Hand', options:[
@@ -592,6 +613,9 @@
       if(m.t === 'snapshot'){
         updateHandFromSnapshot(m.cards || []);
       }
+      if(m.t === 'turn'){
+        setTurnPhase(m.phase);
+      }
     };
     var tries = 0;
     function hello(){
@@ -640,6 +664,7 @@
   renderHand();
   applyHandAlign();
   updateAlignUI();
+  updateTurnButton();
   initChannel();
   try{ window.parent.postMessage({ t:'hand-ready' }, '*'); }catch(e){}
 
