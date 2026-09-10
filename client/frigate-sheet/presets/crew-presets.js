@@ -2,7 +2,7 @@ var CREW_PRESETS = [
     {name:'Ambassador Kamar', type:'science', text_description:'You have the legal right to travel into People’s Star space.<b><c>Diplomacy</c></b>', combat_only:false},
     {name:'Arc Agent Tha’n', type:'science', text_description:'You have the legal right to travel into Vedlu space. <b><c>Leadership<c></b>', combat_only:false},
     {name:'Captain Janson', type:'science', text_description:'If you are scanned, you are notified and can respond with any known ship design.<b><c>Sensors</c></b>', combat_only:false},
-    {name:'Citadel', type:'defense', text_description:'You begin combat with 2 Core modules. Core modules gain "Req.: Adjacent to Core" and share your Hull HP.', combat_only:true},
+    {name:'Citadel', type:'defense', text_description:'You begin combat with a Citadel Module: Requires Adjacent to Core; shares Hull HP with your Core; acts as a Core Module for the purposes of fulfilling requirements.', combat_only:true},
      {name:'Co-leadership', type:'science', text_description:'At the start of your turn if you succeed a DC 12 Leadership Check, draw 1 extra card.', combat_only:true},
     {name:'Conservative', type:'defense', text_description:'At the start of your turn, if you did not activate any “Offense” technologies, modules or deployables last round, gain 2 shields.', combat_only:true},
      {name:'Hoarding', type:'science', text_description:'+4 Storage', combat_only:false},

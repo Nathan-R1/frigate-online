@@ -982,12 +982,12 @@ function requeue(batch) {
 }
 
 function saveChanges() {
-  if (pending.order.length === 0) return;
+  if (pending.order.length === 0) return Promise.resolve();
   saveBtn.disabled = true;
   refreshBtn.disabled = true;
   var batch = batchPayload();
   pending = { order: [], map: {} };
-  fetch('../server/board.php', {
+  return fetch('../server/board.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch: batch })
@@ -1593,7 +1593,13 @@ var sheetFrame = document.getElementById('playerFrame');
 window.addEventListener('message', function (e) {
   if (!sheetFrame || e.source !== sheetFrame.contentWindow) return;
   var m = e.data;
-  if (!m || typeof m !== 'object' || m.t !== 'sheetpe') return;
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'turn-op') {
+    if (pending.order.length === 0) refresh();
+    else saveChanges().then(refresh);
+    return;
+  }
+  if (m.t !== 'sheetpe') return;
   var r = sheetFrame.getBoundingClientRect();
   handX = r.left + (Number(m.x) || 0);
   handY = r.top + (Number(m.y) || 0);
