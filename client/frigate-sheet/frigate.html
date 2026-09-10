@@ -1828,6 +1828,7 @@
     writeSkills(json.skills);
     writeCrew(json.crew);
     writeTech(json.tech);
+    if(HAND_CHANNEL) HAND_CHANNEL.postMessage({ t:'turn', phase:'new' });
     writeMods(json.mods);
     updateDerivedStats();
   }
