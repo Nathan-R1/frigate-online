@@ -960,6 +960,26 @@
   function boardSaveRefresh(){
     try{ window.parent.postMessage({ t:'turn-op' }, '*'); }catch(e){}
   }
+  function deckAllCards(){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    for(var i=0;i<grid.children.length;i++){
+      var card = grid.children[i];
+      setTechState(card, 'deck');
+      var inp = card.querySelector('.tcharges-input');
+      if(inp) inp.value = '0';
+      refreshTechSections(card);
+    }
+    handBroadcast();
+    broadcastHullStats();
+    scheduleSheetAutosave();
+    boardSaveRefresh();
+  }
+  window.addEventListener('message', function(e){
+    var m = e.data;
+    if(!m || typeof m !== 'object' || m.t !== 'deckall') return;
+    deckAllCards();
+  });
   function handleHandState(idx, state){
     var grid = document.getElementById('techGrid');
     var card = grid ? grid.children[idx] : null;

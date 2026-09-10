@@ -50,6 +50,7 @@
             <input type="number" id="gridSize" min="1" max="40" value="18" title="Board width &amp; height (Enter to apply)">
           </div>
           <button type="button" class="settings-item" id="gameAsteroidsBtn" title="Scatter grey squares (asteroids) across 10% of the board">Asteroids</button>
+          <button type="button" class="settings-item" id="gameDeckAllBtn" title="Put all tech cards back into your deck and reset their charges to 0">Deck All Cards</button>
         </div>
       </div>
     </div>
@@ -1294,6 +1295,13 @@ document.getElementById('gameRefreshBtn').addEventListener('click', function () 
 document.getElementById('gameAsteroidsBtn').addEventListener('click', function () {
   closeSettingsMenu();
   scatterAsteroids();
+});
+document.getElementById('gameDeckAllBtn').addEventListener('click', function () {
+  closeSettingsMenu();
+  var pf = document.getElementById('playerFrame');
+  if (pf && pf.contentWindow) {
+    pf.contentWindow.postMessage({ t: 'deckall' }, '*');
+  }
 });
 function isAsteroidPiece(o) {
   return !!o && o.color === 'grey' && o.img === 'square-module';
