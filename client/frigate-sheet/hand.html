@@ -30,6 +30,7 @@
           <option value="az">Name</option>
           <option value="trait">Trait</option>
           <option value="type">Type</option>
+          <option value="state">State</option>
         </select>
         <button type="button" class="hand-icon-btn" id="handSortBtn" onclick="openHandSelect('handSort')" title="Sort hand">⇵</button>
       </span>
@@ -71,6 +72,7 @@
   }
   var HAND_SORT = 'az';
   var HAND_TYPE_ORDER = { offense:0, defense:1, movement:2, science:3 };
+  var HAND_STATE_ORDER = { deck:0, hand:1, played:2, exhausted:3, discarded:4, trashed:5 };
   var HAND_FILTERS = { hand:'', type:'', trait:'' };
   var HAND_DATA = [];
   var HAND_CHANNEL = null;
@@ -357,6 +359,14 @@
         if(oa === undefined) oa = 99;
         if(ob === undefined) ob = 99;
         if(oa !== ob) return oa - ob;
+        return (da.name || '').localeCompare(db.name || '');
+      }
+      if(HAND_SORT === 'state'){
+        var sa = HAND_STATE_ORDER[da.state];
+        var sb = HAND_STATE_ORDER[db.state];
+        if(sa === undefined) sa = 99;
+        if(sb === undefined) sb = 99;
+        if(sa !== sb) return sa - sb;
         return (da.name || '').localeCompare(db.name || '');
       }
       return (da.name || '').localeCompare(db.name || '');
