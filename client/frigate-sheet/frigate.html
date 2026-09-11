@@ -949,6 +949,7 @@
       if(m.t === 'hello'){ handBroadcast(); return; }
       if(m.t === 'state'){ handleHandState(m.idx, m.state); return; }
       if(m.t === 'charge'){ handleHandCharge(m.idx, m.delta); return; }
+      if(m.t === 'drawcard'){ handleDrawCard(); return; }
       if(m.t === 'newturn'){ handleNewTurn(); return; }
       if(m.t === 'endturn'){ handleEndTurn(); return; }
     };
@@ -1031,6 +1032,30 @@
     scheduleSheetAutosave();
     boardSaveRefresh();
     if(HAND_CHANNEL) HAND_CHANNEL.postMessage({ t:'turn', phase:'end' });
+  }
+  function handleDrawCard(){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    var cards = [];
+    for(var i=0;i<grid.children.length;i++){ cards.push(grid.children[i]); }
+    var deck = [];
+    var discard = [];
+    for(i=0;i<cards.length;i++){
+      var st = techState(cards[i]);
+      if(st === 'deck') deck.push(cards[i]);
+      else if(st === 'discarded') discard.push(cards[i]);
+    }
+    if(deck.length === 0 && discard.length > 0){
+      for(i=0;i<discard.length;i++) setTechState(discard[i], 'deck');
+      deck = deck.concat(discard);
+    }
+    if(deck.length === 0) return;
+    var r = Math.floor(Math.random() * deck.length);
+    setTechState(deck[r], 'hand');
+    handBroadcast();
+    broadcastHullStats();
+    scheduleSheetAutosave();
+    boardSaveRefresh();
   }
   function handleEndTurn(){
     var grid = document.getElementById('techGrid');

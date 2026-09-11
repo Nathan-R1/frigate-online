@@ -1,0 +1,95 @@
+{
+  "shipName": "SAM BIG",
+  "shipClass": "Striker Class",
+  "dcHex": "6",
+  "stats": {
+    "hullCur": "5",
+    "hullBase": "5",
+    "shieldCur": "6",
+    "shieldBase": "6",
+    "speedCur": "12",
+    "speedBase": "12",
+    "storageBase": "0",
+    "sensorRangeBase": "0",
+    "drawPlayBase": "1",
+    "drawDrawBase": "4"
+  },
+  "skills": {
+    "Cyber": {
+      "points": "0",
+      "penalty": ""
+    },
+    "Diplomacy": {
+      "points": "1",
+      "penalty": ""
+    },
+    "Engineering": {
+      "points": "0",
+      "penalty": ""
+    },
+    "Leadership": {
+      "points": "2",
+      "penalty": ""
+    },
+    "Logistics": {
+      "points": "1",
+      "penalty": ""
+    },
+    "Navigation": {
+      "points": "4",
+      "penalty": ""
+    },
+    "Piloting": {
+      "points": "3",
+      "penalty": ""
+    },
+    "Sensors": {
+      "points": "3",
+      "penalty": ""
+    },
+    "Science": {
+      "points": "-1",
+      "penalty": ""
+    }
+  },
+  "crew": [
+    {
+      "name": "Scrappy",
+      "text": "Once per round, when you take Hull damage, you may make an Engineering Save against the enemy’s DC to take 1 less Hull HP damage.",
+      "combat": true,
+      "type": "defense"
+    }
+  ],
+  "tech": [
+    {
+      "name": "Boost",
+      "traits": "",
+      "onbuild": "Play 2 more, Trash.",
+      "passive": "",
+      "onactivate": "",
+      "techType": "science",
+      "storage": "",
+      "hull": "",
+      "charges": "",
+      "deploy": "normal",
+      "state": "deck"
+    }
+  ],
+  "mods": [
+    {
+      "name": "Graviton Engine",
+      "req": "Adjacent to any",
+      "hull": "1",
+      "duration": "",
+      "speed": "",
+      "charges": "",
+      "onbuild": "",
+      "passive": "Gain 1 Speed per non Engine module on your ship (if you later gain/lose modules adjust Speed).",
+      "onactivate": "",
+      "type": "module",
+      "tt": "movement",
+      "shape": "",
+      "exhaust": false
+    }
+  ]
+}
