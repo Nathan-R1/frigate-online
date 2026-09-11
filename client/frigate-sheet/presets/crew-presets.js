@@ -8,6 +8,7 @@ var CREW_PRESETS = [
      {name:'Hoarding', type:'science', text_description:'+4 Storage', combat_only:false},
      {name:'Heat Sinks', type:'movement', text_description:'When you roll an attack, add one Heat here or to any ability that can take Heat. When you Move, discard any Heat here, gain 1 Move per 2 Heat discarded.', combat_only:true},
     {name:'Jamming', type:'science', text_description:'When you Create Deployables, you may put them aside instead of on the board. They cannot activate or be targetted and do not occupy a particular space. At the start of your next turn, place them on the board following their normal Creation rules.', combat_only:true},
+    {name:'Junk Hater', type:'science', text_description:'If you hit an asteroid and deal 2+ dmg it is destroyed.', combat_only:true},
     {name:'Crew Munitions Assignment', type:'offense', text_description:'When you add 1 or more charges to a Technology, Module or Deployable you may add 1 additional. Take 1 penalty to any Crew Skill.', combat_only:true},
      {name:'Motherly', type:'defense', text_description:'When an allied ship within Sensor range takes Hull damage, you may reduce it by 1 and take 1 Hull HP damage to your Core Module.', combat_only:true},
      {name:'Peace Loving', type:'science', text_description:'When you fail a Diplomacy check that would initiate combat, you may reroll once.', combat_only:false},
