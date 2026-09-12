@@ -206,7 +206,7 @@ body.resizing #playerFrame { pointer-events: none; }
   animation: astro-spin var(--astro-speed) linear infinite;
 }
 .piece.anom.wormhole .module-svg {
-  filter: drop-shadow(0 0 6px var(--pc)) saturate(1.35);
+  filter: drop-shadow(0 0 6px var(--pc)) saturate(.9);
   opacity: 1;
 }
 .piece.anom { opacity: .94; }
