@@ -1274,11 +1274,11 @@ function updateLosOnHover(cx, cy) {
   var size = state.grid.size;
   var inGrid = c.x >= 0 && c.y >= 0 && c.x < size && c.y < size;
   var pieceSel = sel && sel.type === 'piece';
-  var from = pieceSel ? findObj('piece', sel.id) : null;
+  var from = sel ? findObj(sel.type, sel.id) : null;
   var key = from && inGrid ? from.id + ',' + from.x + ',' + from.y + ',' + c.x + ',' + c.y : '';
   if (key === lastLosKey) return;
   lastLosKey = key;
-  if (moveState && inGrid && from) renderLos(c.x, c.y);   // preview FOV from the hovered square while moving
+  if (moveState && inGrid && from && pieceSel) renderLos(c.x, c.y);   // preview FOV from the hovered square while moving
   if (!key || !from) {
     hideDist();
     clearMovePath();
@@ -1664,7 +1664,7 @@ function handleClick(cx, cy, targetEl) {
     var obj = findObj(sel.type, sel.id);
     if (obj) {
       if (canMoveTo(sel.type, sel.id, cell.x, cell.y)) {
-        if (sel.type === 'piece' && isActorPiece(obj) && moveDistance(obj.x, obj.y, cell.x, cell.y, obj.color) < 0) {
+        if (moveState && (isActorPiece(obj) || obj.color === actorColor) && moveDistance(obj.x, obj.y, cell.x, cell.y, obj.color) < 0) {
           flashBlocked(cell.x, cell.y);
         } else {
           moveObject(sel.type, sel.id, cell.x, cell.y);
