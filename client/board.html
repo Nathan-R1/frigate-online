@@ -506,14 +506,14 @@ function buildFrigateSvg(svg, c) {
 }
 
 /* Fixed-orientation shading via pieces/images/shading.png: an overlay image
-   sized to the body's diameter plus 10%, bottom-left pinned to the body's
-   bottom-left corner, so it never moves with the spin and scales with size. */
+   sized to the body's diameter plus 5%, centred on the body, so it never
+   moves with the spin and scales with the anomaly's size. */
 var shadeSeq = 0;
 function buildShadeNode(def) {
   var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
   var R = def.bodyR || 30;
-  var S = 2 * R * 1.1;
-  var img = svgEl('image', { x: 36 - R, y: 36 + R - S, width: S, height: S });
+  var S = 2 * R * 1.05;
+  var img = svgEl('image', { x: 36 - S / 2, y: 36 - S / 2, width: S, height: S });
   img.setAttribute('href', 'pieces/images/shading.png');
   img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', 'pieces/images/shading.png');
   svg.appendChild(img);
