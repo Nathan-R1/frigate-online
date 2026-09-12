@@ -2233,6 +2233,10 @@ function stopSlowPoll() {
   if (sseFallbackTimer) { clearInterval(sseFallbackTimer); sseFallbackTimer = null; }
 }
 function initSse() {
+  // The PHP built-in server is single-threaded on Windows; a long-lived SSE
+  // stream would block the one worker and hang every other request. Fall back
+  // to slow-polling there. Linux/WSL and production keep real SSE.
+  if (navigator.userAgent.indexOf('Windows') !== -1) { startSlowPoll(); return; }
   try { sseEl = new EventSource('../server/board.php?stream&_=' + Date.now()); }
   catch (e) { startSlowPoll(); return; }
   sseEl.onopen = function () {
