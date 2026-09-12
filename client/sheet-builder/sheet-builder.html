@@ -163,27 +163,31 @@
 
   /* skills window */
   .sk-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: 12px; margin-top: 4px;
   }
   .sk {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; flex-direction: column;
     background: var(--panel-alt); border: 1px solid var(--line);
     border-radius: 8px; padding: 10px 14px;
   }
-  .sk-name { font-family: var(--disp); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; min-width: 110px; }
+  .sk-head { display: flex; align-items: center; gap: 10px; }
+  .sk-name {
+    font-family: var(--disp); font-size: 13px; letter-spacing: .04em; text-transform: uppercase;
+    min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .sk-num {
     font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--cyan);
-    width: 34px; text-align: center;
+    width: 34px; text-align: center; flex: none;
   }
-  .sk-btns { display: flex; gap: 6px; }
+  .sk-btns { display: flex; gap: 6px; flex: none; }
   .sbtn {
     width: 30px; height: 30px; border-radius: 6px; cursor: pointer;
     background: none; border: 1px solid var(--line-bright); color: var(--ink-mid);
     font-family: var(--mono); font-size: 15px; line-height: 1;
   }
   .sbtn:hover { border-color: var(--cyan); color: var(--cyan); }
-  .sk-pen { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .sk-pen { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
   .sk-pen label {
     font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim);
   }
@@ -192,6 +196,19 @@
     font: 600 13px var(--body); padding: 4px 6px; border-radius: 4px;
   }
   .sk-pen input:focus { outline: none; border-color: var(--cyan); }
+  .skinfo {
+    margin-left: 2px; width: 28px; height: 26px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 5px;
+    color: var(--ink-mid); cursor: pointer;
+  }
+  .skinfo .ticon { width: 14px; height: 14px; }
+  .skinfo:hover, .skinfo.on { color: var(--amber); border-color: var(--amber); }
+  .sk-desc {
+    margin-top: 8px; padding: 8px 10px;
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--amber);
+    border-radius: 6px; color: var(--ink-mid); font-size: 12px; line-height: 1.4;
+  }
 
   /* export summary */
   .exp-wide { grid-column: 1 / -1; }
@@ -297,6 +314,18 @@
 
   var SKILL_NAMES = ['Cyber', 'Diplomacy', 'Engineering', 'Leadership', 'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science'];
 
+  var SKILL_DESC = {
+    'Cyber': 'Cyber is added to Draw (min. 0)',
+    'Diplomacy': 'Used to reduce or cause conflict, through threats, persuasion and deception.',
+    'Engineering': 'Engineering is added to Hull HP (min. 0)',
+    'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
+    'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
+    'Navigation': 'Navigation is added to Speed (min. 0)',
+    'Piloting': 'Sometimes you might have to dodge!!!',
+    'Science': '1/2 of (science + science penalty)',
+    'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
+  };
+
   var steps = [
     { key: 'shipClass', label: 'Hull Class' },
     { key: 'crew', label: 'Trait / Officer' },
@@ -319,6 +348,7 @@
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
   var filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false };
   function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false }; }
+  var skillInfoOpen = null;
 
   /* ===== persistence ===== */
   function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null }; }
@@ -614,8 +644,11 @@
       var boosted = eff !== base;
       var canPlus = remaining > 0 && base < 4;
       var canMinus = base > -1;
+      var desc = SKILL_DESC[n] || '';
+      var infoOpen = skillInfoOpen === n && !!desc;
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
+        '<div class="sk-head">' +
         '<span class="sk-name">' + esc(n) + '</span>' +
         '<span class="sk-num' + (boosted ? ' boosted' : '') + '">' + esc(String(eff)) + '</span>' +
         '<span class="sk-btns">' +
@@ -626,6 +659,9 @@
         '<label>Penalty</label>' +
         '<input class="skpen-input" value="' + esc(v.penalty) + '" maxlength="3" placeholder="—" title="Skill penalty">' +
         '</span>' +
+        (desc ? '<button type="button" class="skinfo' + (infoOpen ? ' on' : '') + '" title="' + esc(desc) + '"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg></button>' : '') +
+        '</div>' +
+        (infoOpen ? '<span class="sk-desc">' + esc(desc) + '</span>' : '') +
         '</div>'
       );
     }
@@ -758,6 +794,15 @@
       choices.skillBoost = pk.getAttribute('data-boost');
       expandedFor.crew = '[Skill Increase]';
       saveChoices();
+      renderOptions();
+      return;
+    }
+    var info = e.target.closest('.skinfo');
+    if (info) {
+      var irow = e.target.closest('.sk');
+      var iname = irow ? irow.getAttribute('data-skill') : null;
+      if (!iname) return;
+      skillInfoOpen = (skillInfoOpen === iname) ? null : iname;
       renderOptions();
       return;
     }
