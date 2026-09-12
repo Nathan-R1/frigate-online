@@ -944,6 +944,8 @@ function createObject(type, file) {
 function moveObject(type, id, x, y) {
   var obj = findObj(type, id);
   if (!obj) return;
+  var key = 'mv:' + id;
+  var fromX = obj.x, fromY = obj.y;      // where this move starts from (client's belief)
   obj.x = x; obj.y = y;
   if (type === 'piece') {
     renderPieces();
@@ -951,7 +953,11 @@ function moveObject(type, id, x, y) {
   } else {
     renderChips();
   }
-  queue('mv:' + id, { action: 'move', type: type, id: id, x: x, y: y });
+  var act = { action: 'move', type: type, id: id, x: x, y: y };
+  var old = pending.map[key];
+  act.fromX = (old && typeof old.fromX === 'number') ? old.fromX : fromX;
+  act.fromY = (old && typeof old.fromY === 'number') ? old.fromY : fromY;
+  queue(key, act);
   updateMoveCounter();
 }
 function deleteObject(type, id) {
@@ -1079,6 +1085,19 @@ function requeue(batch) {
   }
 }
 
+/* Some changes in a batch couldn't be applied (e.g. another player deleted a
+   piece, or a cell became occupied) and were skipped by the server. The board
+   has already been re-synced to the server state; flash a short warning so the
+   user knows instead of the old silent "save did nothing". */
+function flashMergeWarnings(failed) {
+  if (!failed || !failed.length) return;
+  window.setTimeout(function () {
+    badgeEl.className = 'warn';
+    badgeEl.textContent = failed.length + ' CHANGE' + (failed.length === 1 ? '' : 'S') + " COULDN'T APPLY — BOARD RE-SYNCED";
+    window.setTimeout(setBadge, 2600);
+  }, 0);
+}
+
 function saveChanges() {
   if (pending.order.length === 0) return Promise.resolve();
   saveBtn.disabled = true;
@@ -1090,7 +1109,7 @@ function saveChanges() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch: batch })
   }).then(function (r) { return r.json(); }).then(function (data) {
-    if (data && data.ok && data.state) { synced = true; schedulePingFade(actorColor, 0); applyServer(data.state); }
+    if (data && data.ok && data.state) { synced = true; schedulePingFade(actorColor, 0); applyServer(data.state); flashMergeWarnings(data.failed); }
     else { synced = false; requeue(batch); }
   }).catch(function () {
     synced = false;
@@ -1476,7 +1495,7 @@ function sendChunkChain(chunks) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch: batch })
   }).then(function (r) { return r.json(); }).then(function (data) {
-    if (data && data.ok && data.state) { synced = true; schedulePingFade(actorColor, 0); applyServer(data.state); }
+    if (data && data.ok && data.state) { synced = true; schedulePingFade(actorColor, 0); applyServer(data.state); flashMergeWarnings(data.failed); }
     else { synced = false; requeue(batch); }
     sendChunkChain(chunks);
   }).catch(function () {
