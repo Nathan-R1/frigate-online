@@ -1221,8 +1221,29 @@ function renderLos(fromX, fromY) {
   var size = state.grid.size;
   losEl.innerHTML = '';
   var vis = visibleCells(fromX, fromY);
-  for (var i = 0; i < size; i++) {
-    for (var j = 0; j < size; j++) {
+  // Whole anomalies stay visible if any part of them is: mark every footprint
+  // cell lit whenever at least one of the body's cells can be seen.
+  var k, p, i, j;
+  for (k = 0; k < state.pieces.length; k++) {
+    p = state.pieces[k];
+    if (!isAnomaly(p)) continue;
+    var s = anomalySize(p);
+    var any = false;
+    for (i = p.x; i < p.x + s; i++) {
+      for (j = p.y; j < p.y + s; j++) {
+        if (i >= 0 && i < size && j >= 0 && j < size && vis[i][j]) any = true;
+      }
+    }
+    if (any) {
+      for (i = p.x; i < p.x + s; i++) {
+        for (j = p.y; j < p.y + s; j++) {
+          if (i >= 0 && i < size && j >= 0 && j < size) vis[i][j] = true;
+        }
+      }
+    }
+  }
+  for (i = 0; i < size; i++) {
+    for (j = 0; j < size; j++) {
       if (!vis[i][j]) {
         var s = el('div', 'shade');
         s.style.left = cellPx(i) + 'px';
