@@ -61,6 +61,27 @@
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
   }
   .opt-body .ticon { width: 15px; height: 15px; vertical-align: -2px; margin-right: 6px; }
+
+  /* filter bar */
+  .filter-bar { display: flex; align-items: center; gap: 12px; margin: 14px 0 2px; flex-wrap: wrap; }
+  .ff-row { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ffilter {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; height: 30px; padding: 0 8px;
+    border: 1px solid var(--line-bright); border-radius: 6px;
+    background: none; color: var(--ink-mid); cursor: pointer; font-size: 13px; line-height: 1;
+    transition: border-color .12s ease, color .12s ease, background .12s ease;
+  }
+  .ffilter .ticon { width: 15px; height: 15px; display: block; }
+  .ffilter:hover { border-color: var(--cyan); color: var(--cyan); }
+  .ffilter.on { border-color: var(--cyan); color: var(--cyan); background: rgba(79,216,201,.12); }
+  .ff-div { width: 1px; height: 20px; background: var(--line); margin: 0 3px; flex: none; }
+  .fsearch {
+    flex: 1; min-width: 190px;
+    background: var(--panel-alt); border: 1px solid var(--line); color: var(--ink);
+    font: 500 13px var(--body); padding: 7px 12px; border-radius: 6px;
+  }
+  .fsearch:focus { outline: none; border-color: var(--cyan); }
   /* expandable option cards */
   .opt-wrap { display: flex; flex-direction: column; }
   .opt-wrap .opt { flex: 1; }
@@ -208,6 +229,7 @@
   <section class="panel builder-panel builder-hidden" id="win">
     <div class="bl"></div><div class="br"></div>
     <div class="eyebrow"><span class="eb-text" id="winTitle">…</span></div>
+    <div class="filter-bar" id="filterBar"></div>
     <div class="opt-grid" id="winOptions"></div>
     <div class="win-nav">
       <button type="button" class="b-btn" id="backBtn">← Back</button>
@@ -286,6 +308,8 @@
   var step = 0;
   var screen = 'landing'; // landing | win | exp
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
+  var filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false };
+  function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false }; }
 
   /* ===== persistence ===== */
   function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '' }; }
@@ -484,8 +508,10 @@
     var out = [];
     for (var i = 0; i < CREW_PRESETS.length; i++) {
       var c = CREW_PRESETS[i];
-      var meta = [{ text: cap(c.type), cls: 't-amber' }];
-      if (c.combat_only) meta.push({ text: 'Combat only', cls: 't-red' });
+      if (!nameMatch(c.name) || !filterTypes(c.type)) continue;
+      if (filters.cbt && !c.combat_only) continue;
+      var meta = [{ text: typeIcon(c.type) + ' ' + cap(c.type), cls: 't-cyan' }];
+      if (c.combat_only) meta.push({ text: '⚔ Combat only', cls: 't-red' });
       var expand = [{ tag: cap(c.type), name: c.name, desc: escapeHtml(stripTags(c.text_description)) }];
       out.push(optionHtml('crew', c.name, c.name, '', meta, expand));
     }
@@ -496,16 +522,22 @@
     var out = [];
     for (var i = 0; i < TECH_PRESETS.length; i++) {
       var t = TECH_PRESETS[i];
+      var metaTraits = t.traits || '';
+      var isMod = metaTraits.indexOf('[Module]') !== -1;
+      var isDep = metaTraits.indexOf('[Deployable]') !== -1;
+      if (!nameMatch(t.name) || !filterTypes(t.tt)) continue;
+      if (!filterVeh(isMod ? 'module' : (isDep ? 'deployable' : null))) continue;
+      var st = parseInt(t.storage, 10);
+      var hasCh = t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0;
+      if (filters.st && !(st > 0)) continue;
+      if (filters.ch && !hasCh) continue;
       var body = traitHtml(t.traits);
       var meta = [{ text: typeIcon(t.tt) + ' ' + cap(t.tt), cls: 't-cyan' }];
-      var metaTraits = t.traits || '';
       if (metaTraits.indexOf('Class Tech') !== -1) meta.push({ text: 'Class Tech', cls: 't-class-tech' });
-      if (metaTraits.indexOf('[Module]') !== -1) meta.push({ text: MODULE_ICON, cls: 't-cyan' });
-      if (metaTraits.indexOf('[Deployable]') !== -1) meta.push({ text: DEPLOYABLE_ICON, cls: 't-amber' });
-      var st = parseInt(t.storage, 10);
+      if (isMod) meta.push({ text: MODULE_ICON, cls: 't-cyan' });
+      if (isDep) meta.push({ text: DEPLOYABLE_ICON, cls: 't-amber' });
       if (!isNaN(st) && st > 0) meta.push({ text: STORAGE_ICON + t.storage, cls: '' });
-      var ch = t.charges;
-      if (ch !== undefined && ch !== null && ch !== '' && parseInt(ch, 10) >= 0) meta.push({ text: CHARGES_ICON + ch, cls: '' });
+      if (hasCh) meta.push({ text: CHARGES_ICON + t.charges, cls: '' });
       var expand = [{ tag: 'Tech ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
       out.push(optionHtml('tech', t.name, t.name, body, meta, expand));
     }
@@ -516,8 +548,10 @@
     var out = [];
     for (var i = 0; i < MOD_PRESETS.length; i++) {
       var m = MOD_PRESETS[i];
+      if (!nameMatch(m.name) || !filterTypes(m.tt)) continue;
+      if (!filterVeh(m.type)) continue;
       var lead = m.type === 'deployable' ? DEPLOYABLE_ICON : MODULE_ICON;
-      var meta = [{ text: cap(m.tt), cls: 't-cyan' }];
+      var meta = [{ text: typeIcon(m.tt) + ' ' + cap(m.tt), cls: 't-cyan' }];
       if (m.hull) meta.push({ text: HULL_ICON + m.hull, cls: 't-hull' });
       var expand = [{ tag: cap(m.tt), name: m.name, desc: modDesc(m) }];
       out.push(optionHtml('mod', m.name, m.name, '', meta, expand, lead));
@@ -558,6 +592,11 @@
   function renderOptions() {
     document.getElementById('winTitle').textContent = steps[step].label;
     var k = steps[step].key;
+    renderFilterBar(k);
+    renderOptionsList();
+  }
+  function renderOptionsList() {
+    var k = steps[step].key;
     var html = '';
     if (k === 'shipClass') html = classOptions();
     else if (k === 'crew') html = crewOptions();
@@ -567,6 +606,57 @@
     document.getElementById('winOptions').innerHTML = html;
     document.getElementById('continueBtn').disabled = (k !== 'skills') && !choices[k];
     updateProgress();
+  }
+
+  /* ===== filtering (search + icon chips) ===== */
+  function nameMatch(name) {
+    var q = filters.q.toLowerCase();
+    return !q || String(name).toLowerCase().indexOf(q) !== -1;
+  }
+  function filterTypes(key) {
+    return !filters.types.length || filters.types.indexOf(key) !== -1;
+  }
+  function filterVeh(key) {
+    if (!filters.vehs.length) return true;
+    return !!key && filters.vehs.indexOf(key) !== -1;
+  }
+  function toggleIn(arr, v) {
+    var i = arr.indexOf(v);
+    if (i === -1) arr.push(v); else arr.splice(i, 1);
+  }
+  function filterChip(iconHtml, fKey, label, on) {
+    return '<button type="button" class="ffilter' + (on ? ' on' : '') + '" data-f="' + fKey + '" title="' + esc(label) + '">' + iconHtml + '</button>';
+  }
+  function renderFilterBar(k) {
+    var bar = document.getElementById('filterBar');
+    if (k !== 'crew' && k !== 'tech' && k !== 'mod') {
+      bar.classList.add('builder-hidden');
+      bar.innerHTML = '';
+      return;
+    }
+    bar.classList.remove('builder-hidden');
+    var html = '<div class="ff-row">';
+    var FE = [['offense', '⚔'], ['defense', '🛡'], ['movement', '➤'], ['science', '⚛︎']];
+    for (var i = 0; i < FE.length; i++) {
+      html += filterChip(FE[i][1], 't:' + FE[i][0], cap(FE[i][0]) + ' type', filters.types.indexOf(FE[i][0]) !== -1);
+    }
+    if (k === 'tech' || k === 'mod') {
+      html += '<span class="ff-div"></span>';
+      html += filterChip(MODULE_ICON, 'v:module', 'Modules', filters.vehs.indexOf('module') !== -1);
+      html += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', filters.vehs.indexOf('deployable') !== -1);
+    }
+    if (k === 'crew') {
+      html += '<span class="ff-div"></span>';
+      html += filterChip('⚔', 'cbt', 'Combat only', filters.cbt);
+    }
+    if (k === 'tech') {
+      html += '<span class="ff-div"></span>';
+      html += filterChip(STORAGE_ICON, 'st', 'Has storage cost', filters.st);
+      html += filterChip(CHARGES_ICON, 'ch', 'Has charges', filters.ch);
+    }
+    html += '</div>';
+    html += '<input type="text" class="fsearch" value="' + esc(filters.q) + '" placeholder="Filter by name…">';
+    bar.innerHTML = html;
   }
   function renderProgressDots() {
     var el = document.getElementById('psteps');
@@ -595,6 +685,7 @@
   /* ===== navigation ===== */
   function goToWin(i) {
     step = i;
+    resetFilters();
     show('win');
     renderOptions();
     renderProgressDots();
@@ -649,6 +740,24 @@
   document.getElementById('continueBtn').addEventListener('click', onContinue);
   document.getElementById('backBtn').addEventListener('click', onBack);
   document.getElementById('expBackBtn').addEventListener('click', onBack);
+
+  document.getElementById('filterBar').addEventListener('click', function (e) {
+    var b = e.target.closest('.ffilter');
+    if (!b) return;
+    var f = b.getAttribute('data-f');
+    if (f.charAt(0) === 't') toggleIn(filters.types, f.slice(2));
+    else if (f.charAt(0) === 'v') toggleIn(filters.vehs, f.slice(2));
+    else if (f === 'st') filters.st = !filters.st;
+    else if (f === 'ch') filters.ch = !filters.ch;
+    else if (f === 'cbt') filters.cbt = !filters.cbt;
+    renderOptions();
+  });
+  document.getElementById('filterBar').addEventListener('input', function (e) {
+    var s = e.target.closest('.fsearch');
+    if (!s) return;
+    filters.q = s.value;
+    renderOptionsList();
+  });
 
   document.getElementById('shipName').addEventListener('input', function () {
     choices.shipName = this.value;
