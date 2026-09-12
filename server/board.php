@@ -192,11 +192,13 @@ function actCreate(&$s, $a) {
 }
 
 function actExhaust(&$s, $a) {
-    if ($a['type'] !== 'piece') return array('error' => 'bad type');
-    foreach ($s['pieces'] as $i => $o) {
+    $type = $a['type'];
+    if ($type !== 'piece' && $type !== 'chip') return array('error' => 'bad type');
+    $key = ($type === 'piece') ? 'pieces' : 'chips';
+    foreach ($s[$key] as $i => $o) {
         if ($o['id'] === $a['id']) {
             $o['exhausted'] = isset($a['exhausted']) ? ((int)$a['exhausted'] ? 1 : 0) : 1;
-            $s['pieces'][$i] = $o;
+            $s[$key][$i] = $o;
             return null;
         }
     }
