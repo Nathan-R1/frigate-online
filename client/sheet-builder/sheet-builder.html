@@ -52,6 +52,29 @@
     color: var(--ink-mid); font-size: 12.5px; white-space: pre-line;
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
   }
+  /* expandable option cards */
+  .opt-wrap { display: flex; flex-direction: column; }
+  .opt-wrap .opt { flex: 1; }
+  .opt-chev {
+    margin-top: auto; align-self: flex-end; line-height: 1;
+    font-family: var(--mono); font-size: 13px; color: var(--ink-dim);
+  }
+  .opt.sel .opt-chev, .opt.open .opt-chev { color: var(--amber); }
+  .opt-panel {
+    margin-top: 6px; padding: 13px 15px;
+    background: var(--void); border: 1px solid var(--line); border-left: 3px solid var(--cyan-dim);
+    border-radius: 8px; display: flex; flex-direction: column; gap: 13px;
+  }
+  .exp-item-name {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-family: var(--disp); font-size: 12px; letter-spacing: .04em; color: var(--ink); text-transform: uppercase;
+  }
+  .exp-tag {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--cyan); border: 1px solid var(--cyan-dim); border-radius: 4px; padding: 2px 7px;
+  }
+  .exp-item-desc { color: var(--ink-mid); font-size: 12px; line-height: 1.55; }
+  .exp-item-desc br + br { display: none; }
 
   /* progress steps */
   .psteps { display: flex; gap: 10px; align-items: center; margin: 22px 0 6px; flex-wrap: wrap; }
@@ -96,6 +119,46 @@
     font-size: 13px; font-family: var(--body); padding: 8px 12px; border-radius: 6px; min-width: 240px;
   }
   .exp-field input:focus { outline: none; border-color: var(--cyan); }
+
+  /* skills window */
+  .sk-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px; margin-top: 4px;
+  }
+  .sk {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel-alt); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 14px;
+  }
+  .sk-name { font-family: var(--disp); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; min-width: 110px; }
+  .sk-num {
+    font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--cyan);
+    width: 34px; text-align: center;
+  }
+  .sk-btns { display: flex; gap: 6px; }
+  .sbtn {
+    width: 30px; height: 30px; border-radius: 6px; cursor: pointer;
+    background: none; border: 1px solid var(--line-bright); color: var(--ink-mid);
+    font-family: var(--mono); font-size: 15px; line-height: 1;
+  }
+  .sbtn:hover { border-color: var(--cyan); color: var(--cyan); }
+  .sk-pen { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .sk-pen label {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim);
+  }
+  .sk-pen input {
+    width: 56px; background: var(--panel-alt); border: 1px solid var(--line); color: var(--ink);
+    font: 600 13px var(--body); padding: 4px 6px; border-radius: 4px;
+  }
+  .sk-pen input:focus { outline: none; border-color: var(--cyan); }
+
+  /* export summary */
+  .exp-wide { grid-column: 1 / -1; }
+  .exp-skills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .exp-skill {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .03em;
+    color: var(--ink-mid); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px;
+  }
 </style>
 </head>
 <body>
@@ -196,15 +259,25 @@
     { key: 'shipClass', label: 'Hull Class' },
     { key: 'crew', label: 'Trait / Officer' },
     { key: 'tech', label: 'Starting Technology' },
-    { key: 'mod', label: 'Starting Module' }
+    { key: 'mod', label: 'Starting Module' },
+    { key: 'skills', label: 'Crew Skills' }
   ];
 
-  var choices = { shipClass: null, crew: null, tech: null, mod: null, shipName: '' };
+  function defaultSkills() {
+    var out = {};
+    for (var i = 0; i < SKILL_NAMES.length; i++) {
+      out[SKILL_NAMES[i]] = { points: SHEET_DEFAULTS.skills[SKILL_NAMES[i]], penalty: '' };
+    }
+    return out;
+  }
+
+  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '' };
   var step = 0;
   var screen = 'landing'; // landing | win | exp
+  var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
 
   /* ===== persistence ===== */
-  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, shipName: '' }; }
+  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '' }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -216,6 +289,16 @@
         c.tech = s.tech || null;
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
+        if (s.skills && typeof s.skills === 'object') {
+          for (var i = 0; i < SKILL_NAMES.length; i++) {
+            var n = SKILL_NAMES[i];
+            var v = s.skills[n];
+            if (v && typeof v === 'object') {
+              c.skills[n].points = (v.points !== undefined && v.points !== null) ? String(v.points) : SHEET_DEFAULTS.skills[n];
+              c.skills[n].penalty = (v.penalty !== undefined && v.penalty !== null) ? String(v.penalty) : '';
+            }
+          }
+        }
       }
       return c;
     } catch (e) { return emptyChoices(); }
@@ -277,7 +360,7 @@
     }
   }
 
-  /* ===== option cards ===== */
+  /* ===== option cards (click-select + expandable detail) ===== */
   function metaTags(list) {
     var html = '';
     for (var i = 0; i < list.length; i++) {
@@ -285,13 +368,53 @@
     }
     return html;
   }
-  function optionHtml(key, id, title, body, meta) {
+  // expand: array of { tag, name, desc } to list under the card when opened
+  function expandPanelHtml(key, expand) {
+    if (!expand || !expand.length) return '';
+    var html = '<div class="opt-panel">';
+    for (var i = 0; i < expand.length; i++) {
+      var it = expand[i];
+      html += '<div class="exp-item">' +
+        '<div class="exp-item-name">' + (it.tag ? '<span class="exp-tag">' + esc(it.tag) + '</span>' : '') + esc(it.name) + '</div>' +
+        '<div class="exp-item-desc">' + (it.desc || 'No text.') + '</div>' +
+        '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+  function optionHtml(key, id, title, body, meta, expand) {
     var sel = choices[key] === id;
-    return '<button type="button" class="opt' + (sel ? ' sel' : '') + '" data-id="' +
-      id.replace(/"/g, '&quot;') + '">' +
+    var isExp = !!(expand && expand.length);
+    var open = isExp && expandedFor[key] === id;
+    return '<div class="opt-wrap">' +
+      '<button type="button" class="opt' + (sel ? ' sel' : '') + (open ? ' open' : '') + '" data-id="' +
+      id.replace(/"/g, '&quot;') + '"' + (isExp ? ' data-exp="1"' : '') + '>' +
       '<span class="opt-title">' + esc(title) + '</span>' +
       (meta && meta.length ? '<span class="opt-meta">' + metaTags(meta) + '</span>' : '') +
-      '<span class="opt-body">' + body + '</span></button>';
+      '<span class="opt-body">' + body + '</span>' +
+      (isExp ? '<span class="opt-chev">' + (open ? '▾' : '▸') + '</span>' : '') +
+      '</button>' +
+      (open ? expandPanelHtml(key, expand) : '') +
+      '</div>';
+  }
+
+  function techDesc(t) {
+    var lines = [];
+    if (!t) return '';
+    if (t.traits) lines.push('Traits: ' + t.traits);
+    if (t.onbuild) lines.push('On Play: ' + t.onbuild);
+    if (t.passive) lines.push('Passive: ' + t.passive);
+    if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
+    return escapeHtml(lines.join('<br>') || 'No text.');
+  }
+  function modDesc(m) {
+    var lines = [];
+    if (!m) return '';
+    if (m.req) lines.push('Requires: ' + m.req);
+    if (m.onbuild) lines.push('On Play: ' + m.onbuild);
+    if (m.passive) lines.push('Passive: ' + m.passive);
+    if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
+    return escapeHtml(lines.join('<br>') || 'No text.');
   }
 
   function classOptions() {
@@ -310,7 +433,22 @@
       if (p.techName) meta.push({ text: 'Tech: ' + p.techName, cls: 't-cyan' });
       if (p.modName) meta.push({ text: 'Mod: ' + p.modName, cls: 't-cyan' });
       if (p.crewTraits && p.crewTraits.length) meta.push({ text: 'Trait: ' + p.crewTraits.join(', '), cls: 't-amber' });
-      out.push(optionHtml('shipClass', k, k, parts.join(' · ') || 'No stat bonuses.', meta));
+      var expand = [];
+      if (p.techName) {
+        var pt = findTech(p.techName);
+        expand.push({ tag: 'Class Tech', name: p.techName, desc: techDesc(pt) });
+      }
+      if (p.modName) {
+        var pm = findMod(p.modName);
+        expand.push({ tag: 'Class Module', name: p.modName, desc: modDesc(pm) });
+      }
+      if (p.crewTraits) {
+        for (var t = 0; t < p.crewTraits.length; t++) {
+          var pc = findCrew(p.crewTraits[t]);
+          expand.push({ tag: 'Crew Trait', name: p.crewTraits[t], desc: pc ? escapeHtml(stripTags(pc.text_description)) : '' });
+        }
+      }
+      out.push(optionHtml('shipClass', k, k, parts.join(' · ') || 'No stat bonuses.', meta, expand));
     }
     return out.join('');
   }
@@ -321,7 +459,8 @@
       var c = CREW_PRESETS[i];
       var meta = [{ text: cap(c.type), cls: 't-amber' }];
       if (c.combat_only) meta.push({ text: 'Combat only', cls: 't-red' });
-      out.push(optionHtml('crew', c.name, c.name, escapeHtml(stripTags(c.text_description)), meta));
+      var expand = [{ tag: cap(c.type), name: c.name, desc: escapeHtml(stripTags(c.text_description)) }];
+      out.push(optionHtml('crew', c.name, c.name, escapeHtml(stripTags(c.text_description)), meta, expand));
     }
     return out.join('');
   }
@@ -338,7 +477,8 @@
       var meta = [{ text: cap(t.tt), cls: 't-cyan' }];
       if (t.storage && t.storage !== '0') meta.push({ text: 'Storage ' + t.storage, cls: '' });
       if (t.charges) meta.push({ text: t.charges + ' charges', cls: '' });
-      out.push(optionHtml('tech', t.name, t.name, escapeHtml(lines.join('\n') || 'No text.'), meta));
+      var expand = [{ tag: 'Tech ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
+      out.push(optionHtml('tech', t.name, t.name, escapeHtml(lines.join('\n') || 'No text.'), meta, expand));
     }
     return out.join('');
   }
@@ -354,8 +494,33 @@
       if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
       var meta = [{ text: cap(m.tt), cls: 't-cyan' }, { text: m.type === 'deployable' ? 'Deployable' : 'Module', cls: 't-amber' }];
       if (m.hull) meta.push({ text: 'Hull ' + m.hull, cls: '' });
-      out.push(optionHtml('mod', m.name, m.name, escapeHtml(lines.join('\n') || 'No text.'), meta));
+      var expand = [{ tag: cap(m.tt), name: m.name, desc: modDesc(m) }];
+      out.push(optionHtml('mod', m.name, m.name, escapeHtml(lines.join('\n') || 'No text.'), meta, expand));
     }
+    return out.join('');
+  }
+
+  function skillsOptions() {
+    var out = ['<div class="sk-grid">'];
+    for (var i = 0; i < SKILL_NAMES.length; i++) {
+      var n = SKILL_NAMES[i];
+      var v = choices.skills[n] || { points: '0', penalty: '' };
+      out.push(
+        '<div class="sk" data-skill="' + esc(n) + '">' +
+        '<span class="sk-name">' + esc(n) + '</span>' +
+        '<span class="sk-num">' + esc(v.points) + '</span>' +
+        '<span class="sk-btns">' +
+        '<button type="button" class="sbtn sminus" data-d="-1" title="Decrease ' + esc(n) + '">−</button>' +
+        '<button type="button" class="sbtn splus" data-d="1" title="Increase ' + esc(n) + '">+</button>' +
+        '</span>' +
+        '<span class="sk-pen">' +
+        '<label>Penalty</label>' +
+        '<input class="skpen-input" value="' + esc(v.penalty) + '" maxlength="3" placeholder="—" title="Skill penalty">' +
+        '</span>' +
+        '</div>'
+      );
+    }
+    out.push('</div>');
     return out.join('');
   }
 
@@ -367,13 +532,15 @@
   }
   function renderOptions() {
     document.getElementById('winTitle').textContent = steps[step].label;
+    var k = steps[step].key;
     var html = '';
-    if (steps[step].key === 'shipClass') html = classOptions();
-    else if (steps[step].key === 'crew') html = crewOptions();
-    else if (steps[step].key === 'tech') html = techOptions();
-    else html = modOptions();
+    if (k === 'shipClass') html = classOptions();
+    else if (k === 'crew') html = crewOptions();
+    else if (k === 'tech') html = techOptions();
+    else if (k === 'mod') html = modOptions();
+    else html = skillsOptions();
     document.getElementById('winOptions').innerHTML = html;
-    document.getElementById('continueBtn').disabled = !choices[steps[step].key];
+    document.getElementById('continueBtn').disabled = (k !== 'skills') && !choices[k];
     updateProgress();
   }
   function renderProgressDots() {
@@ -414,12 +581,40 @@
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
+    var sbtn = e.target.closest('.sbtn');
+    if (sbtn) {
+      var row = e.target.closest('.sk');
+      var name = row ? row.getAttribute('data-skill') : null;
+      if (!name) return;
+      var cur = parseInt(choices.skills[name].points, 10);
+      if (isNaN(cur)) cur = 0;
+      var d = parseInt(sbtn.getAttribute('data-d'), 10) || 0;
+      var nv = Math.max(-1, Math.min(12, cur + d));
+      choices.skills[name].points = String(nv);
+      saveChoices();
+      renderOptions();
+      return;
+    }
     var btn = e.target.closest('.opt');
     if (!btn) return;
     var id = btn.getAttribute('data-id');
-    choices[steps[step].key] = id;
+    var k = steps[step].key;
+    var wasOpen = expandedFor[k] === id;
+    choices[k] = id;
+    if (btn.getAttribute('data-exp')) expandedFor[k] = wasOpen ? null : id;
     saveChoices();
     renderOptions();
+  });
+
+  document.getElementById('winOptions').addEventListener('input', function (e) {
+    if (steps[step].key !== 'skills') return;
+    var inp = e.target.closest('.skpen-input');
+    if (!inp) return;
+    var row = e.target.closest('.sk');
+    var name = row ? row.getAttribute('data-skill') : null;
+    if (!name) return;
+    choices.skills[name].penalty = inp.value;
+    saveChoices();
   });
 
   document.getElementById('continueBtn').addEventListener('click', onContinue);
@@ -439,8 +634,9 @@
     goToWin(0);
   }
   function resumeRun() {
-    step = firstUnanswered();
-    if (step >= steps.length) { step = steps.length - 1; }
+    var next = firstUnanswered();
+    if (next >= steps.length) { step = steps.length; show('exp'); renderProgressDots(); return; }
+    step = next;
     goToWin(step);
   }
   function loadExisting() {
@@ -471,6 +667,16 @@
     if (json && json.crew && json.crew[0] && findCrew(json.crew[0].name)) c.crew = json.crew[0].name;
     if (json && json.tech && json.tech[0] && findTech(json.tech[0].name)) c.tech = json.tech[0].name;
     if (json && json.mods && json.mods[0] && findMod(json.mods[0].name)) c.mod = json.mods[0].name;
+    if (json && json.skills && typeof json.skills === 'object') {
+      for (var i = 0; i < SKILL_NAMES.length; i++) {
+        var n = SKILL_NAMES[i];
+        var sv = json.skills[n];
+        if (sv && typeof sv === 'object') {
+          c.skills[n].points = (sv.points !== undefined && sv.points !== null) ? String(sv.points) : c.skills[n].points;
+          c.skills[n].penalty = (sv.penalty !== undefined && sv.penalty !== null) ? String(sv.penalty) : '';
+        }
+      }
+    }
     choices = c;
     saveChoices();
   }
@@ -490,6 +696,16 @@
         (items[i].v ? esc(items[i].v) : '<span class="exp-none">' + esc(items[i].e) + '</span>') +
         '</div></div>';
     }
+    var skPts = [];
+    for (var si = 0; si < SKILL_NAMES.length; si++) {
+      var n = SKILL_NAMES[si];
+      var v = choices.skills[n] || { points: '0', penalty: '' };
+      var pen = v.penalty ? ' (' + v.penalty + ')' : '';
+      skPts.push(n + ' ' + v.points + pen);
+    }
+    html += '<div class="exp-pick exp-wide"><div class="opt-title">Crew Skills</div><div class="exp-skills">' +
+      skPts.map(function (x) { return '<span class="exp-skill">' + esc(x) + '</span>'; }).join('') +
+      '</div></div>';
     document.getElementById('expSummary').innerHTML = html;
   }
 
@@ -511,14 +727,19 @@
       if (st.speed) { s.stats.speedCur = bumpNum(s.stats.speedCur, st.speed); s.stats.speedBase = bumpNum(s.stats.speedBase, st.speed); }
       if (st.storage) { s.stats.storageBase = bumpNum(s.stats.storageBase, st.storage); }
     }
-    if (preset && preset.skills) {
-      Object.keys(preset.skills).forEach(function (name) {
-        s.skills[name] = bumpNum(s.skills[name], preset.skills[name]);
-      });
-    }
     var skills = {};
     for (var si = 0; si < SKILL_NAMES.length; si++) {
-      skills[SKILL_NAMES[si]] = { points: s.skills[SKILL_NAMES[si]], penalty: '' };
+      var sn = SKILL_NAMES[si];
+      var cv = choices.skills[sn] || {};
+      skills[sn] = {
+        points: (cv.points !== undefined && cv.points !== null) ? String(cv.points) : SHEET_DEFAULTS.skills[sn],
+        penalty: cv.penalty || ''
+      };
+    }
+    if (preset && preset.skills) {
+      Object.keys(preset.skills).forEach(function (name) {
+        skills[name].points = bumpNum(skills[name].points, preset.skills[name]);
+      });
     }
     s.skills = skills;
 
