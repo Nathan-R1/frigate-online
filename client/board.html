@@ -22,6 +22,7 @@
   <div class="settings-wrap" id="settingsWrap">
     <button type="button" class="btn settings-cog" id="settingsBtn" title="Settings">⚙</button>
     <div class="settings-menu hidden" id="settingsMenu">
+      <button type="button" class="settings-item" id="buildSheetBtn" title="Open the sheet builder in a new tab">Build Sheet</button>
       <div class="settings-submenu-wrap">
         <button type="button" class="settings-item view-btn" id="rulesToggleBtn" title="Rules and class info">Rules ▸</button>
         <div class="settings-submenu" id="rulesSubmenu">
@@ -2400,6 +2401,11 @@ document.getElementById('settingsBtn').addEventListener('click', function (e) {
 });
 
 document.getElementById('rulesBtn').addEventListener('click', openRules);
+
+document.getElementById('buildSheetBtn').addEventListener('click', function () {
+  closeSettingsMenu();
+  window.open('sheet-builder/sheet-builder.html', '_blank');
+});
 
 var sheetToggleBtn = document.getElementById('sheetToggleBtn');
 function setSheetHidden(hidden) {
