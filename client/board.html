@@ -505,10 +505,10 @@ function buildFrigateSvg(svg, c) {
   svg.appendChild(g);
 }
 
-/* Fixed-orientation stylized shading overlay: a fan of circles all tangent to
-   the body's bottom-left corner (centre = corner + radius along x and y), so
-   the shading builds into that corner and lightens toward the top-right. A
-   separate non-spinning layer, scaled to each body's radius. */
+/* Fixed-orientation stylized shading overlay: a fan of circles that all pass
+   through the body's bottom-left corner (centre = corner + radius along the
+   diagonal), so the shade is darkest at that corner and lightens toward the
+   top-right. Separate non-spinning layer, scaled to each body's radius. */
 var shadeSeq = 0;
 function buildShadeNode(def) {
   var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
@@ -520,13 +520,14 @@ function buildShadeNode(def) {
   defs.appendChild(clp);
   svg.appendChild(defs);
   var g = svgEl('g', { transform: 'translate(36 36)', 'clip-path': 'url(#tsc-' + sid + ')' });
-  var bx = -R, by = R;                    // body bottom-left corner
+  var bx = -R, by = R;                        // body bottom-left corner
+  var k = Math.SQRT1_2;                        // 1/√2 along the 45° diagonal
   var tiers = 7;
   for (var i = 0; i < tiers; i++) {
     var t = i / (tiers - 1);
-    var r = R * (0.15 + t * 2.85);
+    var r = R * (0.12 + t * 1.48);
     g.appendChild(svgEl('circle', {
-      cx: bx + r, cy: by - r,
+      cx: bx + r * k, cy: by - r * k,
       r: r,
       fill: '#05070a',
       opacity: 0.055 + 0.13 * t * t
