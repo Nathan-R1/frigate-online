@@ -3,6 +3,7 @@
  * Frigate Battle Map — shared state server.
  *
  * GET  board.php?get       -> full board state (JSON)
+ * GET  board.php?stream    -> SSE: pushes "hello" then "changed" whenever the state file changes
  * GET  board.php?pieces    -> autoscanned list from pieces/images/*.png
  * POST board.php           -> one JSON action: resize | create | move | counter | exhaust | ping | delete
  *
@@ -22,16 +23,20 @@
  * and saved atomically (temp file + rename) so the state can never be half-written.
  */
 
+define('STATE_FILE', __DIR__ . '/board-state.json');
+define('IMAGES_DIR', __DIR__ . '/../client/pieces/images');
+define('BOARD_VERSION', 8);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
+define('MAX_SIZE', 40);
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-define('STATE_FILE', __DIR__ . '/board-state.json');
-define('IMAGES_DIR', __DIR__ . '/../client/pieces/images');
-define('BOARD_VERSION', 8);   // bump when behaviour changes; returned as "v" in every response so we can verify the live file
-define('MAX_SIZE', 40);
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['stream'])) {
+    streamState();   // long-lived SSE broadcast of state changes (no polling) — must come after the defines it uses
+}
 
 $VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping', 'delete');
 $VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'grey');
@@ -41,6 +46,47 @@ $ANOMALY_IMGS  = array('asteroid' => 1, 'moon' => 1, 'planet' => 1, 'gas-giant' 
 function respond($data) {
     $data['v'] = BOARD_VERSION;
     echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/*
+ * Long-lived SSE connection: emits "hello" on connect, then "changed" every
+ * time board-state.json's mtime changes, plus a comment heartbeat every 15 s.
+ * Carries no state payload — clients treat it as a "go fetch" signal and use
+ * the normal ?get + applyServer path. Runs in its own PHP worker so it never
+ * blocks saves; it never writes or locks anything.
+ */
+function streamState() {
+    header('Content-Type: text/event-stream; charset=utf-8');
+    header('Cache-Control: no-cache');
+    header('X-Accel-Buffering: no');
+    header('Access-Control-Allow-Origin: *');
+    @set_time_limit(0);
+    if (function_exists('apache_setenv')) @apache_setenv('no-gzip', '1');
+    while (ob_get_level() > 0) { ob_end_flush(); }
+    ob_implicit_flush(true);
+
+    $lastMtime = @filemtime(STATE_FILE);
+    $lastBeat = time();
+
+    echo "data: hello\n\n";
+    flush();
+
+    while (!connection_aborted()) {
+        usleep(250000);
+        clearstatcache(true, STATE_FILE);
+        $mtime = @filemtime(STATE_FILE);
+        if ($mtime !== false && $mtime !== $lastMtime) {
+            $lastMtime = $mtime;
+            echo "data: changed\n\n";
+            flush();
+        }
+        if (time() - $lastBeat >= 15) {
+            $lastBeat = time();
+            echo ": ping\n\n";
+            flush();
+        }
+    }
     exit;
 }
 
