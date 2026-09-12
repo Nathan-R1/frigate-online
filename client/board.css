@@ -25,9 +25,9 @@ body {
 .topbar.hidden-menu .control,
 .topbar.hidden-menu #saveBtn,
 .topbar.hidden-menu #refreshBtn,
-.topbar.hidden-menu #badge       { display: none; }
-.topbar.hidden-menu .settings-wrap,
-.topbar.hidden-menu #moveBtn                  { pointer-events: auto; }
+.topbar.hidden-menu #badge,
+.topbar.hidden-menu #moveBtn                  { display: none; }
+.topbar.hidden-menu .settings-wrap                          { pointer-events: auto; }
 
 /* ===== floating +/- HUD (hosted on the board, above all iframes) ===== */
 .hud-adj-wrap {
