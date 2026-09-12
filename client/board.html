@@ -808,9 +808,12 @@ function buildPieceNode(p) {
 function renderPieces() {
   var ids = {}, i;
   for (i = 0; i < state.pieces.length; i++) ids[state.pieces[i].id] = state.pieces[i];
+  var seenIds = {};
   var kids = piecesEl.children;
   for (var k = kids.length - 1; k >= 0; k--) {
-    if (!ids[kids[k].getAttribute('data-cid')]) kids[k].parentNode.removeChild(kids[k]);
+    var pcid = kids[k].getAttribute('data-cid');
+    if (!ids[pcid] || seenIds[pcid]) kids[k].parentNode.removeChild(kids[k]);
+    else seenIds[pcid] = 1;
   }
   kids = piecesEl.children;
   for (i = 0; i < state.pieces.length; i++) {
@@ -861,26 +864,38 @@ function paintChipNode(c, p, idx, dim, box) {
 function renderChips() {
   var ids = {}, i;
   for (i = 0; i < state.chips.length; i++) ids[state.chips[i].id] = state.chips[i];
-  var groups = {};
+  var groups = {};          // gk -> array of chip objects expected in that cell
+  var expect = {};          // gk -> map id->1
   var p, key;
   for (i = 0; i < state.chips.length; i++) {
     p = state.chips[i];
     key = p.x + ',' + p.y;
-    if (!groups[key]) groups[key] = [];
+    if (!groups[key]) { groups[key] = []; expect[key] = {}; }
     groups[key].push(p);
+    expect[key][p.id] = 1;
   }
+  // Container fix-up: keep exactly one container per cell-stack and drop any
+  // chip inside it that doesn't belong there (e.g. one that moved away).
+  var seenCell = {};
   var containers = chipsEl.children;
-  var byCell = {};
   for (i = containers.length - 1; i >= 0; i--) {
     var cc = containers[i];
     var ck = cc.getAttribute('data-cell');
-    if (!groups[ck] || byCell[ck]) { cc.parentNode.removeChild(cc); continue; }
-    byCell[ck] = cc;
+    if (!groups[ck] || seenCell[ck]) { cc.parentNode.removeChild(cc); continue; }
+    seenCell[ck] = 1;
+    var kids = cc.children;
+    for (var k = kids.length - 1; k >= 0; k--) {
+      if (!expect[ck][kids[k].getAttribute('data-cid')]) kids[k].parentNode.removeChild(kids[k]);
+    }
   }
+  // Layout pass: build or reuse each cell's container and reconcile its chips.
   for (var gk in groups) {
     var arr = groups[gk];
     var xy = gk.split(',');
-    var cont = byCell[gk] || null;
+    var cont = null;
+    for (i = 0; i < chipsEl.children.length; i++) {
+      if (chipsEl.children[i].getAttribute('data-cell') === gk) { cont = chipsEl.children[i]; break; }
+    }
     if (!cont) {
       cont = el('div', 'cell-chips');
       cont.setAttribute('data-cell', gk);
@@ -893,10 +908,6 @@ function renderChips() {
     var n = arr.length;
     var dim = Math.ceil(Math.sqrt(n));
     var box = CELL / dim;
-    var chipKids = cont.children;
-    for (i = chipKids.length - 1; i >= 0; i--) {
-      if (!ids[chipKids[i].getAttribute('data-cid')]) chipKids[i].parentNode.removeChild(chipKids[i]);
-    }
     for (i = 0; i < n; i++) {
       p = arr[i];
       var ref = cont.children[i];
@@ -1067,11 +1078,12 @@ function findObj(type, id) {
 }
 function pickObject(node) {
   var i;
-  for (i = 0; i < 4 && node; i++) {
-    if (node.className && String(node.className).indexOf('piece') === 0) {
+  for (i = 0; i < 16 && node && node !== worldEl; i++) {
+    var cn = node.className ? String(node.className) : '';
+    if (cn.indexOf('piece') === 0) {
       return { type: 'piece', id: node.getAttribute('data-cid') };
     }
-    if (node.className && String(node.className).indexOf('chip') === 0) {
+    if (cn.indexOf('chip') === 0) {
       return { type: 'chip', id: node.getAttribute('data-cid') };
     }
     node = node.parentNode;
@@ -1480,7 +1492,7 @@ function wireCounters(layer) {
     }
     var n = e.target;
     var i;
-    for (i = 0; i < 4 && n; i++) {
+    for (i = 0; i < 16 && n && n !== worldEl; i++) {
       var cname = n.className ? String(n.className) : '';
       if (cname.indexOf('piece') === 0 || cname.indexOf('chip') === 0) {
         e.preventDefault();
