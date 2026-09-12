@@ -29,7 +29,7 @@ var TECH_PRESETS = [
     {name:'Hardening Array', traits:'', onbuild:'Place 2 * Engineering charges on this card', passive:'', onactivate:'Exhaust and remove 1 charge to add 1 Hull to any Module within Sensor range (this may exceed max Hull).', tt:'defense', storage:'2', charges:'0', deploy:false},
     {name:'Comms Unit', traits:'[Module] Class Tech', onbuild:'Create Module Comms Unit', passive:'', onactivate:'', tt:'science', storage:'0', deploy:'module'},
     {name:'AI Piloting', traits:'', onbuild:'', passive:'When you move Modules or Deployables you may move into the same space as an Asteroid. If you end your turn on an Asteroid, Module/Deployable is destroyed.', onactivate:'', tt:'offense', storage:'0', deploy:false},
-    {name:'Grav Jet', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to gain Move 1 per Speed, this can be allocated to any modules', tt:'science', storage:'0', charges:'0', deploy:false},
+    {name:'Grav Jet', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to gain 1 Move per Speed', tt:'science', storage:'0', charges:'0', deploy:false},
     {name:'SU Scanners', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to identify the location of any Stealth Objects in sensor range.', tt:'science', storage:'0', deploy:false},
     {name:'TAT Launcher', traits:'[Deployable]', onbuild:'Place 1 charge on this card', passive:'', onactivate:'Exhaust and remove 1 charge to Create Deployable TAT Guided', tt:'offense', storage:'1', charges:'1', deploy:true},
     {name:'Thrust Unit', traits:'[Module]', onbuild:'Create Module Thrust Engine. Trash.', passive:'', onactivate:'', tt:'movement', storage:'0', deploy:'module'},
