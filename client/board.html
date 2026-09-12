@@ -514,8 +514,8 @@ function buildShadeNode(def) {
   var R = def.bodyR || 30;
   var S = 2 * R;
   var img = svgEl('image', { x: 36 - S / 2, y: 36 - S / 2, width: S, height: S });
-  img.setAttribute('href', 'pieces/images/shading.png');
-  img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', 'pieces/images/shading.png');
+  img.setAttribute('href', 'pieces/images/' + (def.shadeImg || 'shading.png'));
+  img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', 'pieces/images/' + (def.shadeImg || 'shading.png'));
   svg.appendChild(img);
   return svg;
 }
@@ -724,7 +724,7 @@ function frigateAngle(p) {
    their anchor. Wormholes are passable during movement and teleport between
    their own network. */
 var ANOMALIES = {
-  asteroid:     { label: 'Asteroid',   size: 1, bodyR: 30, spin: 0,  shade: true },
+  asteroid:     { label: 'Asteroid',   size: 1, bodyR: 30, spin: 0,  shade: true,  shadeImg: 'shading-astroid.png' },
   moon:         { label: 'Moon',       size: 2, bodyR: 27, spin: 56, shade: true },
   planet:       { label: 'Planet',     size: 3, bodyR: 31, spin: 184, shade: true },
   'gas-giant':  { label: 'Gas Giant',  size: 4, bodyR: 33, spin: 120, shade: true },
