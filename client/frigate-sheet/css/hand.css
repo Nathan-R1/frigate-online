@@ -123,6 +123,7 @@ position:relative;display:inline-flex;align-items:center;
     }
     .hand-sort .hand-icon-btn{display:inline-flex;}
     .hand-newturn .nt-label{display:none;}
+    .hand-draw .nt-label{display:none;}
 
   }
 /* ===== hand filter menu ===== */
