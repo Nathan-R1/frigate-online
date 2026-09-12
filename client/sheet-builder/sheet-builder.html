@@ -41,19 +41,26 @@
     font-family: var(--disp); font-size: 14px; letter-spacing: .04em;
     color: var(--ink); text-transform: uppercase;
   }
+  .opt-title-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .opt-title-row .ticon { width: 15px; height: 15px; flex: none; }
   .opt-meta {
     display: flex; flex-wrap: wrap; gap: 6px;
     font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
   }
-  .opt-meta span { padding: 2px 7px; border: 1px solid var(--line); color: var(--ink-mid); border-radius: 4px; }
+  .opt-meta span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid var(--line); color: var(--ink-mid); border-radius: 4px; line-height: 1; vertical-align: middle; }
   .opt-meta span.t-cyan { color: var(--cyan); border-color: var(--cyan-dim); }
   .opt-meta span.t-amber { color: var(--amber); border-color: var(--brown-dim); }
   .opt-meta span.t-red { color: var(--red); border-color: var(--red-dim); }
   .opt-meta span.t-hull { background: rgba(232,169,74,.12); color: var(--amber); border-color: var(--amber); }
+  .opt-meta span.t-class-tech { color: var(--icon-charged); border-color: var(--icon-charged); background: rgba(156,63,102,.12); }
+  .opt-meta .ticon { width: 11px; height: 11px; flex: none; display: block; }
   .opt-body {
     color: var(--ink-mid); font-size: 12.5px; white-space: pre-line;
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
   }
+  .opt-body .ticon { width: 15px; height: 15px; vertical-align: -2px; margin-right: 6px; }
   /* expandable option cards */
   .opt-wrap { display: flex; flex-direction: column; }
   .opt-wrap .opt { flex: 1; }
@@ -263,7 +270,7 @@
     { key: 'shipClass', label: 'Hull Class' },
     { key: 'crew', label: 'Trait / Officer' },
     { key: 'tech', label: 'Technology Deck' },
-    { key: 'mod', label: 'Modules' },
+    { key: 'mod', label: 'Modules/Deployables' },
     { key: 'skills', label: 'Crew Skills' }
   ];
 
@@ -386,20 +393,34 @@
     html += '</div>';
     return html;
   }
-  function optionHtml(key, id, title, body, meta, expand) {
+  function optionHtml(key, id, title, body, meta, expand, leadIcon) {
     var sel = choices[key] === id;
     var isExp = !!(expand && expand.length);
     var open = isExp && expandedFor[key] === id;
     return '<div class="opt-wrap">' +
       '<button type="button" class="opt' + (body ? '' : ' compact') + (sel ? ' sel' : '') + (open ? ' open' : '') + '" data-id="' +
       id.replace(/"/g, '&quot;') + '"' + (isExp ? ' data-exp="1"' : '') + '>' +
-      '<span class="opt-title">' + esc(title) + '</span>' +
+      '<span class="opt-title-row">' + (leadIcon || '') + '<span class="opt-title">' + esc(title) + '</span></span>' +
       (meta && meta.length ? '<span class="opt-meta">' + metaTags(meta) + '</span>' : '') +
       (body ? '<span class="opt-body">' + body + '</span>' : '') +
       (isExp ? '<span class="opt-chev">' + (open ? '▾' : '▸') + '</span>' : '') +
       '</button>' +
       (open ? expandPanelHtml(key, expand) : '') +
       '</div>';
+  }
+
+  var MODULE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="var(--icon-cyan)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="var(--icon-cyan)" stroke-width="1.6"/></svg>';
+  var DEPLOYABLE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg>';
+  var STORAGE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var HULL_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  var TECH_TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
+  function typeIcon(key) { return TECH_TYPE_ICONS[key] || '⚔'; }
+  // renders tech traits: module/deployable become tags, leftover trait text (e.g. "active 1") stays
+  function traitHtml(traits) {
+    var rest = String(traits || '').replace('[Module]', '').replace('[Deployable]', '').trim();
+    if (!rest || rest.indexOf('Class Tech') !== -1) return '';
+    return '<span>' + esc(rest) + '</span>';
   }
 
   function techDesc(t) {
@@ -475,10 +496,16 @@
     var out = [];
     for (var i = 0; i < TECH_PRESETS.length; i++) {
       var t = TECH_PRESETS[i];
-      var body = t.traits ? 'Traits: ' + t.traits : '';
-      var meta = [{ text: cap(t.tt), cls: 't-cyan' }];
-      if (t.storage && t.storage !== '0') meta.push({ text: 'Storage ' + t.storage, cls: '' });
-      if (t.charges) meta.push({ text: t.charges + ' charges', cls: '' });
+      var body = traitHtml(t.traits);
+      var meta = [{ text: typeIcon(t.tt) + ' ' + cap(t.tt), cls: 't-cyan' }];
+      var metaTraits = t.traits || '';
+      if (metaTraits.indexOf('Class Tech') !== -1) meta.push({ text: 'Class Tech', cls: 't-class-tech' });
+      if (metaTraits.indexOf('[Module]') !== -1) meta.push({ text: MODULE_ICON, cls: 't-cyan' });
+      if (metaTraits.indexOf('[Deployable]') !== -1) meta.push({ text: DEPLOYABLE_ICON, cls: 't-amber' });
+      var st = parseInt(t.storage, 10);
+      if (!isNaN(st) && st > 0) meta.push({ text: STORAGE_ICON + t.storage, cls: '' });
+      var ch = t.charges;
+      if (ch !== undefined && ch !== null && ch !== '' && parseInt(ch, 10) >= 0) meta.push({ text: CHARGES_ICON + ch, cls: '' });
       var expand = [{ tag: 'Tech ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
       out.push(optionHtml('tech', t.name, t.name, body, meta, expand));
     }
@@ -489,10 +516,11 @@
     var out = [];
     for (var i = 0; i < MOD_PRESETS.length; i++) {
       var m = MOD_PRESETS[i];
-      var meta = [{ text: cap(m.tt), cls: 't-cyan' }, { text: m.type === 'deployable' ? 'Deployable' : 'Module', cls: 't-amber' }];
-      if (m.hull) meta.push({ text: 'Hull ' + m.hull, cls: 't-hull' });
+      var lead = m.type === 'deployable' ? DEPLOYABLE_ICON : MODULE_ICON;
+      var meta = [{ text: cap(m.tt), cls: 't-cyan' }];
+      if (m.hull) meta.push({ text: HULL_ICON + m.hull, cls: 't-hull' });
       var expand = [{ tag: cap(m.tt), name: m.name, desc: modDesc(m) }];
-      out.push(optionHtml('mod', m.name, m.name, '', meta, expand));
+      out.push(optionHtml('mod', m.name, m.name, '', meta, expand, lead));
     }
     return out.join('');
   }

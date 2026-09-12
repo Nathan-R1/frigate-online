@@ -4,7 +4,7 @@ var TECH_PRESETS = [
     {name:'Flame Cannon', traits:'active 1', onbuild:'', passive:'', onactivate:'Exhaust a Movement Module to: gain +1 Dmg and +2 Range to all Cannons and P.D. modules until the start of your next turn.', tt:'offense', storage:'0', deploy:false},
     {name:'Cannon Builder', traits:'[Module]', onbuild:'', onactivate:'Exhaust to Create Module Cannon', passive:'', tt:'offense', storage:'0', deploy:'module'},
     {name:'Cannon Unit', traits:'[Module]', onbuild:'Create Module Cannon. Trash.', passive:'', onactivate:'', tt:'offense', storage:'0', deploy:'module'},
-    {name:'Rotating Weapons', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to:\n\nMove an Offense Module any number of spaces to a location adjacent to another of your Modules.', tt:'offense', storage:'0', deploy:false},
+    {name:'Rotating Weapons', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to:\n\nMove an Offense Module any number of spaces to a location adjacent to another of your Modules.', tt:'movement', storage:'0', deploy:false},
     {name:'Torpedo Launcher', traits:'', onbuild:'Place 4 charges on this card', passive:'', onactivate:'Exhaust and remove 1 charge to Create Deployable Ion Torpedo', tt:'offense', storage:'2', charges:'4', deploy:true},
     {name:'P.D. Builder', traits:'[Module]', onbuild:'', passive:'', onactivate:'Exhaust to Create Module P.D.', tt:'defense', storage:'0', deploy:'module'},
     {name:'P.D. Unit', traits:'[Module]', onbuild:'Create Module P.D. Trash.', passive:'', onactivate:'', tt:'defense', storage:'0', deploy:'module'},
