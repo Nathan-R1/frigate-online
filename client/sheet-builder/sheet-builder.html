@@ -29,6 +29,7 @@
     transition: border-color .12s ease, box-shadow .12s ease;
   }
   .opt:hover { border-color: var(--cyan); }
+  .opt.compact { min-height: 0; padding: 12px 16px; }
   .opt.sel {
     border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 0 18px rgba(232,169,74,.25);
   }
@@ -48,6 +49,7 @@
   .opt-meta span.t-cyan { color: var(--cyan); border-color: var(--cyan-dim); }
   .opt-meta span.t-amber { color: var(--amber); border-color: var(--brown-dim); }
   .opt-meta span.t-red { color: var(--red); border-color: var(--red-dim); }
+  .opt-meta span.t-hull { background: rgba(232,169,74,.12); color: var(--amber); border-color: var(--amber); }
   .opt-body {
     color: var(--ink-mid); font-size: 12.5px; white-space: pre-line;
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
@@ -73,7 +75,7 @@
     font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
     color: var(--cyan); border: 1px solid var(--cyan-dim); border-radius: 4px; padding: 2px 7px;
   }
-  .exp-item-desc { color: var(--ink-mid); font-size: 12px; line-height: 1.55; }
+  .exp-item-desc { color: var(--ink-mid); font-size: 12px; line-height: 1.55; white-space: pre-line; }
   .exp-item-desc br + br { display: none; }
 
   /* progress steps */
@@ -81,7 +83,9 @@
   .pstep {
     font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
     color: var(--ink-dim); border: 1px solid var(--line); border-radius: 20px; padding: 4px 12px;
+    background: none; cursor: pointer; line-height: inherit;
   }
+  .pstep:hover { border-color: var(--cyan); color: var(--cyan); }
   .pstep.done { color: var(--cyan); border-color: var(--cyan-dim); }
   .pstep.cur { color: var(--ink); border-color: var(--cyan); background: rgba(79,216,201,.08); }
 
@@ -258,8 +262,8 @@
   var steps = [
     { key: 'shipClass', label: 'Hull Class' },
     { key: 'crew', label: 'Trait / Officer' },
-    { key: 'tech', label: 'Starting Technology' },
-    { key: 'mod', label: 'Starting Module' },
+    { key: 'tech', label: 'Technology Deck' },
+    { key: 'mod', label: 'Modules' },
     { key: 'skills', label: 'Crew Skills' }
   ];
 
@@ -387,11 +391,11 @@
     var isExp = !!(expand && expand.length);
     var open = isExp && expandedFor[key] === id;
     return '<div class="opt-wrap">' +
-      '<button type="button" class="opt' + (sel ? ' sel' : '') + (open ? ' open' : '') + '" data-id="' +
+      '<button type="button" class="opt' + (body ? '' : ' compact') + (sel ? ' sel' : '') + (open ? ' open' : '') + '" data-id="' +
       id.replace(/"/g, '&quot;') + '"' + (isExp ? ' data-exp="1"' : '') + '>' +
       '<span class="opt-title">' + esc(title) + '</span>' +
       (meta && meta.length ? '<span class="opt-meta">' + metaTags(meta) + '</span>' : '') +
-      '<span class="opt-body">' + body + '</span>' +
+      (body ? '<span class="opt-body">' + body + '</span>' : '') +
       (isExp ? '<span class="opt-chev">' + (open ? '▾' : '▸') + '</span>' : '') +
       '</button>' +
       (open ? expandPanelHtml(key, expand) : '') +
@@ -399,22 +403,24 @@
   }
 
   function techDesc(t) {
-    var lines = [];
     if (!t) return '';
+    var lines = [];
     if (t.traits) lines.push('Traits: ' + t.traits);
     if (t.onbuild) lines.push('On Play: ' + t.onbuild);
     if (t.passive) lines.push('Passive: ' + t.passive);
     if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
-    return escapeHtml(lines.join('<br>') || 'No text.');
+    if (!lines.length) return 'No text.';
+    return lines.map(escapeHtml).join('<br>');
   }
   function modDesc(m) {
-    var lines = [];
     if (!m) return '';
+    var lines = [];
     if (m.req) lines.push('Requires: ' + m.req);
     if (m.onbuild) lines.push('On Play: ' + m.onbuild);
     if (m.passive) lines.push('Passive: ' + m.passive);
     if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
-    return escapeHtml(lines.join('<br>') || 'No text.');
+    if (!lines.length) return 'No text.';
+    return lines.map(escapeHtml).join('<br>');
   }
 
   function classOptions() {
@@ -460,7 +466,7 @@
       var meta = [{ text: cap(c.type), cls: 't-amber' }];
       if (c.combat_only) meta.push({ text: 'Combat only', cls: 't-red' });
       var expand = [{ tag: cap(c.type), name: c.name, desc: escapeHtml(stripTags(c.text_description)) }];
-      out.push(optionHtml('crew', c.name, c.name, escapeHtml(stripTags(c.text_description)), meta, expand));
+      out.push(optionHtml('crew', c.name, c.name, '', meta, expand));
     }
     return out.join('');
   }
@@ -469,16 +475,12 @@
     var out = [];
     for (var i = 0; i < TECH_PRESETS.length; i++) {
       var t = TECH_PRESETS[i];
-      var lines = [];
-      if (t.traits) lines.push('Traits: ' + t.traits);
-      if (t.onbuild) lines.push('On Play: ' + t.onbuild);
-      if (t.passive) lines.push('Passive: ' + t.passive);
-      if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
+      var body = t.traits ? 'Traits: ' + t.traits : '';
       var meta = [{ text: cap(t.tt), cls: 't-cyan' }];
       if (t.storage && t.storage !== '0') meta.push({ text: 'Storage ' + t.storage, cls: '' });
       if (t.charges) meta.push({ text: t.charges + ' charges', cls: '' });
       var expand = [{ tag: 'Tech ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
-      out.push(optionHtml('tech', t.name, t.name, escapeHtml(lines.join('\n') || 'No text.'), meta, expand));
+      out.push(optionHtml('tech', t.name, t.name, body, meta, expand));
     }
     return out.join('');
   }
@@ -487,15 +489,10 @@
     var out = [];
     for (var i = 0; i < MOD_PRESETS.length; i++) {
       var m = MOD_PRESETS[i];
-      var lines = [];
-      if (m.req) lines.push('Requires: ' + m.req);
-      if (m.onbuild) lines.push('On Play: ' + m.onbuild);
-      if (m.passive) lines.push('Passive: ' + m.passive);
-      if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
       var meta = [{ text: cap(m.tt), cls: 't-cyan' }, { text: m.type === 'deployable' ? 'Deployable' : 'Module', cls: 't-amber' }];
-      if (m.hull) meta.push({ text: 'Hull ' + m.hull, cls: '' });
+      if (m.hull) meta.push({ text: 'Hull ' + m.hull, cls: 't-hull' });
       var expand = [{ tag: cap(m.tt), name: m.name, desc: modDesc(m) }];
-      out.push(optionHtml('mod', m.name, m.name, escapeHtml(lines.join('\n') || 'No text.'), meta, expand));
+      out.push(optionHtml('mod', m.name, m.name, '', meta, expand));
     }
     return out.join('');
   }
@@ -549,10 +546,14 @@
     for (var i = 0; i < steps.length; i++) {
       var answered = !!choices[steps[i].key];
       var cls = i === step ? 'cur' : (answered ? 'done' : '');
-      html += '<span class="pstep ' + cls + '">' + (i + 1) + '. ' + esc(steps[i].label) + '</span>';
+      html += '<button type="button" class="pstep ' + cls + '" onclick="goStep(' + i + ')">' + (i + 1) + '. ' + esc(steps[i].label) + '</button>';
     }
-    html += '<span class="pstep ' + (screen === 'exp' ? 'cur' : (firstUnanswered() === steps.length ? 'done' : '')) + '">' + (steps.length + 1) + '. Export</span>';
+    html += '<button type="button" class="pstep ' + (screen === 'exp' ? 'cur' : (firstUnanswered() === steps.length ? 'done' : '')) + '" onclick="goStep(' + steps.length + ')">' + (steps.length + 1) + '. Export</button>';
     el.innerHTML = html;
+  }
+  function goStep(i) {
+    if (i === steps.length) { step = steps.length; show('exp'); renderProgressDots(); return; }
+    goToWin(i);
   }
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -825,6 +826,7 @@
   window.startNew = function () { startNew(); };
   window.loadExisting = function () { loadExisting(); };
   window.resumeRun = function () { resumeRun(); };
+  window.goStep = goStep;
   show('landing');
   renderProgressDots();
 })();
