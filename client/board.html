@@ -2191,11 +2191,9 @@ function setBadge() {
   badgeEl.textContent = synced ? 'SYNCED'
                                : (lastSync ? 'OFFLINE' : 'NOT SYNCED');
 }
-function refresh() {
-  if (pending.order.length > 0) {
-    if (!window.confirm('You have ' + pending.order.length + ' unsaved change(s). Refreshing will discard them. Continue?')) return;
-    pending = { order: [], map: {} };
-  }
+var refreshBusy = false, refreshQueued = false;
+function doRefresh() {
+  refreshBusy = true;
   refreshBtn.disabled = true;
   fetch('../server/board.php?get&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
     if (data && data.ok && data.state) { synced = true; applyServer(data.state); }
@@ -2203,11 +2201,54 @@ function refresh() {
   }).catch(function () { synced = false; }).then(function () {
     lastSync = new Date().toLocaleTimeString();
     refreshBtn.disabled = false;
+    refreshBusy = false;
     setBadge();
+    if (refreshQueued) { refreshQueued = false; doRefresh(); }
   });
+}
+function scheduleRefresh() {
+  if (typeof document.hidden !== 'undefined' && document.hidden) return;
+  if (pending.order.length > 0) return;      // never clobber unsaved edits
+  if (refreshBusy) { refreshQueued = true; return; }
+  doRefresh();
+}
+function refresh() {
+  if (pending.order.length > 0) {
+    if (!window.confirm('You have ' + pending.order.length + ' unsaved change(s). Refreshing will discard them. Continue?')) return;
+    pending = { order: [], map: {} };
+  }
+  scheduleRefresh();
 }
 saveBtn.addEventListener('click', saveChanges);
 refreshBtn.addEventListener('click', refresh);
+
+/* ===== live updates via SSE ===== */
+var sseEl = null;
+var sseFallbackTimer = null;
+function startSlowPoll() {
+  if (sseFallbackTimer) return;
+  sseFallbackTimer = setInterval(scheduleRefresh, 10000);
+}
+function stopSlowPoll() {
+  if (sseFallbackTimer) { clearInterval(sseFallbackTimer); sseFallbackTimer = null; }
+}
+function initSse() {
+  try { sseEl = new EventSource('../server/board.php?stream&_=' + Date.now()); }
+  catch (e) { startSlowPoll(); return; }
+  sseEl.onopen = function () {
+    stopSlowPoll();
+    scheduleRefresh();
+  };
+  sseEl.onmessage = function (ev) {
+    if (ev.data === 'changed') scheduleRefresh();
+  };
+  sseEl.onerror = function () {
+    if (sseEl && sseEl.readyState === EventSource.CLOSED) startSlowPoll();
+  };
+}
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) scheduleRefresh();
+});
 
 /* ===== grid size control ===== */
 gridInput.addEventListener('change', function () {
@@ -2906,6 +2947,7 @@ window.addEventListener('keydown', function (e) {
   applyView();
   refreshCatalog();
   refresh();
+  initSse();
   // centre the board
   var w = state.grid.size * CELL, h = state.grid.size * CELL;
   if (boardEl.clientWidth > w) view.x = (boardEl.clientWidth - w) / 2;
