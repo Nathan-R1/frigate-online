@@ -14,6 +14,8 @@
 <div class="hand-dock" id="handDock">
   <div class="hand-bar">
     <button type="button" class="hand-newturn" id="handNewTurnBtn" onclick="sendNewTurn()" title="New Turn: restore exhausted techs and draw (4 + Cyber) from deck"><span class="nt-ico">❯❯❯</span><span class="nt-label">New Turn</span></button>
+    <div class="hand-bar-sep"></div>
+    <button type="button" class="hand-draw" id="handDrawBtn" onclick="sendDrawCard()" title="Draw 1 card from your deck"><span class="nt-ico">⇩</span><span class="nt-label">Draw Card</span></button>
     <div class="hand-slider" id="handSlider">
       <div class="hand-slider-track"></div>
       <div class="hand-slider-thumb" id="handSliderThumb"></div>
@@ -189,6 +191,9 @@
       send({ t:'newturn' });
       setTurnPhase('end');
     }
+  }
+  function sendDrawCard(){
+    send({ t:'drawcard' });
   }
   var FILTER_CATS = [
     {key:'hand', label:'Hand', options:[
@@ -676,6 +681,7 @@
   window.toggleFilterMenu = toggleFilterMenu;
   window.cycleHandAlign = cycleHandAlign;
   window.sendNewTurn = sendNewTurn;
+  window.sendDrawCard = sendDrawCard;
 })();
 </script>
 </body>

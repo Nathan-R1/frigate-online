@@ -103,6 +103,10 @@ input[type=number]:focus { outline: none; border-color: #35d0e0; }
 }
 .btn:hover { border-color: #35d0e0; color: #35d0e0; }
 .btn:disabled { opacity: .5; cursor: default; }
+.move-btn.active {
+  color: #5b94f0; border-color: #5b94f0;
+  box-shadow: 0 0 10px rgba(91, 148, 240, .5);
+}
 
 /* ===== hint bar ===== */
 .hint {
@@ -168,6 +172,10 @@ body.resizing #playerFrame { pointer-events: none; }
 
 .piece { position: absolute; pointer-events: auto; cursor: grab; }
 .piece img { width: 100%; height: 100%; display: block; user-select: none; -webkit-user-select: none; }
+.piece.moving {
+  outline: 2px solid rgba(91, 148, 240, .9); outline-offset: -2px;
+  box-shadow: 0 0 14px rgba(91, 148, 240, .7);
+}
 .piece.selected, .chip.selected {
   outline: 2px solid #35d0e0; outline-offset: -2px;
   box-shadow: 0 0 12px rgba(53, 208, 224, .6);
@@ -222,6 +230,37 @@ body.resizing #playerFrame { pointer-events: none; }
   border-radius: 8px; padding: 6px 12px; pointer-events: none;
 }
 .dist-readout.hidden { display: none; }
+
+/* ===== move phase ===== */
+.move-counter {
+  position: absolute; top: 16px; left: 16px; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(10, 15, 22, .85); border: 1px solid #22303f;
+  border-radius: 8px; padding: 8px 14px; pointer-events: none;
+}
+.move-counter.hidden { display: none; }
+.mc-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .22em;
+  color: #7f8fa0; text-transform: uppercase; white-space: nowrap;
+}
+.mc-val {
+  font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 26px; line-height: 1;
+  color: #35d0e0; text-shadow: 0 0 12px rgba(53, 208, 224, .35);
+  min-width: 36px; text-align: center;
+}
+.move-counter.over .mc-val { color: #e04a4a; text-shadow: 0 0 12px rgba(224, 74, 74, .4); }
+
+/* move budget popup */
+.move-panel { min-width: 340px; padding: 24px 28px; }
+.move-pop-body { display: flex; align-items: center; gap: 16px; padding: 14px 0 4px; }
+.move-pop-label {
+  font: 600 15px 'Rajdhani', sans-serif; letter-spacing: 1px; color: #dfe6ee;
+  white-space: nowrap;
+}
+.move-pop-body input {
+  width: 130px; font-size: 26px; padding: 8px 10px; text-align: center;
+}
+.move-pop-ok { margin-left: auto; padding: 10px 26px; font-size: 14px; }
 
 /* ===== create popup ===== */
 .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; z-index: 50; }
