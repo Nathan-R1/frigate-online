@@ -540,17 +540,16 @@ function findObj(type, id) {
   for (i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
   return null;
 }
-function selectAt(x, y) {
+function pickObject(node) {
   var i;
-  for (i = 0; i < state.pieces.length; i++) {
-    if (state.pieces[i].x === x && state.pieces[i].y === y) {
-      return { type: 'piece', id: state.pieces[i].id };
+  for (i = 0; i < 4 && node; i++) {
+    if (node.className && String(node.className).indexOf('piece') === 0) {
+      return { type: 'piece', id: node.getAttribute('data-cid') };
     }
-  }
-  for (i = 0; i < state.chips.length; i++) {
-    if (state.chips[i].x === x && state.chips[i].y === y) {
-      return { type: 'chip', id: state.chips[i].id };
+    if (node.className && String(node.className).indexOf('chip') === 0) {
+      return { type: 'chip', id: node.getAttribute('data-cid') };
     }
+    node = node.parentNode;
   }
   return null;
 }
@@ -627,7 +626,7 @@ window.addEventListener('mouseup', function (e) {
   drag = null;
   boardEl.className = '';
   if (wasDrag) return;
-  handleClick(e.clientX, e.clientY);
+  handleClick(e.clientX, e.clientY, e.target);
 });
 
 boardEl.addEventListener('wheel', function (e) {
@@ -739,12 +738,12 @@ boardEl.addEventListener('touchcancel', function () {
   touchActive = false;
 }, { passive: false });
 
-function handleClick(cx, cy) {
+function handleClick(cx, cy, targetEl) {
   var cell = clientToCell(cx, cy);
   var size = state.grid.size;
   if (cell.x < 0 || cell.y < 0 || cell.x >= size || cell.y >= size) return;
 
-  var hit = selectAt(cell.x, cell.y);
+  var hit = pickObject(targetEl);
   if (hit) { setSelection(hit); return; }
 
   if (sel) {
@@ -1024,7 +1023,7 @@ function endMove() {
 
 moveBtn.addEventListener('click', function () {
   if (moveState) { endMove(); return; }
-  moveBudgetInput.value = '6';
+  moveBudgetInput.value = localStorage.getItem('frigateMoveBudget') || '6';
   movePopup.classList.remove('hidden');
   moveBudgetInput.focus();
   moveBudgetInput.select();
@@ -1034,6 +1033,7 @@ function submitMoveBudget() {
   var n = Math.floor(Number(moveBudgetInput.value));
   if (!(n >= 1)) n = 1;
   n = Math.min(999, n);
+  try { localStorage.setItem('frigateMoveBudget', String(n)); } catch (e) {}
   movePopup.classList.add('hidden');
   startMove(n);
 }
