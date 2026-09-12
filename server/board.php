@@ -6,6 +6,15 @@
  * GET  board.php?pieces    -> autoscanned list from pieces/images/*.png
  * POST board.php           -> one JSON action: resize | create | move | counter | exhaust | ping | delete
  *
+ * Batches merge with a first-write-wins rule: each action is applied to the
+ * live state in order, and actions that no longer apply (e.g. moving a piece
+ * another player just deleted, or moving onto a now-occupied cell) are skipped
+ * individually instead of aborting the whole batch. Moves carry the position
+ * the sender believed the object was at; if it moved in the meantime, that
+ * move is skipped so the first committed change sticks. The response includes
+ * a "failed" list of the skipped actions' errors so clients can notify the
+ * user.
+ *
  * Pings are persistent per-player markers stored as a color-keyed map
  * (one ping per color, replaced on each new ping, no TTL expiry).
  *
@@ -209,6 +218,15 @@ function actMove(&$s, $a) {
     }
     if ($idx === -1) return array('error' => 'not found');
 
+    // First-write-wins: the sender records where it believed the object was.
+    // If it no longer matches, someone else moved it first, so reject this
+    // move (the batch loop skips it) instead of overwriting them.
+    if (isset($a['fromX']) && isset($a['fromY'])) {
+        if ((int)$target['x'] !== (int)$a['fromX'] || (int)$target['y'] !== (int)$a['fromY']) {
+            return array('error' => 'moved elsewhere');
+        }
+    }
+
     $blocked = cellBlocked($s, $type, $x, $y);
     $sameCell = $target['x'] == $x && $target['y'] == $y;
     if ($blocked && !$sameCell) return array('error' => 'cell occupied');
@@ -318,7 +336,8 @@ if ($method === 'POST') {
             if (!in_array($b['action'], $VALID_ACTIONS, true)) respond(array('ok' => false, 'error' => 'unknown action'));
             $actions[] = $b;
         }
-        $res = mutateState(function (&$s) use ($actions) {
+        $failed = array();   // per-action errors: conflicts are skipped so the rest still saves (last-write-wins merge)
+        $res = mutateState(function (&$s) use ($actions, &$failed) {
             foreach ($actions as $act) {
                 $r = null;
                 switch ($act['action']) {
@@ -330,12 +349,14 @@ if ($method === 'POST') {
                     case 'ping':    $r = actPing($s, $act);    break;
                     case 'delete':  $r = actDelete($s, $act);  break;
                 }
-                if (is_array($r) && isset($r['error'])) return $r;   // abort the whole batch, nothing saved
+                if (is_array($r) && isset($r['error'])) $failed[] = $r['error'];
             }
             return null;
         });
         if (isset($res['error'])) respond(array('ok' => false, 'error' => $res['error']));
-        respond(array('ok' => true, 'state' => $res['state']));
+        $out = array('ok' => true, 'state' => $res['state']);
+        if (!empty($failed)) $out['failed'] = $failed;
+        respond($out);
     }
     if (!isset($a['action'])) respond(array('ok' => false, 'error' => 'bad payload'));
     $action = $a['action'];

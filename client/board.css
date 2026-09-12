@@ -97,6 +97,7 @@ input[type=number]:focus { outline: none; border-color: #35d0e0; }
 #badge.on { color: #7df0a8; background: rgba(61, 220, 140, .12); border: 1px solid rgba(61, 220, 140, .35); }
 #badge.off { color: #f2c063; background: rgba(242, 192, 99, .12); border: 1px solid rgba(242, 192, 99, .35); }
 #badge.pending { color: #ffd166; background: rgba(255, 209, 102, .12); border: 1px solid rgba(255, 209, 102, .4); }
+#badge.warn { color: #e04a4a; background: rgba(224, 74, 74, .12); border: 1px solid rgba(224, 74, 74, .4); }
 .btn {
   background: #0a0f16; border: 1px solid #26374a; color: #8fa4b8;
   font: 600 12px 'Rajdhani', sans-serif; letter-spacing: 1px; padding: 6px 12px;
