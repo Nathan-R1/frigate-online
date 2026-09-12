@@ -664,12 +664,12 @@ function buildWormholeSvg(svg, seed, def) {
   var swirl = svgEl('g');
   for (var i = 0; i < 4; i++) {
     var rx = 27 - i * 5, ry = 11 - i * 1.6;
-    swirl.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: rx, ry: ry, fill: i === 0 ? 'rgba(4,6,10,.85)' : 'none', stroke: tint, 'stroke-width': 2.5 - i * 0.4, opacity: 0.75 - i * 0.14, transform: 'rotate(' + (i * 17) + ')' }));
+    swirl.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: rx, ry: ry, fill: i === 0 ? 'rgba(4,6,10,.85)' : 'none', stroke: tint, 'stroke-width': 3 - i * 0.35, opacity: 0.95 - i * 0.14, transform: 'rotate(' + (i * 17) + ')' }));
   }
   addRotate(swirl, '7s', true);
   g.appendChild(swirl);
   var arcs = svgEl('g');
-  arcs.appendChild(svgEl('circle', { r: 31, fill: 'none', stroke: tint, 'stroke-width': 2, 'stroke-dasharray': '10 18', opacity: 0.5 }));
+  arcs.appendChild(svgEl('circle', { r: 31, fill: 'none', stroke: tint, 'stroke-width': 3, 'stroke-dasharray': '10 18', opacity: 0.85 }));
   addRotate(arcs, '13s', false);
   g.appendChild(arcs);
   var core = svgEl('circle', { r: 9, fill: '#04060a' });
@@ -963,6 +963,7 @@ function paintPieceNode(d, p) {
   d.style.top = cellPx(p.y) + 'px';
   var sv = d.querySelector('.module-svg');
   var cls = anom ? 'piece anom' : 'piece';
+  if (anom && isWormhole(p)) cls += ' wormhole';
   if (p.exhausted) cls += ' exhausted';
   if (moveState && isActorPiece(p)) cls += ' moving';
   if (sel && sel.type === 'piece' && sel.id === p.id) cls += ' selected';
