@@ -53,6 +53,7 @@
   .opt-meta span.t-cyan { color: var(--cyan); border-color: var(--cyan-dim); }
   .opt-meta span.t-amber { color: var(--amber); border-color: var(--brown-dim); }
   .opt-meta span.t-red { color: var(--red); border-color: var(--red-dim); }
+  .opt-meta span.t-skill { color: var(--amber); border-color: var(--brown-dim); background: rgba(232,169,74,.08); }
   .opt-meta span.t-hull { background: rgba(232,169,74,.12); color: var(--amber); border-color: var(--amber); }
   .opt-meta span.t-class-tech { color: var(--icon-charged); border-color: var(--icon-charged); background: rgba(156,63,102,.12); }
   .opt-meta .ticon { width: 11px; height: 11px; flex: none; display: block; }
@@ -308,8 +309,8 @@
   var step = 0;
   var screen = 'landing'; // landing | win | exp
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
-  var filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false };
-  function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false }; }
+  var filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false };
+  function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false }; }
 
   /* ===== persistence ===== */
   function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '' }; }
@@ -510,7 +511,9 @@
       var c = CREW_PRESETS[i];
       if (!nameMatch(c.name) || !filterTypes(c.type)) continue;
       if (filters.cbt && !c.combat_only) continue;
+      if (filters.sk && !c.skill_increase) continue;
       var meta = [{ text: typeIcon(c.type) + ' ' + cap(c.type), cls: 't-cyan' }];
+      if (c.skill_increase) meta.push({ text: '⭐ Crew Skill', cls: 't-skill' });
       if (c.combat_only) meta.push({ text: '⚔ Combat only', cls: 't-red' });
       var expand = [{ tag: cap(c.type), name: c.name, desc: escapeHtml(stripTags(c.text_description)) }];
       out.push(optionHtml('crew', c.name, c.name, '', meta, expand));
@@ -648,6 +651,7 @@
     if (k === 'crew') {
       html += '<span class="ff-div"></span>';
       html += filterChip('⚔', 'cbt', 'Combat only', filters.cbt);
+      html += filterChip('⭐', 'sk', 'Crew Skill', filters.sk);
     }
     if (k === 'tech') {
       html += '<span class="ff-div"></span>';
@@ -750,6 +754,7 @@
     else if (f === 'st') filters.st = !filters.st;
     else if (f === 'ch') filters.ch = !filters.ch;
     else if (f === 'cbt') filters.cbt = !filters.cbt;
+    else if (f === 'sk') filters.sk = !filters.sk;
     renderOptions();
   });
   document.getElementById('filterBar').addEventListener('input', function (e) {
