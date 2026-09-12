@@ -75,6 +75,7 @@
       <div id="los" class="layer"></div>
       <div id="path" class="layer">
         <svg id="movePathSvg" class="move-path"></svg>
+        <div id="movePathBeacon" class="move-beacon hidden"></div>
       </div>
     </div>
     <div id="moveCounter" class="move-counter hidden">
@@ -541,13 +542,20 @@ function updateLosOnHover(cx, cy) {
     var p = findMovePath(from.x, from.y, c.x, c.y, from.color);
     if (p) {
       showDist(p.length - 1);
-      if (moveState) renderMovePath(p);
-      else clearMovePath();
+      if (moveState) {
+        var over = projectedMoveLeft(from, c.x, c.y) < 0;
+        distEl.classList.toggle('over', over);
+        renderMovePath(p, over);
+      } else {
+        distEl.classList.remove('over');
+        clearMovePath();
+      }
       return;
     }
   }
   hideDist();
   clearMovePath();
+  distEl.classList.remove('over');
 }
 
 /* ===== selection / move ===== */
@@ -662,11 +670,19 @@ function moveDistance(fromX, fromY, tx, ty, color) {
 }
 
 /* ===== move path preview ===== */
+var SVG_NS = 'http://www.w3.org/2000/svg';
 var movePathSvg = document.getElementById('movePathSvg');
-var movePathPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+var movePathPoly = document.createElementNS(SVG_NS, 'polyline');
+var movePathPulse = document.createElementNS(SVG_NS, 'polyline');
+movePathPoly.setAttribute('class', 'path-base');
+movePathPulse.setAttribute('class', 'path-pulse');
+movePathPulse.setAttribute('pathLength', '100');
 movePathSvg.appendChild(movePathPoly);
+movePathSvg.appendChild(movePathPulse);
+var movePathBeacon = document.getElementById('movePathBeacon');
+var pathLayerEl = document.getElementById('path');
 
-function renderMovePath(p) {
+function renderMovePath(p, over) {
   var px = state.grid.size * CELL;
   movePathSvg.setAttribute('width', px);
   movePathSvg.setAttribute('height', px);
@@ -674,10 +690,36 @@ function renderMovePath(p) {
   for (i = 0; i < p.length; i++) {
     pts.push((p[i].x * CELL + CELL / 2) + ',' + (p[i].y * CELL + CELL / 2));
   }
-  movePathPoly.setAttribute('points', pts.join(' '));
+  pts = pts.join(' ');
+  movePathPoly.setAttribute('points', pts);
+  movePathPulse.setAttribute('points', pts);
+  pathLayerEl.classList.toggle('over', !!over);
+  var last = p[p.length - 1];
+  movePathBeacon.style.left = (last.x * CELL + CELL / 2) + 'px';
+  movePathBeacon.style.top = (last.y * CELL + CELL / 2) + 'px';
+  movePathBeacon.classList.remove('hidden');
 }
 function clearMovePath() {
   movePathPoly.setAttribute('points', '');
+  movePathPulse.setAttribute('points', '');
+  pathLayerEl.classList.remove('over');
+  movePathBeacon.classList.add('hidden');
+}
+
+function projectedMoveLeft(obj, tx, ty) {
+  var used = 0, st = null, d, i, p, oldCost = 0;
+  for (i = 0; i < state.pieces.length; i++) {
+    p = state.pieces[i];
+    st = moveState.starts[p.id];
+    if (!st) continue;
+    d = moveDistance(st.x, st.y, p.x, p.y, actorColor);
+    if (d > 0) used += d;
+    if (p.id === obj.id) oldCost = Math.max(d, 0);
+  }
+  st = moveState.starts[obj.id];
+  var newCost = 0;
+  if (st) newCost = Math.max(moveDistance(st.x, st.y, tx, ty, actorColor), 0);
+  return moveState.budget - (used - oldCost + newCost);
 }
 
 /* ===== interactions on the board ===== */

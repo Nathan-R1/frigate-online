@@ -232,24 +232,76 @@ body.resizing #playerFrame { pointer-events: none; }
   border-radius: 8px; padding: 2px 5px; pointer-events: none;
 }
 .dist-readout.hidden { display: none; }
+.dist-readout.over {
+  color: #e04a4a;
+  border-color: rgba(224, 74, 74, .55);
+  box-shadow: 0 0 8px rgba(224, 74, 74, .4);
+}
+
+/* over-budget: line + beacon go red */
+#path.over .move-path { filter: drop-shadow(0 0 6px rgba(224, 74, 74, .6)); }
+#path.over polyline { stroke: #e04a4a; }
+#path.over .path-pulse { stroke: #ffb0a9; }
+#path.over .move-beacon { background: #ffc6c0; box-shadow: 0 0 12px rgba(224, 74, 74, .95); }
+#path.over .move-beacon::after { border-color: rgba(224, 74, 74, .85); }
 
 /* ===== move path preview ===== */
 #path .move-path {
   position: absolute; left: 0; top: 0; overflow: visible;
-  filter: drop-shadow(0 0 5px rgba(53, 208, 224, .55));
+  filter: drop-shadow(0 0 6px rgba(53, 208, 224, .6));
 }
-#path .move-path polyline {
+#path polyline {
   fill: none;
   stroke: #35d0e0;
-  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 5 14;
-  animation: movepath-flow .8s linear infinite;
 }
-@keyframes movepath-flow {
+#path .path-base {
+  stroke-width: 3;
+  opacity: .5;
+  stroke-dasharray: 5 14;
+  animation: path-breathe 2.2s ease-in-out infinite,
+             path-flow .8s linear infinite;
+}
+#path .path-pulse {
+  stroke-width: 9;
+  stroke: #cdf4ff;
+  opacity: .95;
+  stroke-dasharray: 8 92;
+  animation: path-pulse-flow 1.4s linear infinite;
+}
+@keyframes path-breathe {
+  0%, 100% { opacity: .35; }
+  50% { opacity: .65; }
+}
+@keyframes path-flow {
   from { stroke-dashoffset: 0; }
   to { stroke-dashoffset: -19; }
+}
+@keyframes path-pulse-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -100; }
+}
+#path .move-beacon {
+  position: absolute;
+  width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #e6fbff;
+  box-shadow: 0 0 12px rgba(53, 208, 224, .95);
+  pointer-events: none;
+}
+#path .move-beacon::after {
+  content: '';
+  position: absolute; left: 50%; top: 50%;
+  width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(53, 208, 224, .85);
+  animation: beacon-ring 1.2s ease-out infinite;
+}
+#path .move-beacon.hidden { display: none; }
+@keyframes beacon-ring {
+  0% { transform: scale(.3); opacity: 1; }
+  100% { transform: scale(3.2); opacity: 0; }
 }
 
 /* ===== move phase ===== */
