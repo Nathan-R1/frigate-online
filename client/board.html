@@ -115,6 +115,7 @@
     </div>
     <div class="pop-list" id="anomList"></div>
     <div class="pop-foot">
+      <span class="anom-msg hidden" id="anomMsg"></span>
       <span class="anom-foot">Multi-cell bodies anchor at the clicked cell</span>
     </div>
   </div>
@@ -504,45 +505,22 @@ function buildFrigateSvg(svg, c) {
   svg.appendChild(g);
 }
 
-/* Seeded faceted-silhouette shading, drawn only ONCE as a fixed overlay (never
-   animated) so the light source stays in one orientation while the body spins
-   beneath it. All anomalies share this for a consistent look. */
+/* Shared baked-in radial shading (the original asteroid method): a dark
+   gradient gas over the silhouette, light from the top-left so rocky bodies
+   read as shadowed spheres. Drawn inside the spinning body so it moves with
+   the rock. */
 var shadeSeq = 0;
-function buildShadeSvg(svg, radius, seed) {
-  var n = 10, pts = [], i, ang, r;
-  for (i = 0; i < n; i++) {
-    ang = (i / n) * Math.PI * 2;
-    r = radius * (0.94 + hashStr('s' + i + seed) * 0.12);
-    pts.push((Math.cos(ang) * r).toFixed(1) + ',' + (Math.sin(ang) * r).toFixed(1));
-  }
-  var ptsStr = pts.join(' ');
-  var sid = 'sh' + (shadeSeq++);
+function addShade(parent, radius) {
+  var sid = 'sd' + (shadeSeq++);
   var defs = svgEl('defs');
-  var clp = svgEl('clipPath', { id: 'shc-' + sid });
-  clp.appendChild(svgEl('polygon', { points: ptsStr }));
-  defs.appendChild(clp);
-  var lg = svgEl('linearGradient', { id: 'shl-' + sid, x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
-  lg.appendChild(svgEl('stop', { offset: '38%', 'stop-color': 'rgba(0,0,0,0)' }));
-  lg.appendChild(svgEl('stop', { offset: '45%', 'stop-color': 'rgba(0,0,0,.34)' }));
-  lg.appendChild(svgEl('stop', { offset: '62%', 'stop-color': 'rgba(0,0,0,.54)' }));
-  lg.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'rgba(0,0,0,.66)' }));
-  defs.appendChild(lg);
-  var lg2 = svgEl('linearGradient', { id: 'shl2-' + sid, x1: '0%', y1: '100%', x2: '100%', y2: '0%' });
-  lg2.appendChild(svgEl('stop', { offset: '0%', 'stop-color': 'rgba(0,0,0,0)' }));
-  lg2.appendChild(svgEl('stop', { offset: '54%', 'stop-color': 'rgba(0,0,0,0)' }));
-  lg2.appendChild(svgEl('stop', { offset: '57%', 'stop-color': 'rgba(0,0,0,.18)' }));
-  lg2.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'rgba(0,0,0,.42)' }));
-  defs.appendChild(lg2);
-  svg.appendChild(defs);
-  var sh = svgEl('g', { 'clip-path': 'url(#shc-' + sid + ')' });
-  sh.appendChild(svgEl('rect', { x: -36, y: -36, width: 72, height: 72, fill: 'url(#shl-' + sid + ')' }));
-  sh.appendChild(svgEl('rect', { x: -36, y: -36, width: 72, height: 72, fill: 'url(#shl2-' + sid + ')', transform: 'rotate(34)' }));
-  svg.appendChild(sh);
-}
-function buildShadeNode(def, seed) {
-  var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
-  buildShadeSvg(svg, def.bodyR || 30, seed);
-  return svg;
+  var grad = svgEl('radialGradient', { id: sid, cx: '50%', cy: '28%', r: '75%' });
+  grad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#15181c' }));
+  grad.appendChild(svgEl('stop', { offset: '38%', 'stop-color': '#15181c', 'stop-opacity': '0' }));
+  grad.appendChild(svgEl('stop', { offset: '70%', 'stop-color': '#15181c', 'stop-opacity': '0' }));
+  grad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#05070a', 'stop-opacity': '0.5' }));
+  defs.appendChild(grad);
+  parent.appendChild(defs);
+  parent.appendChild(svgEl('ellipse', { cx: -10, cy: -11, rx: radius, ry: radius * 0.83, transform: 'rotate(34)', fill: 'url(#' + sid + ')' }));
 }
 
 function rockPolygon(seed, n, base) {
@@ -574,6 +552,7 @@ function buildAsteroidSvg(svg, seed) {
   var m2 = svgEl('circle', { cx: 25, cy: -22, r: 3.6, fill: '#5b6168', stroke: '#3f444a', 'stroke-width': 1.4 });
   svg.appendChild(m1);
   svg.appendChild(m2);
+  addShade(g, 31);
   svg.appendChild(g);
 }
 
@@ -587,6 +566,7 @@ function buildMoonSvg(svg, seed) {
     g.appendChild(svgEl('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: cr.toFixed(1), fill: 'rgba(0,0,0,.34)' }));
     g.appendChild(svgEl('circle', { cx: cx.toFixed(1), cy: (cy - cr * 0.4).toFixed(1), r: (cr * 0.55).toFixed(1), fill: 'rgba(255,255,255,.12)' }));
   }
+  addShade(g, 26);
   svg.appendChild(g);
 }
 
@@ -609,6 +589,7 @@ function buildPlanetSvg(svg, seed) {
     y += h;
   }
   body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
+  addShade(body, base);
   g.appendChild(body);
   var ringG = svgEl('g');
   ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 9, ry: 9, fill: 'none', stroke: '#9aa2ac', 'stroke-width': 5, opacity: 0.55, transform: 'rotate(-16)' }));
@@ -644,6 +625,7 @@ function buildGasGiantSvg(svg, seed) {
   var storm = svgEl('ellipse', { cx: (hashStr('a' + seed) - 0.5) * 30, cy: (hashStr('b' + seed) - 0.5) * 26, rx: 8 + hashStr('ac' + seed) * 4, ry: 4, fill: '#aeb4bb', opacity: 0.5 });
   body.appendChild(storm);
   body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
+  addShade(body, base);
   g.appendChild(body);
   svg.appendChild(g);
 }
@@ -750,9 +732,9 @@ function frigateAngle(p) {
    their own network. */
 var ANOMALIES = {
   asteroid:    { label: 'Asteroid',  size: 1, bodyR: 30, spin: 0 },
-  moon:        { label: 'Moon',      size: 2, bodyR: 27, spin: 14 },
-  planet:      { label: 'Planet',    size: 3, bodyR: 31, spin: 46 },
-  'gas-giant': { label: 'Gas Giant', size: 4, bodyR: 33, spin: 30 },
+  moon:        { label: 'Moon',      size: 2, bodyR: 27, spin: 56 },
+  planet:      { label: 'Planet',    size: 3, bodyR: 31, spin: 184 },
+  'gas-giant': { label: 'Gas Giant', size: 4, bodyR: 33, spin: 120 },
   'wormhole-a': { label: 'Wormhole A', size: 1, bodyR: 30, spin: 5, tint: '#ff5ecf' },
   'wormhole-b': { label: 'Wormhole B', size: 1, bodyR: 30, spin: 5, tint: '#35d0e0' },
   'black-hole': { label: 'Black Hole', size: 1, bodyR: 30, spin: 8 }
@@ -997,11 +979,12 @@ function buildPieceNode(p) {
   d.appendChild(sv);
   var key = anomalyKey(p);
   if (key) {
+    var base = el('div', 'anom-base');
+    d.insertBefore(base, sv);
     var seed = hashStr(p.id);
     var def = ANOMALIES[key];
     sv.style.setProperty('--astro-start', (key === 'asteroid' ? Math.floor(seed * 360) : 0) + 'deg');
-    sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 12))) + 's');
-    d.appendChild(buildShadeNode(def, seed));
+    sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 48))) + 's');
     var cornerWrap = el('div', 'astro-corners');
     var corners = [
       { cls: 'ac-tl', at: [0, 0], adj: [[0, -1], [-1, 0]] },
@@ -1405,7 +1388,9 @@ function findMovePath(fromX, fromY, tx, ty, color) {
       if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
       key = nx + ',' + ny;
       if (key in seen) continue;
-      if (key === targetKey) {          // destination may be a shared chip cell
+      if (pathBlocked(nx, ny, color) && key !== targetKey) continue;  // destination may be a shared chip cell
+      seen[key] = x + ',' + y;
+      if (key === targetKey) {
         var path = [], cur = key, name;
         while (cur) {
           name = cur.split(',');
@@ -1415,8 +1400,6 @@ function findMovePath(fromX, fromY, tx, ty, color) {
         path.reverse();
         return path;
       }
-      if (pathBlocked(nx, ny, color)) continue;
-      seen[key] = x + ',' + y;
       qx.push(nx); qy.push(ny);
     }
   }
@@ -1853,14 +1836,32 @@ function openAnomalyPopup() {
   anomPopupEl.classList.remove('hidden');
 }
 function hideAnomalyPopup() { anomPopupEl.classList.add('hidden'); }
+var anomMsgEl = document.getElementById('anomMsg');
+var anomMsgTimer = 0;
+function showAnomalyMsg(text) {
+  anomMsgEl.textContent = text;
+  anomMsgEl.classList.remove('hidden');
+  if (anomMsgTimer) clearTimeout(anomMsgTimer);
+  anomMsgTimer = setTimeout(function () {
+    anomMsgEl.classList.add('hidden');
+    anomMsgEl.textContent = '';
+  }, 2600);
+}
 function createAnomaly(k) {
   var def = ANOMALIES[k];
   var gs = state.grid.size;
-  for (var dx = 0; dx < def.size; dx++) {
-    for (var dy = 0; dy < def.size; dy++) {
-      var cx = lastCreate.x + dx, cy = lastCreate.y + dy;
-      if (cx >= gs || cy >= gs || occupancy(cx, cy)) {
+  var dx, dy, cx, cy;
+  for (dx = 0; dx < def.size; dx++) {
+    for (dy = 0; dy < def.size; dy++) {
+      cx = lastCreate.x + dx; cy = lastCreate.y + dy;
+      if (cx < 0 || cy < 0 || cx >= gs || cy >= gs) {
         flashBlocked(lastCreate.x, lastCreate.y);
+        showAnomalyMsg(def.label + ' needs ' + def.size + '×' + def.size + ' cells — that spot is off the edge');
+        return;
+      }
+      if (occupancy(cx, cy)) {
+        flashBlocked(lastCreate.x, lastCreate.y);
+        showAnomalyMsg(def.label + ' needs ' + def.size + '×' + def.size + ' free cells — the space is taken');
         return;
       }
     }
@@ -1878,6 +1879,7 @@ function createAnomaly(k) {
   state.pieces.push(obj);
   renderPieces();
   hideAnomalyPopup();
+  hideCreate();
   queue('cr:' + obj.id, { action: 'create', type: 'piece', id: obj.id, img: k, size: def.size, x: obj.x, y: obj.y, color: 'grey', exhausted: 0 });
 }
 document.getElementById('popAnoms').addEventListener('click', function () {
