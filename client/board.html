@@ -1542,7 +1542,7 @@ window.addEventListener('mouseup', function (e) {
   var wasDrag = drag.moved;
   drag = null;
   boardEl.className = '';
-  if (wasDrag) return;
+  if (wasDrag) { saveViewState(); return; }
   handleClick(e.clientX, e.clientY, e.target);
 });
 
@@ -1556,6 +1556,7 @@ boardEl.addEventListener('wheel', function (e) {
   view.y = my - (my - view.y) * (z / view.zoom);
   view.zoom = z;
   applyView();
+  saveViewState();
 }, { passive: false });
 
 /* ===== touch: single-finger pan + two-finger pinch zoom ===== */
@@ -1641,11 +1642,13 @@ boardEl.addEventListener('touchend', function (e) {
     pinch = null;
     touchPan = null;
     boardEl.className = '';
+    saveViewState();
     return;
   }
   if (touchPan && touchPan.moved) touchLatch();
   touchPan = null;
   boardEl.className = '';
+  saveViewState();
 }, { passive: false });
 boardEl.addEventListener('touchcancel', function () {
   drag = null;
@@ -2296,7 +2299,8 @@ function saveViewState() {
       menu: topbarEl && topbarEl.classList.contains('hidden-menu') ? 1 : 0,
       vertical: statsBar && statsBar.classList.contains('vertical-stats') ? 1 : 0,
       cardPop: cardPopMode || 'hover',
-      width: (playerPanel && playerPanel.style.width) || ''
+      width: (playerPanel && playerPanel.style.width) || '',
+      view: { x: view.x, y: view.y, zoom: view.zoom }
     }));
   } catch (e) {}
 }
@@ -2681,6 +2685,7 @@ applyCardPopToggle();
 cardPopToggleBtn.addEventListener('click', toggleCardPop);
 
 /* restore persisted view preferences (survives hard refresh via localStorage) */
+var restoredBoardView = false;
 (function restoreView() {
   var s = loadViewState();
   if (s.sheet) setSheetHidden(true);
@@ -2689,6 +2694,13 @@ cardPopToggleBtn.addEventListener('click', toggleCardPop);
   if (s.cardPop) cardPopMode = (s.cardPop === 'click') ? 'click' : 'hover';
   applyCardPopToggle();
   if (s.width) playerPanel.style.width = s.width;
+  var vs = s.view;
+  if (vs && typeof vs.zoom === 'number' && vs.zoom > 0) {
+    view.zoom = clamp(vs.zoom, MIN_ZOOM, MAX_ZOOM);
+    if (typeof vs.x === 'number') view.x = vs.x;
+    if (typeof vs.y === 'number') view.y = vs.y;
+    restoredBoardView = true;
+  }
 })();
 
 statsBar.addEventListener('load', function () {
@@ -2983,10 +2995,12 @@ window.addEventListener('keydown', function (e) {
   refreshCatalog();
   refresh();
   initSse();
-  // centre the board
-  var w = state.grid.size * CELL, h = state.grid.size * CELL;
-  if (boardEl.clientWidth > w) view.x = (boardEl.clientWidth - w) / 2;
-  if (boardEl.clientHeight > h) view.y = (boardEl.clientHeight - h) / 2;
+  // centre the board only when no view was restored
+  if (!restoredBoardView) {
+    var w = state.grid.size * CELL, h = state.grid.size * CELL;
+    if (boardEl.clientWidth > w) view.x = (boardEl.clientWidth - w) / 2;
+    if (boardEl.clientHeight > h) view.y = (boardEl.clientHeight - h) / 2;
+  }
   applyView();
 })();
 
