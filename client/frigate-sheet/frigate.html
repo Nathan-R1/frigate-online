@@ -976,11 +976,35 @@
     scheduleSheetAutosave();
     boardSaveRefresh();
   }
+  function clearTechs(){
+    var grid = document.getElementById('techGrid');
+    if(!grid) return;
+    while(grid.children.length > 1){
+      grid.removeChild(grid.lastElementChild);
+    }
+    var card = grid.children[0];
+    if(card){
+      var nameEl = card.querySelector('.tname');
+      if(nameEl) nameEl.value = '';
+      setTechState(card, 'deck');
+      var traits = card.querySelector('.ttraits');
+      if(traits) traits.value = '';
+      var fields = card.querySelectorAll('.tsec textarea, .tstorage-input, .thull-input, .tcharges-input');
+      for(var i=0;i<fields.length;i++) fields[i].value = '';
+      refreshTechSections(card);
+    }
+    refreshTechSlotControls();
+    updateDerivedStats();
+    handBroadcast();
+    broadcastHullStats();
+    scheduleSheetAutosave();
+    boardSaveRefresh();
+  }
   window.addEventListener('message', function(e){
     var m = e.data;
-    if(e.source !== window.parent) return;
-    if(!m || typeof m !== 'object' || m.t !== 'deckall') return;
-    deckAllCards();
+    if(e.source !== window.parent || !m || typeof m !== 'object') return;
+    if(m.t === 'deckall') deckAllCards();
+    else if(m.t === 'techclear') clearTechs();
   });
   function handleHandState(idx, state){
     var grid = document.getElementById('techGrid');

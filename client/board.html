@@ -52,7 +52,9 @@
             <input type="number" id="gridSize" min="1" max="40" value="18" title="Board width &amp; height (Enter to apply)">
           </div>
           <button type="button" class="settings-item" id="gameAsteroidsBtn" title="Scatter grey squares (asteroids) across 10% of the board">Asteroids</button>
+          <button type="button" class="settings-item" id="gameClearBoardBtn" title="Delete every piece and chip from the board">Clear Board</button>
           <button type="button" class="settings-item" id="gameDeckAllBtn" title="Put all tech cards back into your deck and reset their charges to 0">Deck All Cards</button>
+          <button type="button" class="settings-item" id="gameClearTechsBtn" title="Delete every tech card from your sheet">Delete all Techs</button>
         </div>
       </div>
     </div>
@@ -2485,6 +2487,34 @@ document.getElementById('gameDeckAllBtn').addEventListener('click', function () 
     pf.contentWindow.postMessage({ t: 'deckall' }, '*');
   }
 });
+document.getElementById('gameClearBoardBtn').addEventListener('click', function () {
+  closeSettingsMenu();
+  if(!window.confirm('Delete ALL pieces and chips on the board? This cannot be undone.')) return;
+  clearBoard();
+});
+document.getElementById('gameClearTechsBtn').addEventListener('click', function () {
+  closeSettingsMenu();
+  if(!window.confirm('Delete ALL tech cards from your sheet? This cannot be undone.')) return;
+  var pf = document.getElementById('playerFrame');
+  if (pf && pf.contentWindow) {
+    pf.contentWindow.postMessage({ t: 'techclear' }, '*');
+  }
+});
+function clearBoard() {
+  var i;
+  for (i = state.pieces.length - 1; i >= 0; i--) {
+    queue('del:' + state.pieces[i].id, { action: 'delete', type: 'piece', id: state.pieces[i].id });
+    state.pieces.splice(i, 1);
+  }
+  for (i = state.chips.length - 1; i >= 0; i--) {
+    queue('del:' + state.chips[i].id, { action: 'delete', type: 'chip', id: state.chips[i].id });
+    state.chips.splice(i, 1);
+  }
+  if (sel) { sel = null; clearLos(); hideDist(); }
+  renderPieces();
+  renderChips();
+  saveChangesChunked();
+}
 function isAsteroidPiece(o) {
   return anomalyKey(o) === 'asteroid';
 }
