@@ -505,22 +505,36 @@ function buildFrigateSvg(svg, c) {
   svg.appendChild(g);
 }
 
-/* Shared baked-in radial shading (the original asteroid method): a dark
-   gradient gas over the silhouette, light from the top-left so rocky bodies
-   read as shadowed spheres. Drawn inside the spinning body so it moves with
-   the rock. */
+/* Fixed-orientation terraced shading overlay: concentric dark steps clipped to
+   the body circle, light from the top-left. Rendered as a separate layer that
+   never rotates with the rock, and sized to each body's radius so it scales
+   with the anomaly. */
 var shadeSeq = 0;
-function addShade(parent, radius) {
-  var sid = 'sd' + (shadeSeq++);
+function buildShadeNode(def) {
+  var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
+  var R = (def.bodyR || 30) * 0.92;
+  var sid = 'ts' + (shadeSeq++);
   var defs = svgEl('defs');
-  var grad = svgEl('radialGradient', { id: sid, cx: '50%', cy: '28%', r: '75%' });
-  grad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#15181c' }));
-  grad.appendChild(svgEl('stop', { offset: '38%', 'stop-color': '#15181c', 'stop-opacity': '0' }));
-  grad.appendChild(svgEl('stop', { offset: '70%', 'stop-color': '#15181c', 'stop-opacity': '0' }));
-  grad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#05070a', 'stop-opacity': '0.5' }));
-  defs.appendChild(grad);
-  parent.appendChild(defs);
-  parent.appendChild(svgEl('ellipse', { cx: -10, cy: -11, rx: radius, ry: radius * 0.83, transform: 'rotate(34)', fill: 'url(#' + sid + ')' }));
+  var clp = svgEl('clipPath', { id: 'tsc-' + sid });
+  clp.appendChild(svgEl('circle', { r: R }));
+  defs.appendChild(clp);
+  svg.appendChild(defs);
+  var g = svgEl('g', { transform: 'translate(36 36)', 'clip-path': 'url(#tsc-' + sid + ')' });
+  var tiers = 6;
+  for (var i = 0; i < tiers; i++) {
+    var t = i / (tiers - 1);
+    var r = R * (1 - t * 0.6);
+    g.appendChild(svgEl('ellipse', {
+      cx: -8, cy: -9,
+      rx: r, ry: r * 0.9,
+      fill: 'none',
+      stroke: '#05070a',
+      'stroke-width': R * 0.1,
+      opacity: 0.1 + t * t * 0.4
+    }));
+  }
+  svg.appendChild(g);
+  return svg;
 }
 
 function rockPolygon(seed, n, base) {
@@ -552,7 +566,6 @@ function buildAsteroidSvg(svg, seed) {
   var m2 = svgEl('circle', { cx: 25, cy: -22, r: 3.6, fill: '#5b6168', stroke: '#3f444a', 'stroke-width': 1.4 });
   svg.appendChild(m1);
   svg.appendChild(m2);
-  addShade(g, 31);
   svg.appendChild(g);
 }
 
@@ -566,7 +579,6 @@ function buildMoonSvg(svg, seed) {
     g.appendChild(svgEl('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: cr.toFixed(1), fill: 'rgba(0,0,0,.34)' }));
     g.appendChild(svgEl('circle', { cx: cx.toFixed(1), cy: (cy - cr * 0.4).toFixed(1), r: (cr * 0.55).toFixed(1), fill: 'rgba(255,255,255,.12)' }));
   }
-  addShade(g, 26);
   svg.appendChild(g);
 }
 
@@ -589,7 +601,6 @@ function buildPlanetSvg(svg, seed) {
     y += h;
   }
   body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
-  addShade(body, base);
   g.appendChild(body);
   var ringG = svgEl('g');
   ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 9, ry: 9, fill: 'none', stroke: '#9aa2ac', 'stroke-width': 5, opacity: 0.55, transform: 'rotate(-16)' }));
@@ -625,7 +636,6 @@ function buildGasGiantSvg(svg, seed) {
   var storm = svgEl('ellipse', { cx: (hashStr('a' + seed) - 0.5) * 30, cy: (hashStr('b' + seed) - 0.5) * 26, rx: 8 + hashStr('ac' + seed) * 4, ry: 4, fill: '#aeb4bb', opacity: 0.5 });
   body.appendChild(storm);
   body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
-  addShade(body, base);
   g.appendChild(body);
   svg.appendChild(g);
 }
@@ -985,6 +995,7 @@ function buildPieceNode(p) {
     var def = ANOMALIES[key];
     sv.style.setProperty('--astro-start', (key === 'asteroid' ? Math.floor(seed * 360) : 0) + 'deg');
     sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 48))) + 's');
+    d.appendChild(buildShadeNode(def));
     var cornerWrap = el('div', 'astro-corners');
     var corners = [
       { cls: 'ac-tl', at: [0, 0], adj: [[0, -1], [-1, 0]] },
