@@ -54,6 +54,20 @@ color:var(--cyan);
 .hand-newturn:hover{
 color:var(--amber);border-color:var(--amber);
   }
+.hand-bar-sep{
+width:1px;height:14px;background:var(--line-bright);margin:0 6px;
+  }
+.hand-draw{
+
+    display:flex;align-items:center;gap:6px;
+    background:none;border:1px solid var(--line-bright);color:var(--ink-dim);
+    font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    padding:4px 9px;cursor:pointer;line-height:1;margin-left:0;flex:none;
+  
+  }
+.hand-draw:hover{
+color:var(--cyan);border-color:var(--cyan);
+  }
 .hand-tab .hand-count{
 
     display:inline-flex;align-items:center;justify-content:center;

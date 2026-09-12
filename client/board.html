@@ -17,6 +17,7 @@
   </div>
   <button type="button" class="btn" id="saveBtn" title="Send all your pending changes to the server in one request">SAVE</button>
   <button type="button" class="btn" id="refreshBtn" title="Pull the latest board state from the server">⟳ REFRESH</button>
+  <button type="button" class="btn move-btn" id="moveBtn" title="Start a movement phase (enter your movement budget)">MOVE</button>
   <span id="badge" class="off">…</span>
   <div class="settings-wrap" id="settingsWrap">
     <button type="button" class="btn settings-cog" id="settingsBtn" title="Settings">⚙</button>
@@ -73,6 +74,10 @@
       <div id="pings" class="layer"></div>
       <div id="los" class="layer"></div>
     </div>
+    <div id="moveCounter" class="move-counter hidden">
+      <div class="mc-label">MOVES LEFT</div>
+      <div class="mc-val" id="moveCounterVal">0</div>
+    </div>
   </div>
   <iframe class="hand-slot" id="handSlot" src="frigate-sheet/hand.html" title="Tech Hand"></iframe>
 </div>
@@ -91,6 +96,20 @@
     <div class="pop-foot">
       <span id="popStatus">scanned from pieces/images</span>
       <button type="button" id="popReload">⟳ RESCAN</button>
+    </div>
+  </div>
+</div>
+
+<div id="movePopup" class="overlay hidden">
+  <div class="panel move-panel">
+    <div class="pop-head">
+      <span class="eyebrow">START MOVE</span>
+      <button type="button" class="x" id="movePopupClose" title="Close">✕</button>
+    </div>
+    <div class="move-pop-body">
+      <label class="move-pop-label" for="moveBudgetInput">Movement budget</label>
+      <input type="number" id="moveBudgetInput" min="1" max="999" value="6" title="How many moves you have this phase">
+      <button type="button" class="btn move-pop-ok" id="moveBudgetOk">OK</button>
     </div>
   </div>
 </div>
@@ -341,6 +360,7 @@ function renderPieces() {
     d.appendChild(c.cg);
     var cls = 'piece';
     if (p.exhausted) cls += ' exhausted';
+    if (moveState && isActorPiece(p)) cls += ' moving';
     if (sel && sel.type === 'piece' && sel.id === p.id) cls += ' selected';
     d.className = cls;
     piecesEl.appendChild(d);
@@ -909,7 +929,7 @@ function createObject(type, file) {
     x: lastCreate.x,
     y: lastCreate.y,
     buttons: { red: 0, grey: 0 },
-    exhausted: 1
+    exhausted: 0
   };
   if (type === 'piece') {
     state.pieces.push(obj);
@@ -919,7 +939,8 @@ function createObject(type, file) {
     renderChips();
   }
   hideCreate();
-  queue('cr:' + obj.id, { action: 'create', type: type, id: obj.id, img: file, x: obj.x, y: obj.y, color: actorColor });
+  queue('cr:' + obj.id, { action: 'create', type: type, id: obj.id, img: file, x: obj.x, y: obj.y, color: actorColor, exhausted: 0 });
+  if (moveState && type === 'piece' && isActorPiece(obj)) moveState.starts[obj.id] = { x: obj.x, y: obj.y };
 }
 function moveObject(type, id, x, y) {
   var obj = findObj(type, id);
@@ -932,6 +953,7 @@ function moveObject(type, id, x, y) {
     renderChips();
   }
   queue('mv:' + id, { action: 'move', type: type, id: id, x: x, y: y });
+  updateMoveCounter();
 }
 function deleteObject(type, id) {
   var list = type === 'piece' ? state.pieces : state.chips;
@@ -944,7 +966,81 @@ function deleteObject(type, id) {
   if (sel && sel.type === type && sel.id === id) { sel = null; clearLos(); hideDist(); }
   if (type === 'piece') renderPieces(); else renderChips();
   queue('del:' + id, { action: 'delete', type: type, id: id });
+  updateMoveCounter();
 }
+
+/* ===== movement phase ===== */
+var moveState = null;   // null => not moving; else { budget: n, starts: { id: {x, y} } }
+var moveBtn = document.getElementById('moveBtn');
+var moveCounter = document.getElementById('moveCounter');
+var moveCounterVal = document.getElementById('moveCounterVal');
+var movePopup = document.getElementById('movePopup');
+var moveBudgetInput = document.getElementById('moveBudgetInput');
+var moveBudgetOk = document.getElementById('moveBudgetOk');
+var movePopupClose = document.getElementById('movePopupClose');
+
+function isActorPiece(o) {
+  return !!o && o.color === actorColor && !isAsteroidPiece(o);
+}
+
+function updateMoveCounter() {
+  if (!moveState) return;
+  var used = 0, st, p, i;
+  for (i = 0; i < state.pieces.length; i++) {
+    p = state.pieces[i];
+    st = moveState.starts[p.id];
+    if (st) used += Math.abs(p.x - st.x) + Math.abs(p.y - st.y);
+  }
+  var left = moveState.budget - used;
+  moveCounterVal.textContent = String(left);
+  moveCounter.classList.toggle('over', left < 0);
+  moveCounter.classList.remove('hidden');
+}
+
+function startMove(budget) {
+  moveState = { budget: budget, starts: {} };
+  var i, p;
+  for (i = 0; i < state.pieces.length; i++) {
+    p = state.pieces[i];
+    if (isActorPiece(p)) moveState.starts[p.id] = { x: p.x, y: p.y };
+  }
+  moveBtn.textContent = 'FINISH MOVE';
+  moveBtn.title = 'End the movement phase and save';
+  moveBtn.classList.add('active');
+  renderPieces();
+  updateMoveCounter();
+}
+
+function endMove() {
+  if (!moveState) return;
+  moveState = null;
+  moveBtn.textContent = 'MOVE';
+  moveBtn.title = 'Start a movement phase (enter your movement budget)';
+  moveBtn.classList.remove('active');
+  moveCounter.classList.add('hidden');
+  renderPieces();
+  saveChanges();
+}
+
+moveBtn.addEventListener('click', function () {
+  if (moveState) { endMove(); return; }
+  moveBudgetInput.value = '6';
+  movePopup.classList.remove('hidden');
+  moveBudgetInput.focus();
+  moveBudgetInput.select();
+});
+
+function submitMoveBudget() {
+  var n = Math.floor(Number(moveBudgetInput.value));
+  if (!(n >= 1)) n = 1;
+  n = Math.min(999, n);
+  movePopup.classList.add('hidden');
+  startMove(n);
+}
+moveBudgetOk.addEventListener('click', submitMoveBudget);
+movePopupClose.addEventListener('click', function () { movePopup.classList.add('hidden'); });
+moveBudgetInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitMoveBudget(); });
+movePopup.addEventListener('click', function (e) { if (e.target === movePopup) movePopup.classList.add('hidden'); });
 
 /* ===== networking ===== */
 var pending = { order: [], map: {} };
@@ -1753,6 +1849,7 @@ window.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     if (!rulesPopup.classList.contains('hidden')) { rulesPopup.classList.add('hidden'); return; }
     if (!classInfoPopup.classList.contains('hidden')) { closeClassInfo(); return; }
+    if (!movePopup.classList.contains('hidden')) { movePopup.classList.add('hidden'); return; }
     if (!popupEl.classList.contains('hidden')) { hideCreate(); return; }
     if (!swatchesEl.querySelector('.sw-menu').classList.contains('hidden')) { closeSwMenu(); return; }
     if (sel) { sel = null; renderPieces(); renderChips(); clearLos(); hideDist(); }
