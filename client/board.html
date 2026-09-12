@@ -520,17 +520,17 @@ function buildShadeNode(def) {
   defs.appendChild(clp);
   svg.appendChild(defs);
   var g = svgEl('g', { transform: 'translate(36 36)', 'clip-path': 'url(#tsc-' + sid + ')' });
-  var bx = -R, by = R;                        // body bottom-left corner
+  var bx = -R * 1.15, by = R * 1.15;          // pivot sits down-left of the body
   var k = Math.SQRT1_2;                        // 1/√2 along the 45° diagonal
   var tiers = 7;
   for (var i = 0; i < tiers; i++) {
     var t = i / (tiers - 1);
-    var r = R * (0.12 + t * 1.48);
+    var r = R * (0.2 + t * 1.5);
     g.appendChild(svgEl('circle', {
       cx: bx + r * k, cy: by - r * k,
       r: r,
       fill: '#05070a',
-      opacity: 0.055 + 0.13 * t * t
+      opacity: 0.02 + 0.28 * t * t
     }));
   }
   svg.appendChild(g);
