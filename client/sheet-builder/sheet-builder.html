@@ -91,6 +91,19 @@
     font: 500 13px var(--body); padding: 7px 12px; border-radius: 6px;
   }
   .fsearch:focus { outline: none; border-color: var(--cyan); }
+  /* inventory bar (multi-picks above the filter bar) */
+  .inv-bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    margin: 12px 0 0;
+  }
+  .invchip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 5px; cursor: pointer;
+    background: var(--void); border: 1px solid var(--amber); color: var(--amber);
+    font-family: var(--mono); font-size: 11px; letter-spacing: .05em;
+  }
+  .invchip b { color: var(--amber); }
+  .invchip:hover { background: rgba(232,169,74,.12); }
   /* expandable option cards */
   .opt-wrap { display: flex; flex-direction: column; }
   .opt-wrap .opt { flex: 1; }
@@ -100,9 +113,20 @@
   }
   .opt.sel .opt-chev, .opt.open .opt-chev { color: var(--amber); }
   .opt-panel {
-    margin-top: 6px; padding: 13px 15px;
+    position: relative; margin-top: 6px; padding: 13px 15px;
     background: var(--void); border: 1px solid var(--line); border-left: 3px solid var(--cyan-dim);
     border-radius: 8px; display: flex; flex-direction: column; gap: 13px;
+  }
+  .exp-add {
+    position: absolute; top: 8px; right: 10px;
+    width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+    background: none; border: 1px solid var(--line-bright); color: var(--ink-mid);
+    font-family: var(--mono); font-size: 16px; line-height: 1;
+  }
+  .exp-add:hover { border-color: var(--amber); color: var(--amber); }
+  .exp-count {
+    position: absolute; top: 8px; right: 42px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--amber);
   }
   .exp-item-name {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -255,6 +279,7 @@
   <section class="panel builder-panel builder-hidden" id="win">
     <div class="bl"></div><div class="br"></div>
     <div class="eyebrow"><span class="eb-text" id="winTitle">…</span></div>
+    <div class="inv-bar" id="invBar"></div>
     <div class="filter-bar" id="filterBar"></div>
     <div class="opt-grid" id="winOptions"></div>
     <div class="win-nav">
@@ -342,7 +367,7 @@
     return out;
   }
 
-  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null };
+  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null, inv: emptyInv() };
   var step = 0;
   var screen = 'landing'; // landing | win | exp
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
@@ -351,7 +376,8 @@
   var skillInfoOpen = null;
 
   /* ===== persistence ===== */
-  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null }; }
+  function emptyInv() { return { crew: {}, tech: {}, mod: {} }; }
+  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -364,6 +390,23 @@
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
         c.skillBoost = s.skillBoost || null;
+        if (s.inv && typeof s.inv === 'object') {
+          c.inv = { crew: {}, tech: {}, mod: {} };
+          ['crew', 'tech', 'mod'].forEach(function (ik) {
+            var src = s.inv[ik];
+            if (src && typeof src === 'object') {
+              Object.keys(src).forEach(function (name) {
+                var n = parseInt(src[name], 10);
+                if (n > 0) c.inv[ik][name] = n;
+              });
+            }
+          });
+        } else {
+          c.inv = emptyInv();
+          if (s.crew) c.inv.crew[s.crew] = 1;
+          if (s.tech) c.inv.tech[s.tech] = 1;
+          if (s.mod) c.inv.mod[s.mod] = 1;
+        }
         if (s.skills && typeof s.skills === 'object') {
           for (var i = 0; i < SKILL_NAMES.length; i++) {
             var n = SKILL_NAMES[i];
@@ -384,9 +427,15 @@
   function choicesHaveAny() {
     return !!(choices.shipClass || choices.crew || choices.tech || choices.mod || choices.shipName);
   }
+  function hasPick(k) {
+    if (k === 'shipClass' || k === 'skills') return !!choices[k];
+    var inv = choices.inv && choices.inv[k];
+    if (inv) for (var n in inv) if (inv[n] > 0) return true;
+    return !!choices[k];
+  }
   function firstUnanswered() {
     for (var i = 0; i < steps.length; i++) {
-      if (!choices[steps[i].key]) return i;
+      if (!hasPick(steps[i].key)) return i;
     }
     return steps.length; // all answered -> export
   }
@@ -444,9 +493,12 @@
     return html;
   }
   // expand: array of { tag, name, desc } to list under the card when opened
-  function expandPanelHtml(key, expand) {
+  function expandPanelHtml(key, expand, id) {
     if (!expand || !expand.length) return '';
-    var html = '<div class="opt-panel">';
+    var addCount = (choices.inv && choices.inv[key] && choices.inv[key][id]) || 0;
+    var html = '<div class="opt-panel" data-panel="' + key + '">';
+    if (addCount) html += '<span class="exp-count">×' + addCount + '</span>';
+    html += '<button type="button" class="exp-add" data-add="' + key + '">+</button>';
     for (var i = 0; i < expand.length; i++) {
       var it = expand[i];
       html += '<div class="exp-item">' +
@@ -469,7 +521,7 @@
       (body ? '<span class="opt-body">' + body + '</span>' : '') +
       (isExp ? '<span class="opt-chev">' + (open ? '▾' : '▸') + '</span>' : '') +
       '</button>' +
-      (open ? expandPanelHtml(key, expand) : '') +
+      (open ? expandPanelHtml(key, expand, id) : '') +
       '</div>';
   }
 
@@ -690,7 +742,7 @@
     else if (k === 'mod') html = modOptions();
     else html = skillsOptions();
     document.getElementById('winOptions').innerHTML = html;
-    document.getElementById('continueBtn').disabled = (k !== 'skills' && !choices[k]) || (k === 'crew' && choices.crew === '[Skill Increase]' && !choices.skillBoost);
+    document.getElementById('continueBtn').disabled = (k !== 'skills' && !hasPick(k)) || (k === 'crew' && choices.crew === '[Skill Increase]' && !choices.skillBoost);
     updateProgress();
   }
 
@@ -710,10 +762,30 @@
     var i = arr.indexOf(v);
     if (i === -1) arr.push(v); else arr.splice(i, 1);
   }
+  function renderInv(k) {
+    var invEl = document.getElementById('invBar');
+    var inv = choices.inv && choices.inv[k];
+    var names = [];
+    if (inv) for (var n in inv) if (inv[n] > 0) names.push(n);
+    if (k === 'shipClass' || k === 'skills' || !names.length) {
+      invEl.classList.add('builder-hidden');
+      invEl.innerHTML = '';
+      return;
+    }
+    invEl.classList.remove('builder-hidden');
+    var html = '';
+    for (var i = 0; i < names.length; i++) {
+      var c = inv[names[i]];
+      html += '<button type="button" class="invchip" data-rk="' + esc(k) + '" data-rn="' + esc(names[i]) + '" title="Tap to remove one">' +
+        esc(names[i]) + (c > 1 ? ' <b>(×' + c + ')</b>' : '') + '</button>';
+    }
+    invEl.innerHTML = html;
+  }
   function filterChip(iconHtml, fKey, label, on) {
     return '<button type="button" class="ffilter' + (on ? ' on' : '') + '" data-f="' + fKey + '" title="' + esc(label) + '">' + iconHtml + '</button>';
   }
   function renderFilterBar(k) {
+    renderInv(k);
     var bar = document.getElementById('filterBar');
     if (k !== 'crew' && k !== 'tech' && k !== 'mod') {
       bar.classList.add('builder-hidden');
@@ -788,6 +860,20 @@
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
+    var addBtn = e.target.closest('.exp-add');
+    if (addBtn) {
+      var kk = addBtn.getAttribute('data-add');
+      var wrap = e.target.closest('.opt-wrap');
+      var optEl = wrap ? wrap.querySelector('.opt') : null;
+      var id = optEl ? optEl.getAttribute('data-id') : null;
+      if (kk && id) {
+        if (!choices.inv[kk]) choices.inv[kk] = {};
+        choices.inv[kk][id] = (choices.inv[kk][id] || 0) + 1;
+        saveChoices();
+        renderOptions();
+      }
+      return;
+    }
     var pk = e.target.closest('.skill-pick-btn');
     if (pk) {
       choices.crew = '[Skill Increase]';
@@ -847,6 +933,18 @@
   document.getElementById('backBtn').addEventListener('click', onBack);
   document.getElementById('expBackBtn').addEventListener('click', onBack);
 
+  document.getElementById('invBar').addEventListener('click', function (e) {
+    var chip = e.target.closest('.invchip');
+    if (!chip) return;
+    var ik = chip.getAttribute('data-rk');
+    var iname = chip.getAttribute('data-rn');
+    var inv = choices.inv[ik];
+    if (!inv || !inv[iname]) return;
+    inv[iname] -= 1;
+    if (inv[iname] <= 0) delete inv[iname];
+    saveChoices();
+    renderOptions();
+  });
   document.getElementById('filterBar').addEventListener('click', function (e) {
     var b = e.target.closest('.ffilter');
     if (!b) return;
@@ -909,9 +1007,24 @@
     var c = emptyChoices();
     c.shipName = (json && json.shipName) || '';
     if (json && json.shipClass && CLASS_PRESETS[json.shipClass]) c.shipClass = json.shipClass;
-    if (json && json.crew && json.crew[0] && findCrew(json.crew[0].name)) c.crew = json.crew[0].name;
-    if (json && json.tech && json.tech[0] && findTech(json.tech[0].name)) c.tech = json.tech[0].name;
-    if (json && json.mods && json.mods[0] && findMod(json.mods[0].name)) c.mod = json.mods[0].name;
+    if (json && json.crew && json.crew[0] && findCrew(json.crew[0].name)) {
+      c.crew = json.crew[0].name;
+      for (var ci = 0; ci < json.crew.length; ci++) {
+        if (findCrew(json.crew[ci].name)) c.inv.crew[json.crew[ci].name] = (c.inv.crew[json.crew[ci].name] || 0) + 1;
+      }
+    }
+    if (json && json.tech && json.tech[0] && findTech(json.tech[0].name)) {
+      c.tech = json.tech[0].name;
+      for (var ti = 0; ti < json.tech.length; ti++) {
+        if (findTech(json.tech[ti].name)) c.inv.tech[json.tech[ti].name] = (c.inv.tech[json.tech[ti].name] || 0) + 1;
+      }
+    }
+    if (json && json.mods && json.mods[0] && findMod(json.mods[0].name)) {
+      c.mod = json.mods[0].name;
+      for (var mi = 0; mi < json.mods.length; mi++) {
+        if (findMod(json.mods[mi].name)) c.inv.mod[json.mods[mi].name] = (c.inv.mod[json.mods[mi].name] || 0) + 1;
+      }
+    }
     if (json && json.skills && typeof json.skills === 'object') {
       for (var i = 0; i < SKILL_NAMES.length; i++) {
         var n = SKILL_NAMES[i];
@@ -929,18 +1042,35 @@
   /* ===== export ===== */
   function renderExport() {
     document.getElementById('shipName').value = choices.shipName;
-    var items = [
-      { t: 'Hull Class', v: choices.shipClass, e: 'Not chosen' },
-      { t: 'Trait / Officer', v: choices.crew === '[Skill Increase]' && choices.skillBoost ? '[Skill Increase] → ' + choices.skillBoost : choices.crew, e: 'Not chosen' },
-      { t: 'Starting Technology', v: choices.tech, e: 'Not chosen' },
-      { t: 'Starting Module', v: choices.mod, e: 'Not chosen' }
-    ];
+    var skillBoostLabel = choices.crew === '[Skill Increase]' && choices.skillBoost ? '[Skill Increase] → ' + choices.skillBoost : null;
     var html = '';
-    for (var i = 0; i < items.length; i++) {
-      html += '<div class="exp-pick"><div class="opt-title">' + esc(items[i].t) + '</div><div>' +
-        (items[i].v ? esc(items[i].v) : '<span class="exp-none">' + esc(items[i].e) + '</span>') +
-        '</div></div>';
+
+    function pickList(t, invArr, singleVal, opts) {
+      var names = [];
+      if (invArr) {
+        for (var n in invArr) if (invArr[n] > 0) names.push(n);
+      }
+      var chips = '';
+      if (names.length) {
+        for (var i = 0; i < names.length; i++) {
+          var c = invArr[names[i]];
+          chips += '<span class="exp-skill">' + esc(names[i]) + (c > 1 ? ' <b>×' + c + '</b>' : '') + '</span>';
+        }
+      } else if (opts) {
+        chips = '<span class="exp-skill">' + esc(opts) + '</span>';
+      }
+      html += '<div class="exp-pick exp-wide"><div class="opt-title">' + esc(t) + '</div>' +
+        (chips ? '<div class="exp-skills">' + chips + '</div>' : '<div><span class="exp-none">Not chosen</span></div>') +
+        '</div>';
     }
+
+    html += '<div class="exp-pick exp-wide"><div class="opt-title">Hull Class</div><div>' +
+      (choices.shipClass ? esc(choices.shipClass) : '<span class="exp-none">Not chosen</span>') + '</div></div>';
+    if (skillBoostLabel) pickList('Trait / Officer (Skill Increase)', null, null, skillBoostLabel);
+    pickList('Traits / Officers', choices.inv.crew, choices.crew);
+    pickList('Technologies', choices.inv.tech, choices.tech);
+    pickList('Modules / Deployables', choices.inv.mod, choices.mod);
+
     var skPts = [];
     for (var si = 0; si < SKILL_NAMES.length; si++) {
       var n = SKILL_NAMES[si];
@@ -995,7 +1125,7 @@
 
     s.crew = [];
     var crew = findCrew(choices.crew);
-    if (crew) {
+    if (crew && !(choices.inv.crew && choices.inv.crew[crew.name])) {
       s.crew.push({
         name: crew.name,
         text: crew.text_description || '',
@@ -1003,40 +1133,92 @@
         type: crew.type
       });
     }
+    for (var cn in choices.inv.crew) {
+      var cp = findCrew(cn);
+      if (!cp) continue;
+      for (var ck = 0; ck < choices.inv.crew[cn]; ck++) {
+        s.crew.push({
+          name: cp.name,
+          text: cp.text_description || '',
+          combat: cp.combat_only === true,
+          type: cp.type
+        });
+      }
+    }
 
     s.tech = [];
-    var tech = findTech(choices.tech);
-    if (tech) {
+    for (var tn in choices.inv.tech) {
+      var tech = findTech(tn);
+      if (!tech) continue;
+      for (var tk = 0; tk < choices.inv.tech[tn]; tk++) {
+        s.tech.push({
+          name: tech.name,
+          traits: tech.traits || '',
+          onbuild: tech.onbuild || '',
+          passive: tech.passive || '',
+          onactivate: tech.onactivate || '',
+          techType: tech.tt || 'offense',
+          storage: tech.storage || '0',
+          hull: '',
+          charges: tech.charges || '',
+          deploy: deployKey(tech.deploy),
+          state: 'deck'
+        });
+      }
+    }
+    var soloTech = findTech(choices.tech);
+    if (soloTech && !choices.inv.tech[soloTech.name]) {
       s.tech.push({
-        name: tech.name,
-        traits: tech.traits || '',
-        onbuild: tech.onbuild || '',
-        passive: tech.passive || '',
-        onactivate: tech.onactivate || '',
-        techType: tech.tt || 'offense',
-        storage: tech.storage || '0',
+        name: soloTech.name,
+        traits: soloTech.traits || '',
+        onbuild: soloTech.onbuild || '',
+        passive: soloTech.passive || '',
+        onactivate: soloTech.onactivate || '',
+        techType: soloTech.tt || 'offense',
+        storage: soloTech.storage || '0',
         hull: '',
-        charges: tech.charges || '',
-        deploy: deployKey(tech.deploy),
+        charges: soloTech.charges || '',
+        deploy: deployKey(soloTech.deploy),
         state: 'deck'
       });
     }
 
     s.mods = [];
-    var mod = findMod(choices.mod);
-    if (mod) {
+    for (var mn in choices.inv.mod) {
+      var mod = findMod(mn);
+      if (!mod) continue;
+      for (var mk = 0; mk < choices.inv.mod[mn]; mk++) {
+        s.mods.push({
+          name: mod.name,
+          req: mod.req || '',
+          hull: mod.hull || '',
+          duration: mod.duration || '',
+          speed: mod.speed || '',
+          charges: mod.charges || '',
+          onbuild: mod.onbuild || '',
+          passive: mod.passive || '',
+          onactivate: mod.onactivate || '',
+          type: mod.type || 'module',
+          tt: mod.tt || 'offense',
+          shape: '',
+          exhaust: false
+        });
+      }
+    }
+    var soloMod = findMod(choices.mod);
+    if (soloMod && !choices.inv.mod[soloMod.name]) {
       s.mods.push({
-        name: mod.name,
-        req: mod.req || '',
-        hull: mod.hull || '',
-        duration: mod.duration || '',
-        speed: mod.speed || '',
-        charges: mod.charges || '',
-        onbuild: mod.onbuild || '',
-        passive: mod.passive || '',
-        onactivate: mod.onactivate || '',
-        type: mod.type || 'module',
-        tt: mod.tt || 'offense',
+        name: soloMod.name,
+        req: soloMod.req || '',
+        hull: soloMod.hull || '',
+        duration: soloMod.duration || '',
+        speed: soloMod.speed || '',
+        charges: soloMod.charges || '',
+        onbuild: soloMod.onbuild || '',
+        passive: soloMod.passive || '',
+        onactivate: soloMod.onactivate || '',
+        type: soloMod.type || 'module',
+        tt: soloMod.tt || 'offense',
         shape: '',
         exhaust: false
       });
