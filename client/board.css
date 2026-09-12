@@ -205,6 +205,10 @@ body.resizing #playerFrame { pointer-events: none; }
   filter: drop-shadow(0 0 4px rgba(0, 0, 0, .8)) saturate(.45);
   animation: astro-spin var(--astro-speed) linear infinite;
 }
+.piece.anom.wormhole .module-svg {
+  filter: drop-shadow(0 0 6px var(--pc)) saturate(1.35);
+  opacity: 1;
+}
 .piece.anom { opacity: .94; }
 .piece.moving {
   box-shadow: 0 0 6px rgba(91, 148, 240, .18);
