@@ -1254,18 +1254,27 @@ function updateLosOnHover(cx, cy) {
   if (key === lastLosKey) return;
   lastLosKey = key;
   if (moveState && inGrid && from) renderLos(c.x, c.y);   // preview FOV from the hovered square while moving
-  if (key && canMoveTo(sel.type, sel.id, c.x, c.y)) {
+  if (!key || !from) {
+    hideDist();
+    clearMovePath();
+    distEl.classList.remove('over');
+    return;
+  }
+  if (!moveState) {
+    // Out of Move mode this is a range check (shooting etc.): plain straight
+    // distance, ignoring obstacles and wormholes instead of A* detouring.
+    showDist(Math.abs(from.x - c.x) + Math.abs(from.y - c.y));
+    distEl.classList.remove('over');
+    clearMovePath();
+    return;
+  }
+  if (canMoveTo(sel.type, sel.id, c.x, c.y)) {
     var p = findMovePath(from.x, from.y, c.x, c.y, from.color);
     if (p) {
       showDist(p.length - 1);
-      if (moveState) {
-        var over = projectedMoveLeft(from, c.x, c.y) < 0;
-        distEl.classList.toggle('over', over);
-        renderMovePath(p, over);
-      } else {
-        distEl.classList.remove('over');
-        clearMovePath();
-      }
+      var over = projectedMoveLeft(from, c.x, c.y) < 0;
+      distEl.classList.toggle('over', over);
+      renderMovePath(p, over);
       return;
     }
   }
