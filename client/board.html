@@ -505,9 +505,10 @@ function buildFrigateSvg(svg, c) {
   svg.appendChild(g);
 }
 
-/* Fixed-orientation shading via pieces/images/shading.png: an overlay image
+/* Fixed-orientation shading via pieces/shading/shading*.png: an overlay image
    sized to the body's diameter, centred on the body, so it never moves with
-   the spin and scales with the anomaly's size. */
+   the spin and scales with the anomaly's size. Kept out of pieces/images so
+   the shading PNGs never show up in the CREATE picker. */
 var shadeSeq = 0;
 function buildShadeNode(def) {
   var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
@@ -516,8 +517,8 @@ function buildShadeNode(def) {
   var src = def.shadeImg || 'shading.png';
   if (typeof src === 'function') src = src();
   var img = svgEl('image', { x: 36 - S / 2, y: 36 - S / 2, width: S, height: S });
-  img.setAttribute('href', 'pieces/images/' + src);
-  img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', 'pieces/images/' + src);
+  img.setAttribute('href', 'pieces/shading/' + src);
+  img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', 'pieces/shading/' + src);
   svg.appendChild(img);
   return svg;
 }
@@ -961,16 +962,6 @@ function paintPieceNode(d, p) {
   d.style.left = cellPx(p.x) + 'px';
   d.style.top = cellPx(p.y) + 'px';
   var sv = d.querySelector('.module-svg');
-  if (anom && d._anomCorners) {
-    for (var i = 0; i < d._anomCorners.length; i++) {
-      var co = d._anomCorners[i];
-      var hide = false;
-      for (var k = 0; k < co.adj.length; k++) {
-        if (coversAnomalyAt(p.x + co.at[0] + co.adj[k][0], p.y + co.at[1] + co.adj[k][1], p.id)) hide = true;
-      }
-      co.el.style.display = hide ? 'none' : '';
-    }
-  }
   var cls = anom ? 'piece anom' : 'piece';
   if (p.exhausted) cls += ' exhausted';
   if (moveState && isActorPiece(p)) cls += ' moving';
@@ -1014,22 +1005,6 @@ function buildPieceNode(p) {
     sv.style.setProperty('--astro-start', (key === 'asteroid' ? Math.floor(seed * 360) : 0) + 'deg');
     sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 48))) + 's');
     if (def.shade !== false) d.appendChild(buildShadeNode(def));
-    var cornerWrap = el('div', 'astro-corners');
-    var corners = [
-      { cls: 'ac-tl', at: [0, 0], adj: [[0, -1], [-1, 0]] },
-      { cls: 'ac-tr', at: [sz - 1, 0], adj: [[0, -1], [1, 0]] },
-      { cls: 'ac-bl', at: [0, sz - 1], adj: [[0, 1], [-1, 0]] },
-      { cls: 'ac-br', at: [sz - 1, sz - 1], adj: [[0, 1], [1, 0]] }
-    ];
-    var els = [];
-    for (var i = 0; i < corners.length; i++) {
-      var sp = el('span', 'astro-corner ' + corners[i].cls);
-      sp.style.animationDelay = (i * 0.8) + 's';
-      cornerWrap.appendChild(sp);
-      els.push({ el: sp, at: corners[i].at, adj: corners[i].adj });
-    }
-    d.appendChild(cornerWrap);
-    d._anomCorners = els;
   }
   var mc = ['mc-tl', 'mc-tr', 'mc-bl', 'mc-br'];
   for (var m = 0; m < mc.length; m++) d.appendChild(el('span', 'move-corner ' + mc[m]));
