@@ -18,7 +18,6 @@
   <button type="button" class="btn" id="saveBtn" title="Send all your pending changes to the server in one request">SAVE</button>
   <button type="button" class="btn" id="refreshBtn" title="Pull the latest board state from the server">⟳ REFRESH</button>
   <button type="button" class="btn move-btn" id="moveBtn" title="Start a movement phase (enter your movement budget)">MOVE</button>
-  <button type="button" class="btn conn-btn glow" id="connBtn" title="Switch how connected modules join together (placeholder — remove when decided)">◫ CONNECT: GLOW</button>
   <span id="badge" class="off">…</span>
   <div class="settings-wrap" id="settingsWrap">
     <button type="button" class="btn settings-cog" id="settingsBtn" title="Settings">⚙</button>
@@ -38,6 +37,7 @@
           <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
           <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
           <button type="button" class="settings-item" id="cardPopToggleBtn" title="Cards pop up on hover. Toggle to only pop them up when clicked.">Hover</button>
+          <button type="button" class="settings-item conn-btn glow" id="connBtn" title="Switch how connected modules join together">◫ Connect: GLOW</button>
         </div>
       </div>
       <div class="settings-submenu-wrap">
@@ -805,7 +805,7 @@ function wormholeNetIndex() {
 }
 
 /* ===== ship connections ===== */
-var connStyle = 'station'; // 'mech' | 'wide' | 'glow' | 'station'
+var connStyle = 'glow'; // 'glow' | 'station' | 'mech' | 'wide'
 function connPairs() {
   var pairs = [], i, j, a, b;
   for (i = 0; i < state.pieces.length; i++) {
@@ -933,11 +933,11 @@ function renderConnections() {
 }
 
 function cycleConnStyle() {
-  var order = ['mech', 'wide', 'glow', 'station'];
-  var names = { mech: 'MECH', wide: 'WIDE', glow: 'GLOW', station: 'STATION' };
+  var order = ['glow', 'station', 'mech', 'wide'];
+  var names = { glow: 'GLOW', station: 'STATION', mech: 'MECH', wide: 'WIDE' };
   connStyle = order[(order.indexOf(connStyle) + 1) % order.length];
-  connBtn.textContent = '◫ CONNECT: ' + names[connStyle];
-  connBtn.className = 'btn conn-btn ' + connStyle;
+  connBtn.textContent = '◫ Connect: ' + names[connStyle];
+  connBtn.className = 'settings-item conn-btn ' + connStyle;
   renderConnections();
 }
 connBtn.addEventListener('click', cycleConnStyle);
