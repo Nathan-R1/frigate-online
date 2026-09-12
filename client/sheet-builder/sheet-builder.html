@@ -57,6 +57,14 @@
   .opt-meta span.t-hull { background: rgba(232,169,74,.12); color: var(--amber); border-color: var(--amber); }
   .opt-meta span.t-class-tech { color: var(--icon-charged); border-color: var(--icon-charged); background: rgba(156,63,102,.12); }
   .opt-meta .ticon { width: 11px; height: 11px; flex: none; display: block; }
+  .sk-note { margin: 0 0 8px; color: var(--ink-mid); font-size: 12px; }
+  .skill-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill-pick-btn { padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--ink-mid); font-family: var(--mono); font-size: 11px; letter-spacing: .06em; cursor: pointer; }
+  .skill-pick-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .skill-pick-btn.on { border-color: var(--icon-cyan); color: var(--cyan); background: rgba(92,168,182,.1); }
+  .sk-total { grid-column: 1 / -1; font-family: var(--mono); font-size: 12px; letter-spacing: .08em; color: var(--ink-mid); margin-bottom: 10px; }
+  .sk-total b { color: var(--amber); }
+  .sk-num.boosted { color: var(--amber); }
   .opt-body {
     color: var(--ink-mid); font-size: 12.5px; white-space: pre-line;
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
@@ -305,7 +313,7 @@
     return out;
   }
 
-  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '' };
+  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null };
   var step = 0;
   var screen = 'landing'; // landing | win | exp
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
@@ -313,7 +321,7 @@
   function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false }; }
 
   /* ===== persistence ===== */
-  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '' }; }
+  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -325,6 +333,7 @@
         c.tech = s.tech || null;
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
+        c.skillBoost = s.skillBoost || null;
         if (s.skills && typeof s.skills === 'object') {
           for (var i = 0; i < SKILL_NAMES.length; i++) {
             var n = SKILL_NAMES[i];
@@ -507,6 +516,11 @@
 
   function crewOptions() {
     var out = [];
+    var SK = '[Skill Increase]';
+    if (!filters.cbt && nameMatch(SK) && filterTypes('science')) {
+      var meta = [{ text: '⚛︎ Science', cls: 't-cyan' }, { text: '⭐ Crew Skill', cls: 't-skill' }];
+      out.push(optionHtml('crew', SK, SK, '', meta, [{ tag: 'Science', name: SK, desc: crewPickHtml() }]));
+    }
     for (var i = 0; i < CREW_PRESETS.length; i++) {
       var c = CREW_PRESETS[i];
       if (!nameMatch(c.name) || !filterTypes(c.type)) continue;
@@ -519,6 +533,16 @@
       out.push(optionHtml('crew', c.name, c.name, '', meta, expand));
     }
     return out.join('');
+  }
+  function crewPickHtml() {
+    var html = '<div class="sk-note">Gain a +2 to any Crew Skill (up to max 4).</div><div class="skill-pick">';
+    for (var i = 0; i < SKILL_NAMES.length; i++) {
+      var n = SKILL_NAMES[i];
+      var on = choices.skillBoost === n;
+      html += '<button type="button" class="skill-pick-btn' + (on ? ' on' : '') + '" data-boost="' + esc(n) + '">' + esc(n) + '</button>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function techOptions() {
@@ -562,18 +586,41 @@
     return out.join('');
   }
 
+  function skillEffective(name) {
+    var base = parseInt(choices.skills[name].points, 10);
+    if (isNaN(base)) base = 0;
+    if (choices.crew === '[Skill Increase]' && choices.skillBoost === name) return Math.min(4, base + 2);
+    return base;
+  }
+  function skillsTotal() {
+    var total = 0;
+    for (var i = 0; i < SKILL_NAMES.length; i++) {
+      var b = parseInt(choices.skills[SKILL_NAMES[i]].points, 10);
+      if (!isNaN(b)) total += b;
+    }
+    return total;
+  }
   function skillsOptions() {
-    var out = ['<div class="sk-grid">'];
+    var out = [];
+    var remaining = 13 - skillsTotal();
+    out.push('<div class="sk-total">Total Points remaining: <b>' + remaining + '</b></div>');
+    out.push('<div class="sk-grid">');
     for (var i = 0; i < SKILL_NAMES.length; i++) {
       var n = SKILL_NAMES[i];
       var v = choices.skills[n] || { points: '0', penalty: '' };
+      var base = parseInt(v.points, 10);
+      if (isNaN(base)) base = 0;
+      var eff = skillEffective(n);
+      var boosted = eff !== base;
+      var canPlus = remaining > 0 && base < 4;
+      var canMinus = base > -1;
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
         '<span class="sk-name">' + esc(n) + '</span>' +
-        '<span class="sk-num">' + esc(v.points) + '</span>' +
+        '<span class="sk-num' + (boosted ? ' boosted' : '') + '">' + esc(String(eff)) + '</span>' +
         '<span class="sk-btns">' +
-        '<button type="button" class="sbtn sminus" data-d="-1" title="Decrease ' + esc(n) + '">−</button>' +
-        '<button type="button" class="sbtn splus" data-d="1" title="Increase ' + esc(n) + '">+</button>' +
+        '<button type="button" class="sbtn sminus" data-d="-1" title="Decrease ' + esc(n) + '"' + (canMinus ? '' : ' disabled') + '>−</button>' +
+        '<button type="button" class="sbtn splus" data-d="1" title="Increase ' + esc(n) + '"' + (canPlus ? '' : ' disabled') + '>+</button>' +
         '</span>' +
         '<span class="sk-pen">' +
         '<label>Penalty</label>' +
@@ -607,7 +654,7 @@
     else if (k === 'mod') html = modOptions();
     else html = skillsOptions();
     document.getElementById('winOptions').innerHTML = html;
-    document.getElementById('continueBtn').disabled = (k !== 'skills') && !choices[k];
+    document.getElementById('continueBtn').disabled = (k !== 'skills' && !choices[k]) || (k === 'crew' && choices.crew === '[Skill Increase]' && !choices.skillBoost);
     updateProgress();
   }
 
@@ -705,6 +752,15 @@
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
+    var pk = e.target.closest('.skill-pick-btn');
+    if (pk) {
+      choices.crew = '[Skill Increase]';
+      choices.skillBoost = pk.getAttribute('data-boost');
+      expandedFor.crew = '[Skill Increase]';
+      saveChoices();
+      renderOptions();
+      return;
+    }
     var sbtn = e.target.closest('.sbtn');
     if (sbtn) {
       var row = e.target.closest('.sk');
@@ -713,7 +769,7 @@
       var cur = parseInt(choices.skills[name].points, 10);
       if (isNaN(cur)) cur = 0;
       var d = parseInt(sbtn.getAttribute('data-d'), 10) || 0;
-      var nv = Math.max(-1, Math.min(12, cur + d));
+      var nv = Math.max(-1, Math.min(4, cur + d));
       choices.skills[name].points = String(nv);
       saveChoices();
       renderOptions();
@@ -725,6 +781,7 @@
     var k = steps[step].key;
     var wasOpen = expandedFor[k] === id;
     choices[k] = id;
+    if (k === 'crew' && id !== '[Skill Increase]') choices.skillBoost = null;
     if (btn.getAttribute('data-exp')) expandedFor[k] = wasOpen ? null : id;
     saveChoices();
     renderOptions();
@@ -829,7 +886,7 @@
     document.getElementById('shipName').value = choices.shipName;
     var items = [
       { t: 'Hull Class', v: choices.shipClass, e: 'Not chosen' },
-      { t: 'Trait / Officer', v: choices.crew, e: 'Not chosen' },
+      { t: 'Trait / Officer', v: choices.crew === '[Skill Increase]' && choices.skillBoost ? '[Skill Increase] → ' + choices.skillBoost : choices.crew, e: 'Not chosen' },
       { t: 'Starting Technology', v: choices.tech, e: 'Not chosen' },
       { t: 'Starting Module', v: choices.mod, e: 'Not chosen' }
     ];
@@ -844,7 +901,7 @@
       var n = SKILL_NAMES[si];
       var v = choices.skills[n] || { points: '0', penalty: '' };
       var pen = v.penalty ? ' (' + v.penalty + ')' : '';
-      skPts.push(n + ' ' + v.points + pen);
+      skPts.push(n + ' ' + skillEffective(n) + pen);
     }
     html += '<div class="exp-pick exp-wide"><div class="opt-title">Crew Skills</div><div class="exp-skills">' +
       skPts.map(function (x) { return '<span class="exp-skill">' + esc(x) + '</span>'; }).join('') +
@@ -883,6 +940,11 @@
       Object.keys(preset.skills).forEach(function (name) {
         skills[name].points = bumpNum(skills[name].points, preset.skills[name]);
       });
+    }
+    if (choices.crew === '[Skill Increase]' && choices.skillBoost && skills[choices.skillBoost]) {
+      var boost = parseInt(skills[choices.skillBoost].points, 10);
+      if (isNaN(boost)) boost = 0;
+      skills[choices.skillBoost].points = String(Math.min(4, boost + 2));
     }
     s.skills = skills;
 
