@@ -226,12 +226,31 @@ body.resizing #playerFrame { pointer-events: none; }
 #los .shade { position: absolute; background: rgba(0, 0, 0, .5); }
 
 .dist-readout {
-  position: fixed; right: 14px; bottom: 56px; z-index: 90;
-  font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700;
+  position: fixed; z-index: 90;
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
   color: #35d0e0; background: rgba(10, 15, 22, .85); border: 1px solid #22303f;
-  border-radius: 8px; padding: 6px 12px; pointer-events: none;
+  border-radius: 8px; padding: 2px 5px; pointer-events: none;
 }
 .dist-readout.hidden { display: none; }
+
+/* ===== move path preview ===== */
+#path .move-path {
+  position: absolute; left: 0; top: 0; overflow: visible;
+  filter: drop-shadow(0 0 5px rgba(53, 208, 224, .55));
+}
+#path .move-path polyline {
+  fill: none;
+  stroke: #35d0e0;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 5 14;
+  animation: movepath-flow .8s linear infinite;
+}
+@keyframes movepath-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -19; }
+}
 
 /* ===== move phase ===== */
 .move-counter {

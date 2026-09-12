@@ -73,6 +73,9 @@
       <div id="chips" class="layer"></div>
       <div id="pings" class="layer"></div>
       <div id="los" class="layer"></div>
+      <div id="path" class="layer">
+        <svg id="movePathSvg" class="move-path"></svg>
+      </div>
     </div>
     <div id="moveCounter" class="move-counter hidden">
       <div class="mc-label">MOVES LEFT</div>
@@ -518,6 +521,11 @@ function renderLos(fromX, fromY) {
 function clearLos() { losEl.innerHTML = ''; lastLosKey = ''; }
 function showDist(d) { distEl.textContent = String(d); distEl.classList.remove('hidden'); }
 function hideDist() { distEl.classList.add('hidden'); }
+function followDist(cx, cy) {
+  if (distEl.classList.contains('hidden')) return;
+  distEl.style.left = (cx + 14) + 'px';
+  distEl.style.top = (cy + 16) + 'px';
+}
 
 function updateLosOnHover(cx, cy) {
   if (touchActive) return;
@@ -529,8 +537,17 @@ function updateLosOnHover(cx, cy) {
   var key = from && inGrid ? from.id + ',' + from.x + ',' + from.y + ',' + c.x + ',' + c.y : '';
   if (key === lastLosKey) return;
   lastLosKey = key;
-  if (key) showDist(Math.abs(c.x - from.x) + Math.abs(c.y - from.y));
-  else hideDist();
+  if (key && canMoveTo(sel.type, sel.id, c.x, c.y)) {
+    var p = findMovePath(from.x, from.y, c.x, c.y, from.color);
+    if (p) {
+      showDist(p.length - 1);
+      if (moveState) renderMovePath(p);
+      else clearMovePath();
+      return;
+    }
+  }
+  hideDist();
+  clearMovePath();
 }
 
 /* ===== selection / move ===== */
@@ -561,6 +578,7 @@ function setSelection(next) {
   }
   clearLos();
   hideDist();
+  clearMovePath();
   if (sel && sel.type === 'piece') {
     var from = findObj(sel.type, sel.id);
     if (from) renderLos(from.x, from.y);
@@ -588,6 +606,80 @@ function canMoveTo(type, id, x, y) {
   return false;
 }
 
+/* Shortest orthogonal path distance (BFS) around blocking objects. Empty cells
+   and same-colour non-asteroid pieces are passable; other colours, asteroids
+   and chips block. Returns -1 when the target is unreachable. */
+function pathBlocked(x, y, color) {
+  var i, o;
+  for (i = 0; i < state.pieces.length; i++) {
+    o = state.pieces[i];
+    if (o.x === x && o.y === y) return !(o.color === color && !isAsteroidPiece(o));
+  }
+  for (i = 0; i < state.chips.length; i++) {
+    if (state.chips[i].x === x && state.chips[i].y === y) return true;
+  }
+  return false;
+}
+
+function findMovePath(fromX, fromY, tx, ty, color) {
+  var size = state.grid.size;
+  if (tx < 0 || ty < 0 || tx >= size || ty >= size) return null;
+  if (fromX === tx && fromY === ty) return [{ x: fromX, y: fromY }];
+  var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  var qx = [fromX], qy = [fromY];
+  var seen = {}, startKey = fromX + ',' + fromY, targetKey = tx + ',' + ty;
+  seen[startKey] = null;
+  var head = 0, k, nx, ny, key;
+  while (head < qx.length) {
+    var x = qx[head], y = qy[head];
+    head++;
+    for (k = 0; k < 4; k++) {
+      nx = x + dirs[k][0]; ny = y + dirs[k][1];
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+      key = nx + ',' + ny;
+      if (key in seen) continue;
+      if (pathBlocked(nx, ny, color)) continue;
+      seen[key] = x + ',' + y;
+      if (key === targetKey) {
+        var path = [], cur = key, name;
+        while (cur) {
+          name = cur.split(',');
+          path.push({ x: Number(name[0]), y: Number(name[1]) });
+          cur = seen[cur];
+        }
+        path.reverse();
+        return path;
+      }
+      qx.push(nx); qy.push(ny);
+    }
+  }
+  return null;
+}
+
+function moveDistance(fromX, fromY, tx, ty, color) {
+  var p = findMovePath(fromX, fromY, tx, ty, color);
+  return p ? p.length - 1 : -1;
+}
+
+/* ===== move path preview ===== */
+var movePathSvg = document.getElementById('movePathSvg');
+var movePathPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+movePathSvg.appendChild(movePathPoly);
+
+function renderMovePath(p) {
+  var px = state.grid.size * CELL;
+  movePathSvg.setAttribute('width', px);
+  movePathSvg.setAttribute('height', px);
+  var pts = [], i;
+  for (i = 0; i < p.length; i++) {
+    pts.push((p[i].x * CELL + CELL / 2) + ',' + (p[i].y * CELL + CELL / 2));
+  }
+  movePathPoly.setAttribute('points', pts.join(' '));
+}
+function clearMovePath() {
+  movePathPoly.setAttribute('points', '');
+}
+
 /* ===== interactions on the board ===== */
 var drag = null;
 boardEl.addEventListener('mousedown', function (e) {
@@ -608,6 +700,7 @@ boardEl.addEventListener('mousedown', function (e) {
 window.addEventListener('mousemove', function (e) {
   if (touchActive) return;
   updateLosOnHover(e.clientX, e.clientY);
+  followDist(e.clientX, e.clientY);
   if (!drag) return;
   var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
@@ -750,7 +843,11 @@ function handleClick(cx, cy, targetEl) {
     var obj = findObj(sel.type, sel.id);
     if (obj) {
       if (canMoveTo(sel.type, sel.id, cell.x, cell.y)) {
-        moveObject(sel.type, sel.id, cell.x, cell.y);
+        if (isActorPiece(obj) && moveDistance(obj.x, obj.y, cell.x, cell.y, obj.color) < 0) {
+          flashBlocked(cell.x, cell.y);
+        } else {
+          moveObject(sel.type, sel.id, cell.x, cell.y);
+        }
       } else {
         flashBlocked(cell.x, cell.y);
       }
@@ -990,11 +1087,14 @@ function isActorPiece(o) {
 
 function updateMoveCounter() {
   if (!moveState) return;
-  var used = 0, st, p, i;
+  var used = 0, st, p, d, i;
   for (i = 0; i < state.pieces.length; i++) {
     p = state.pieces[i];
     st = moveState.starts[p.id];
-    if (st) used += Math.abs(p.x - st.x) + Math.abs(p.y - st.y);
+    if (st) {
+      d = moveDistance(st.x, st.y, p.x, p.y, actorColor);
+      if (d > 0) used += d;
+    }
   }
   var left = moveState.budget - used;
   moveCounterVal.textContent = String(left);
@@ -1023,6 +1123,7 @@ function endMove() {
   moveBtn.title = 'Start a movement phase (enter your movement budget)';
   moveBtn.classList.remove('active');
   moveCounter.classList.add('hidden');
+  clearMovePath();
   renderPieces();
   saveChanges();
 }
