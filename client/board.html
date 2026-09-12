@@ -592,12 +592,12 @@ function buildPlanetSvg(svg, seed) {
   defs.appendChild(clp);
   svg.appendChild(defs);
   var ocean = svgEl('radialGradient', { id: 'plo-' + sid, cx: '35%', cy: '35%', r: '85%' });
-  ocean.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#4aa3e0' }));
-  ocean.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#1e5fa8' }));
+  ocean.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#5fbff0' }));
+  ocean.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#2373c2' }));
   defs.appendChild(ocean);
   var body = svgEl('g', { 'clip-path': 'url(#plc-' + sid + ')' });
   body.appendChild(svgEl('circle', { r: base, fill: 'url(#plo-' + sid + ')' }));
-  var contCols = ['#46a055', '#58b066', '#39904b', '#6cb96f'];
+  var contCols = ['#38b45f', '#4cc76e', '#2a9c52', '#6cd98a'];
   var nCont = 6 + Math.floor(hashStr('nc' + seed) * 3);
   for (var c = 0; c < nCont; c++) {
     var ccx = (hashStr('ccx' + c + seed) - 0.5) * base * 1.4;
