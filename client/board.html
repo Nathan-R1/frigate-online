@@ -549,6 +549,21 @@ function buildAsteroidSvg(svg, seed) {
   }
   var m1 = svgEl('circle', { cx: -26, cy: 20, r: 5, fill: '#565c63', stroke: '#3f444a', 'stroke-width': 1.5 });
   var m2 = svgEl('circle', { cx: 25, cy: -22, r: 3.6, fill: '#5b6168', stroke: '#3f444a', 'stroke-width': 1.4 });
+  if (hashStr('oaf' + seed) < 0.3) {
+    var a1 = hashStr('oa' + seed) * Math.PI * 2;
+    var a2 = a1 + Math.PI + (hashStr('ob' + seed) - 0.5) * 1.6;
+    var r1 = 27 + hashStr('oc' + seed) * 6;
+    var r2 = 24 + hashStr('od' + seed) * 7;
+    m1.setAttribute('cx', (Math.cos(a1) * r1).toFixed(1));
+    m1.setAttribute('cy', (Math.sin(a1) * r1).toFixed(1));
+    m1.setAttribute('r', (3.5 + hashStr('oe' + seed) * 2).toFixed(1));
+    m2.setAttribute('cx', (Math.cos(a2) * r2).toFixed(1));
+    m2.setAttribute('cy', (Math.sin(a2) * r2).toFixed(1));
+    m2.setAttribute('r', (2.5 + hashStr('of' + seed) * 2).toFixed(1));
+  } else {
+    m1.setAttribute('r', '0');
+    m2.setAttribute('r', '0');
+  }
   svg.appendChild(m1);
   svg.appendChild(m2);
   svg.appendChild(g);
