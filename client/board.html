@@ -101,8 +101,20 @@
     </div>
     <div class="pop-list" id="popList"></div>
     <div class="pop-foot">
-      <span id="popStatus">scanned from pieces/images</span>
-      <button type="button" id="popReload">⟳ RESCAN</button>
+      <button type="button" id="popAnoms" title="Place anomaly objects (asteroids, moons, planets, wormholes…)">✦ ANOMALIES</button>
+    </div>
+  </div>
+</div>
+
+<div id="anomPopup" class="overlay hidden">
+  <div class="panel">
+    <div class="pop-head">
+      <span class="eyebrow" id="anomCell">ANOMALIES</span>
+      <span class="anom-hint">Blue corners mark the warning edge — they hide next to other anomalies</span>
+    </div>
+    <div class="pop-list" id="anomList"></div>
+    <div class="pop-foot">
+      <span class="anom-foot">Multi-cell bodies anchor at the clicked cell</span>
     </div>
   </div>
 </div>
@@ -221,7 +233,6 @@ var swatchesEl = document.getElementById('swatches');
 var popupEl = document.getElementById('createPopup');
 var popListEl = document.getElementById('popList');
 var popCellEl = document.getElementById('popCell');
-var popStatusEl = document.getElementById('popStatus');
 
 var state = { rev: 0, grid: { size: 18 }, pieces: [], chips: [], pings: {} };
 var actorColor = localStorage.getItem('frigateColor') || 'green';
@@ -253,7 +264,7 @@ function cellPx(c) { return c * CELL; }
 function occupancy(x, y) {
   var i;
   for (i = 0; i < state.pieces.length; i++) {
-    if (state.pieces[i].x === x && state.pieces[i].y === y) return 'piece';
+    if (pieceCovers(state.pieces[i], x, y)) return 'piece';
   }
   for (i = 0; i < state.chips.length; i++) {
     if (state.chips[i].x === x && state.chips[i].y === y) return 'chip';
@@ -492,39 +503,67 @@ function buildFrigateSvg(svg, c) {
   svg.appendChild(g);
 }
 
-function buildAsteroidSvg(svg, seed) {
-  var g = svgEl('g', { transform: 'translate(36 36)' });
-  var pts = [];
-  var n = 9 + Math.floor(seed * 4);
-  for (var i = 0; i < n; i++) {
-    var ang = (i / n) * Math.PI * 2;
-    var r = 20 + hashStr('r' + i + seed) * 11;
+/* Seeded faceted-silhouette shading, drawn only ONCE as a fixed overlay (never
+   animated) so the light source stays in one orientation while the body spins
+   beneath it. All anomalies share this for a consistent look. */
+var shadeSeq = 0;
+function buildShadeSvg(svg, radius, seed) {
+  var n = 10, pts = [], i, ang, r;
+  for (i = 0; i < n; i++) {
+    ang = (i / n) * Math.PI * 2;
+    r = radius * (0.94 + hashStr('s' + i + seed) * 0.12);
     pts.push((Math.cos(ang) * r).toFixed(1) + ',' + (Math.sin(ang) * r).toFixed(1));
   }
   var ptsStr = pts.join(' ');
-  g.appendChild(svgEl('polygon', { points: ptsStr, fill: '#6a7077', stroke: '#4b5158', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
-  var sid = 'a' + String(seed).replace('.', '').slice(0, 10);
+  var sid = 'sh' + (shadeSeq++);
   var defs = svgEl('defs');
-  var clp = svgEl('clipPath', { id: 'astc-' + sid });
+  var clp = svgEl('clipPath', { id: 'shc-' + sid });
   clp.appendChild(svgEl('polygon', { points: ptsStr }));
   defs.appendChild(clp);
-  var lg = svgEl('linearGradient', { id: 'astl-' + sid, x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
-  lg.appendChild(svgEl('stop', { offset: '36%', 'stop-color': 'rgba(0,0,0,0)' }));
-  lg.appendChild(svgEl('stop', { offset: '44%', 'stop-color': 'rgba(0,0,0,.36)' }));
-  lg.appendChild(svgEl('stop', { offset: '62%', 'stop-color': 'rgba(0,0,0,.56)' }));
-  lg.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'rgba(0,0,0,.68)' }));
+  var lg = svgEl('linearGradient', { id: 'shl-' + sid, x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
+  lg.appendChild(svgEl('stop', { offset: '38%', 'stop-color': 'rgba(0,0,0,0)' }));
+  lg.appendChild(svgEl('stop', { offset: '45%', 'stop-color': 'rgba(0,0,0,.34)' }));
+  lg.appendChild(svgEl('stop', { offset: '62%', 'stop-color': 'rgba(0,0,0,.54)' }));
+  lg.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'rgba(0,0,0,.66)' }));
   defs.appendChild(lg);
-  var lg2 = svgEl('linearGradient', { id: 'astl2-' + sid, x1: '0%', y1: '100%', x2: '100%', y2: '0%' });
+  var lg2 = svgEl('linearGradient', { id: 'shl2-' + sid, x1: '0%', y1: '100%', x2: '100%', y2: '0%' });
   lg2.appendChild(svgEl('stop', { offset: '0%', 'stop-color': 'rgba(0,0,0,0)' }));
-  lg2.appendChild(svgEl('stop', { offset: '52%', 'stop-color': 'rgba(0,0,0,0)' }));
-  lg2.appendChild(svgEl('stop', { offset: '55%', 'stop-color': 'rgba(0,0,0,.2)' }));
-  lg2.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'rgba(0,0,0,.45)' }));
+  lg2.appendChild(svgEl('stop', { offset: '54%', 'stop-color': 'rgba(0,0,0,0)' }));
+  lg2.appendChild(svgEl('stop', { offset: '57%', 'stop-color': 'rgba(0,0,0,.18)' }));
+  lg2.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'rgba(0,0,0,.42)' }));
   defs.appendChild(lg2);
   svg.appendChild(defs);
-  var sh = svgEl('g', { 'clip-path': 'url(#astc-' + sid + ')' });
-  sh.appendChild(svgEl('rect', { x: -36, y: -36, width: 72, height: 72, fill: 'url(#astl-' + sid + ')' }));
-  sh.appendChild(svgEl('rect', { x: -36, y: -36, width: 72, height: 72, fill: 'url(#astl2-' + sid + ')', transform: 'rotate(38)' }));
-  g.appendChild(sh);
+  var sh = svgEl('g', { 'clip-path': 'url(#shc-' + sid + ')' });
+  sh.appendChild(svgEl('rect', { x: -36, y: -36, width: 72, height: 72, fill: 'url(#shl-' + sid + ')' }));
+  sh.appendChild(svgEl('rect', { x: -36, y: -36, width: 72, height: 72, fill: 'url(#shl2-' + sid + ')', transform: 'rotate(34)' }));
+  svg.appendChild(sh);
+}
+function buildShadeNode(def, seed) {
+  var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
+  buildShadeSvg(svg, def.bodyR || 30, seed);
+  return svg;
+}
+
+function rockPolygon(seed, n, base) {
+  var pts = [], i, ang, r;
+  for (i = 0; i < n; i++) {
+    ang = (i / n) * Math.PI * 2;
+    r = base + hashStr('r' + i + seed) * 11;
+    pts.push(r);
+  }
+  return pts;
+}
+
+function buildAsteroidSvg(svg, seed) {
+  var g = svgEl('g', { transform: 'translate(36 36)' });
+  var n = 9 + Math.floor(seed * 4);
+  var pts = rockPolygon(seed, n, 20);
+  var ptsStr = '';
+  for (var i = 0; i < n; i++) {
+    var ang = (i / n) * Math.PI * 2;
+    ptsStr += (Math.cos(ang) * pts[i]).toFixed(1) + ',' + (Math.sin(ang) * pts[i]).toFixed(1) + (i < n - 1 ? ' ' : '');
+  }
+  g.appendChild(svgEl('polygon', { points: ptsStr, fill: '#6a7077', stroke: '#4b5158', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
   for (i = 0; i < 3; i++) {
     var cy = (hashStr('c' + i + seed) - 0.5) * 16;
     var cx = (hashStr('d' + i + seed) - 0.5) * 20;
@@ -537,10 +576,130 @@ function buildAsteroidSvg(svg, seed) {
   svg.appendChild(g);
 }
 
+function buildMoonSvg(svg, seed) {
+  var g = svgEl('g', { transform: 'translate(36 36)' });
+  g.appendChild(svgEl('circle', { r: 26, fill: '#72777f', stroke: '#464b52', 'stroke-width': 2 }));
+  for (var i = 0; i < 6; i++) {
+    var cx = (hashStr('m' + i + seed) - 0.5) * 34;
+    var cy = (hashStr('n' + i + seed) - 0.5) * 34;
+    var cr = 1.4 + hashStr('o' + i + seed) * 3.4;
+    g.appendChild(svgEl('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: cr.toFixed(1), fill: 'rgba(0,0,0,.34)' }));
+    g.appendChild(svgEl('circle', { cx: cx.toFixed(1), cy: (cy - cr * 0.4).toFixed(1), r: (cr * 0.55).toFixed(1), fill: 'rgba(255,255,255,.12)' }));
+  }
+  svg.appendChild(g);
+}
+
+function buildPlanetSvg(svg, seed) {
+  var g = svgEl('g', { transform: 'translate(36 36)' });
+  var bandCols = ['#5a6069', '#7e848c', '#6b7178', '#8a9199', '#5f656c'];
+  var base = 31;
+  var defs = svgEl('defs');
+  var sid = 'pl' + (shadeSeq++);
+  var clp = svgEl('clipPath', { id: 'plc-' + sid });
+  clp.appendChild(svgEl('circle', { r: base }));
+  defs.appendChild(clp);
+  svg.appendChild(defs);
+  var body = svgEl('g', { 'clip-path': 'url(#plc-' + sid + ')' });
+  body.appendChild(svgEl('circle', { r: base, fill: '#646a72' }));
+  var y = -base;
+  while (y < base) {
+    var h = 7 + hashStr('b' + y + seed) * 12;
+    body.appendChild(svgEl('rect', { x: -base, y: y, width: base * 2, height: h, fill: bandCols[Math.floor(hashStr('g' + y + seed) * bandCols.length)] }));
+    y += h;
+  }
+  body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
+  g.appendChild(body);
+  var ringG = svgEl('g');
+  ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 9, ry: 9, fill: 'none', stroke: '#9aa2ac', 'stroke-width': 5, opacity: 0.55, transform: 'rotate(-16)' }));
+  ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 3, ry: 7, fill: 'none', stroke: 'rgba(0,0,0,.35)', 'stroke-width': 6, opacity: 0.4, transform: 'rotate(-16)' }));
+  addRotate(ringG, '26s', false);
+  g.appendChild(ringG);
+  svg.appendChild(g);
+}
+
+function buildGasGiantSvg(svg, seed) {
+  var g = svgEl('g', { transform: 'translate(36 36)' });
+  var base = 33;
+  var defs = svgEl('defs');
+  var sid = 'gg' + (shadeSeq++);
+  var clp = svgEl('clipPath', { id: 'ggc-' + sid });
+  clp.appendChild(svgEl('circle', { r: base }));
+  defs.appendChild(clp);
+  svg.appendChild(defs);
+  var body = svgEl('g', { 'clip-path': 'url(#ggc-' + sid + ')' });
+  var bands = ['#5d6269', '#7f858d', '#8d949c', '#555a61', '#747a82', '#989fa7', '#63696f'];
+  var y = -base;
+  while (y < base) {
+    var h = 4 + hashStr('z' + y + seed) * 8;
+    var st;
+    if (hashStr('c' + y + seed) > 0.75) {
+      st = svgEl('rect', { x: -base, y: y, width: base * 2, height: h, fill: bands[Math.floor(hashStr('d' + y + seed) * bands.length)] });
+    } else {
+      st = svgEl('rect', { x: -base, y: y, width: base * 2, height: h, fill: 'none', stroke: bands[Math.floor(hashStr('f' + y + seed) * bands.length)], 'stroke-width': 3 });
+    }
+    body.appendChild(st);
+    y += h;
+  }
+  var storm = svgEl('ellipse', { cx: (hashStr('a' + seed) - 0.5) * 30, cy: (hashStr('b' + seed) - 0.5) * 26, rx: 8 + hashStr('ac' + seed) * 4, ry: 4, fill: '#aeb4bb', opacity: 0.5 });
+  body.appendChild(storm);
+  body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
+  g.appendChild(body);
+  svg.appendChild(g);
+}
+
+function buildWormholeSvg(svg, seed, def) {
+  var tint = (def && def.tint) || '#35d0e0';
+  var g = svgEl('g', { transform: 'translate(36 36)' });
+  var swirl = svgEl('g');
+  for (var i = 0; i < 4; i++) {
+    var rx = 27 - i * 5, ry = 11 - i * 1.6;
+    swirl.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: rx, ry: ry, fill: i === 0 ? 'rgba(4,6,10,.85)' : 'none', stroke: tint, 'stroke-width': 2.5 - i * 0.4, opacity: 0.75 - i * 0.14, transform: 'rotate(' + (i * 17) + ')' }));
+  }
+  addRotate(swirl, '7s', true);
+  g.appendChild(swirl);
+  var arcs = svgEl('g');
+  arcs.appendChild(svgEl('circle', { r: 31, fill: 'none', stroke: tint, 'stroke-width': 2, 'stroke-dasharray': '10 18', opacity: 0.5 }));
+  addRotate(arcs, '13s', false);
+  g.appendChild(arcs);
+  var core = svgEl('circle', { r: 9, fill: '#04060a' });
+  core.setAttribute('class', 'core-pulse');
+  g.appendChild(core);
+  svg.appendChild(g);
+}
+
+function buildBlackHoleSvg(svg, seed) {
+  var g = svgEl('g', { transform: 'translate(36 36)' });
+  var disc = svgEl('g');
+  disc.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: 24, ry: 9.5, fill: 'none', stroke: '#ffb35c', 'stroke-width': 4, opacity: 0.85, transform: 'rotate(-14)' }));
+  disc.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: 20, ry: 7.5, fill: 'none', stroke: '#ff7a7e', 'stroke-width': 3, opacity: 0.7, transform: 'rotate(-14)' }));
+  addRotate(disc, '5s', false);
+  g.appendChild(disc);
+  var lens = svgEl('g');
+  lens.appendChild(svgEl('circle', { r: 14, fill: 'none', stroke: 'rgba(140,180,255,.6)', 'stroke-width': 2, 'stroke-dasharray': '3 5', opacity: 0.8 }));
+  addRotate(lens, '9s', true);
+  g.appendChild(lens);
+  g.appendChild(svgEl('circle', { r: 9, fill: '#000', stroke: 'rgba(255,255,255,.35)', 'stroke-width': 1.5 }));
+  var glint = svgEl('circle', { r: 3, fill: '#eef4ff' });
+  glint.setAttribute('class', 'core-pulse');
+  g.appendChild(glint);
+  svg.appendChild(g);
+}
+
+var ANOMALY_BUILDERS = {
+  asteroid: buildAsteroidSvg,
+  moon: buildMoonSvg,
+  planet: buildPlanetSvg,
+  'gas-giant': buildGasGiantSvg,
+  'wormhole-a': buildWormholeSvg,
+  'wormhole-b': buildWormholeSvg,
+  'black-hole': buildBlackHoleSvg
+};
+
 function moduleSvg(p) {
   var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'module-svg' });
-  if (isAsteroidPiece(p)) {
-    buildAsteroidSvg(svg, hashStr(p.id));
+  var kid = anomalyKey(p);
+  if (kid) {
+    ANOMALY_BUILDERS[kid](svg, hashStr(p.id), ANOMALIES[kid]);
     return svg;
   }
   var c = PALETTE[p.color] || '#7fa0b0';
@@ -559,7 +718,7 @@ function neighborCentroid(p) {
   var cx = 0, cy = 0, n = 0, i, q;
   for (i = 0; i < state.pieces.length; i++) {
     q = state.pieces[i];
-    if (q.id === p.id || isAsteroidPiece(q)) continue;
+    if (q.id === p.id || isAnomaly(q)) continue;
     if (q.color !== p.color) continue;
     var dx = q.x - p.x, dy = q.y - p.y;
     if ((dx === 0 && Math.abs(dy) === 1) || (dy === 0 && Math.abs(dx) === 1)) {
@@ -582,25 +741,67 @@ function frigateAngle(p) {
   return ((a + 270 + 360) % 360 + 360) % 360;
 }
 
-function isAsteroidAt(x, y) {
-  var i;
-  for (i = 0; i < state.pieces.length; i++) {
-    var q = state.pieces[i];
-    if (q.x === x && q.y === y && isAsteroidPiece(q)) return true;
+/* ===== anomalies =====
+   Anomalies are ambient board hazards placed from the ANOMALIES screen. They
+   share the same silhouette shading, blue corner warnings and optional slow
+   spin; multi-tile ones (moon/planet/gas-giant) occupy size×size cells from
+   their anchor. Wormholes are passable during movement and teleport between
+   their own network. */
+var ANOMALIES = {
+  asteroid:    { label: 'Asteroid',  size: 1, bodyR: 30, spin: 0 },
+  moon:        { label: 'Moon',      size: 2, bodyR: 27, spin: 14 },
+  planet:      { label: 'Planet',    size: 3, bodyR: 31, spin: 46 },
+  'gas-giant': { label: 'Gas Giant', size: 4, bodyR: 33, spin: 30 },
+  'wormhole-a': { label: 'Wormhole A', size: 1, bodyR: 30, spin: 5, tint: '#ff5ecf' },
+  'wormhole-b': { label: 'Wormhole B', size: 1, bodyR: 30, spin: 5, tint: '#35d0e0' },
+  'black-hole': { label: 'Black Hole', size: 1, bodyR: 30, spin: 8 }
+};
+function anomalyKey(o) {
+  if (!o) return null;
+  if (ANOMALIES[o.img]) return o.img;
+  if (o.img === 'square-module' && o.color === 'grey') return 'asteroid'; // legacy save
+  return null;
+}
+function isAnomaly(o) { return !!anomalyKey(o); }
+function anomalySize(o) { return (ANOMALIES[anomalyKey(o)] || ANOMALIES.asteroid).size; }
+function isWormhole(o) {
+  var k = anomalyKey(o);
+  return k === 'wormhole-a' || k === 'wormhole-b';
+}
+function pieceCovers(o, x, y) {
+  var s = anomalySize(o);
+  return x >= o.x && x < o.x + s && y >= o.y && y < o.y + s;
+}
+/* Is any anomaly footprint covering (x,y)? Optionally ignore one piece by id. */
+function coversAnomalyAt(x, y, ignoreId) {
+  for (var i = 0; i < state.pieces.length; i++) {
+    var p = state.pieces[i];
+    if (ignoreId && p.id === ignoreId) continue;
+    if (isAnomaly(p) && pieceCovers(p, x, y)) return true;
   }
   return false;
 }
+/* Wormhole networks: cell "x,y" -> net key ('wormhole-a'|'wormhole-b'). */
+function wormholeNetIndex() {
+  var map = {}, i, p, k;
+  for (i = 0; i < state.pieces.length; i++) {
+    p = state.pieces[i];
+    k = anomalyKey(p);
+    if (isWormhole(p)) map[p.x + ',' + p.y] = k;
+  }
+  return map;
+}
 
 /* ===== ship connections ===== */
-var connStyle = 'glow';   // 'mech' | 'glow' | 'station'
+var connStyle = 'mech';   // 'mech' | 'wide' | 'glow' | 'station'
 function connPairs() {
   var pairs = [], i, j, a, b;
   for (i = 0; i < state.pieces.length; i++) {
     a = state.pieces[i];
-    if (isAsteroidPiece(a)) continue;
+    if (isAnomaly(a)) continue;
     for (j = i + 1; j < state.pieces.length; j++) {
       b = state.pieces[j];
-      if (isAsteroidPiece(b) || a.color !== b.color) continue;
+      if (isAnomaly(b) || a.color !== b.color) continue;
       var dx = a.x - b.x, dy = a.y - b.y;
       if ((dx === 0 && Math.abs(dy) === 1) || (dy === 0 && Math.abs(dx) === 1)) pairs.push([a, b]);
     }
@@ -666,23 +867,39 @@ function drawConnStation(svg, a, b, c) {
   svg.appendChild(g);
 }
 
-function drawConnTech(svg, a, b, c) {
+function drawConnWide(svg, a, b, c) {
   var horiz = Math.abs(a.x - b.x) > Math.abs(a.y - b.y);
   var x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y);
-  var g = svgEl('g', { 'class': 'conn-tech' });
+  var off = CELL / 4;                        // border lines half a space apart
+  var g = svgEl('g', { 'class': 'conn-wide' });
   var strut;
-  if (horiz) strut = svgEl('rect', { x: x1, y: y1 - 7, width: CELL, height: 14, rx: 3 });
-  else strut = svgEl('rect', { x: x1 - 7, y: y1, width: 14, height: CELL, rx: 3 });
-  strut.setAttribute('fill', '#212936');
-  strut.setAttribute('stroke', shade(c, 0.8));
-  strut.setAttribute('stroke-width', 1.2);
+  if (horiz) strut = svgEl('rect', { x: x1, y: y1 - off, width: CELL, height: off * 2, rx: 4 });
+  else strut = svgEl('rect', { x: x1 - off, y: y1, width: off * 2, height: CELL, rx: 4 });
+  strut.setAttribute('fill', '#202836');
+  strut.setAttribute('stroke', shade(c, 0.85));
+  strut.setAttribute('stroke-width', 1.5);
   g.appendChild(strut);
-  g.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: c, opacity: 0.16, 'stroke-width': 9, 'stroke-linecap': 'round' }));
-  g.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, 'class': 'conn-pulse', stroke: c, 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-dasharray': '22 80' }));
-  g.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, 'class': 'conn-base', stroke: c, 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-dasharray': '3 9' }));
+  var edgeCol = shade(c, 0.55);
+  var edgeA, edgeB;
+  if (horiz) {
+    edgeA = svgEl('line', { x1: x1, y1: y1 - off, x2: x1 + CELL, y2: y1 - off, stroke: edgeCol, 'stroke-width': 2, opacity: 0.85 });
+    edgeB = svgEl('line', { x1: x1, y1: y1 + off, x2: x1 + CELL, y2: y1 + off, stroke: edgeCol, 'stroke-width': 2, opacity: 0.85 });
+  } else {
+    edgeA = svgEl('line', { x1: x1 - off, y1: y1, x2: x1 - off, y2: y1 + CELL, stroke: edgeCol, 'stroke-width': 2, opacity: 0.85 });
+    edgeB = svgEl('line', { x1: x1 + off, y1: y1, x2: x1 + off, y2: y1 + CELL, stroke: edgeCol, 'stroke-width': 2, opacity: 0.85 });
+  }
+  g.appendChild(edgeA);
+  g.appendChild(edgeB);
+  var core = svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, 'class': 'conn-base', stroke: c, 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-dasharray': '4 12', opacity: 0.65 });
+  g.appendChild(core);
   var bx = [a, b];
   for (var i = 0; i < 2; i++) {
-    g.appendChild(svgEl('circle', { cx: bx[i].x, cy: bx[i].y, r: 5.5, fill: shade(c, 0.5), stroke: c, 'stroke-width': 1.8 }));
+    g.appendChild(svgEl('circle', { cx: bx[i].x, cy: bx[i].y, r: 8, fill: shade(c, 0.5), stroke: c, 'stroke-width': 2 }));
+    var rv1, rv2;
+    if (horiz) { rv1 = svgEl('circle', { cx: bx[i].x, cy: bx[i].y - 5, r: 1.4, fill: '#0c1117' }); rv2 = svgEl('circle', { cx: bx[i].x, cy: bx[i].y + 5, r: 1.4, fill: '#0c1117' }); }
+    else { rv1 = svgEl('circle', { cx: bx[i].x - 5, cy: bx[i].y, r: 1.4, fill: '#0c1117' }); rv2 = svgEl('circle', { cx: bx[i].x + 5, cy: bx[i].y, r: 1.4, fill: '#0c1117' }); }
+    g.appendChild(rv1);
+    g.appendChild(rv2);
   }
   svg.appendChild(g);
 }
@@ -698,14 +915,14 @@ function renderConnections() {
     var c = PALETTE[pairs[i][0].color] || '#5b94f0';
     if (connStyle === 'glow') drawConnGlow(svg, a, b, c);
     else if (connStyle === 'mech') drawConnMech(svg, a, b, c);
-    else if (connStyle === 'tech') drawConnTech(svg, a, b, c);
+    else if (connStyle === 'wide') drawConnWide(svg, a, b, c);
     else drawConnStation(svg, a, b, c);
   }
 }
 
 function cycleConnStyle() {
-  var order = ['mech', 'glow', 'station', 'tech'];
-  var names = { mech: 'MECH', glow: 'GLOW', station: 'STATION', tech: 'TECH' };
+  var order = ['mech', 'wide', 'glow', 'station'];
+  var names = { mech: 'MECH', wide: 'WIDE', glow: 'GLOW', station: 'STATION' };
   connStyle = order[(order.indexOf(connStyle) + 1) % order.length];
   connBtn.textContent = '◫ CONNECT: ' + names[connStyle];
   connBtn.className = 'btn conn-btn ' + connStyle;
@@ -729,27 +946,27 @@ function setCounters(d, p) {
 }
 
 function paintPieceNode(d, p) {
-  var isAst = isAsteroidPiece(p);
+  var anom = isAnomaly(p);
   d.style.left = cellPx(p.x) + 'px';
   d.style.top = cellPx(p.y) + 'px';
   var sv = d.querySelector('.module-svg');
-  if (isAst && d._astroCorners) {
-    for (var i = 0; i < d._astroCorners.length; i++) {
-      var co = d._astroCorners[i];
+  if (anom && d._anomCorners) {
+    for (var i = 0; i < d._anomCorners.length; i++) {
+      var co = d._anomCorners[i];
       var hide = false;
       for (var k = 0; k < co.adj.length; k++) {
-        if (isAsteroidAt(p.x + co.adj[k][0], p.y + co.adj[k][1])) hide = true;
+        if (coversAnomalyAt(p.x + co.at[0] + co.adj[k][0], p.y + co.at[1] + co.adj[k][1], p.id)) hide = true;
       }
       co.el.style.display = hide ? 'none' : '';
     }
   }
-  var cls = isAst ? 'piece astro' : 'piece';
+  var cls = anom ? 'piece anom' : 'piece';
   if (p.exhausted) cls += ' exhausted';
   if (moveState && isActorPiece(p)) cls += ' moving';
   if (sel && sel.type === 'piece' && sel.id === p.id) cls += ' selected';
   d.className = cls;
   setCounters(d, p);
-  if (!isAst && sv) {
+  if (!anom && sv) {
     if (p.img === 'frigate-ship' || p.img === 'triangle-module') {
       sv.style.transform = 'rotate(' + frigateAngle(p) + 'deg)';
     } else if (p.img === 'square-module') {
@@ -770,32 +987,36 @@ function paintPieceNode(d, p) {
 function buildPieceNode(p) {
   var d = el('div', 'piece');
   d.setAttribute('data-cid', p.id);
-  d.style.width = CELL + 'px';
-  d.style.height = CELL + 'px';
+  var sz = anomalySize(p);
+  d.style.width = CELL * sz + 'px';
+  d.style.height = CELL * sz + 'px';
   var col = PALETTE[p.color] || '#7fa0b0';
   d.style.setProperty('--pc', col);
   var sv = moduleSvg(p);
   d.appendChild(sv);
-  if (isAsteroidPiece(p)) {
+  var key = anomalyKey(p);
+  if (key) {
     var seed = hashStr(p.id);
-    sv.style.setProperty('--astro-start', Math.floor(seed * 360) + 'deg');
-    sv.style.setProperty('--astro-speed', (28 + seed * 42).toFixed(1) + 's');
+    var def = ANOMALIES[key];
+    sv.style.setProperty('--astro-start', (key === 'asteroid' ? Math.floor(seed * 360) : 0) + 'deg');
+    sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 12))) + 's');
+    d.appendChild(buildShadeNode(def, seed));
     var cornerWrap = el('div', 'astro-corners');
     var corners = [
-      { cls: 'ac-tl', adj: [[0, -1], [-1, 0]] },
-      { cls: 'ac-tr', adj: [[0, -1], [1, 0]] },
-      { cls: 'ac-bl', adj: [[0, 1], [-1, 0]] },
-      { cls: 'ac-br', adj: [[0, 1], [1, 0]] }
+      { cls: 'ac-tl', at: [0, 0], adj: [[0, -1], [-1, 0]] },
+      { cls: 'ac-tr', at: [sz - 1, 0], adj: [[0, -1], [1, 0]] },
+      { cls: 'ac-bl', at: [0, sz - 1], adj: [[0, 1], [-1, 0]] },
+      { cls: 'ac-br', at: [sz - 1, sz - 1], adj: [[0, 1], [1, 0]] }
     ];
     var els = [];
     for (var i = 0; i < corners.length; i++) {
       var sp = el('span', 'astro-corner ' + corners[i].cls);
       sp.style.animationDelay = (i * 0.8) + 's';
       cornerWrap.appendChild(sp);
-      els.push({ el: sp, adj: corners[i].adj });
+      els.push({ el: sp, at: corners[i].at, adj: corners[i].adj });
     }
     d.appendChild(cornerWrap);
-    d._astroCorners = els;
+    d._anomCorners = els;
   }
   var mc = ['mc-tl', 'mc-tr', 'mc-bl', 'mc-br'];
   for (var m = 0; m < mc.length; m++) d.appendChild(el('span', 'move-corner ' + mc[m]));
@@ -1119,21 +1340,33 @@ function flashBlocked(x, y) {
 
 function canMoveTo(type, id, x, y) {
   var same = findObj(type, id);
-  if (same && same.x === x && same.y === y) return true;
-  var occ = occupancy(x, y);
-  if (!occ) return true;
-  if (type === 'chip' && occ === 'chip') return true;   // chips can share with chips
-  return false;
+  if (!same) return false;
+  var s = (type === 'piece') ? anomalySize(same) : 1;
+  for (var dx = 0; dx < s; dx++) {
+    for (var dy = 0; dy < s; dy++) {
+      var cx = x + dx, cy = y + dy;
+      if (cx < 0 || cy < 0 || cx >= state.grid.size || cy >= state.grid.size) return false;
+      var inSelf = cx >= same.x && cx < same.x + s && cy >= same.y && cy < same.y + s;
+      if (inSelf) continue;
+      var occ = occupancy(cx, cy);
+      if (!occ) continue;
+      if (type === 'chip' && occ === 'chip') continue;   // chips can share with chips
+      return false;
+    }
+  }
+  return true;
 }
 
-/* Shortest orthogonal path distance (BFS) around blocking objects. Empty cells
-   and same-colour non-asteroid pieces are passable; other colours, asteroids
-   and chips block. Returns -1 when the target is unreachable. */
+/* Shortest orthogonal path distance (BFS) around blocking objects. Empty cells,
+   same-colour modules and wormholes are passable; other colours, non-wormhole
+   anomalies and chips block. Returns -1 when the target is unreachable. */
 function pathBlocked(x, y, color) {
   var i, o;
   for (i = 0; i < state.pieces.length; i++) {
     o = state.pieces[i];
-    if (o.x === x && o.y === y) return !(o.color === color && !isAsteroidPiece(o));
+    if (!pieceCovers(o, x, y)) continue;
+    if (isWormhole(o)) return false;                  // skip through wormhole spaces
+    return !(o.color === color && !isAnomaly(o));
   }
   for (i = 0; i < state.chips.length; i++) {
     if (state.chips[i].x === x && state.chips[i].y === y) return true;
@@ -1146,21 +1379,32 @@ function findMovePath(fromX, fromY, tx, ty, color) {
   if (tx < 0 || ty < 0 || tx >= size || ty >= size) return null;
   if (fromX === tx && fromY === ty) return [{ x: fromX, y: fromY }];
   var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  var nets = wormholeNetIndex();        // "x,y" -> wormhole-a | wormhole-b
   var qx = [fromX], qy = [fromY];
   var seen = {}, startKey = fromX + ',' + fromY, targetKey = tx + ',' + ty;
   seen[startKey] = null;
-  var head = 0, k, nx, ny, key;
+  var head = 0, k, nx, ny, key, x, y;
   while (head < qx.length) {
-    var x = qx[head], y = qy[head];
+    x = qx[head]; y = qy[head];
     head++;
-    for (k = 0; k < 4; k++) {
-      nx = x + dirs[k][0]; ny = y + dirs[k][1];
+    // Standing on a wormhole lets you step to any other member of the same
+    // network for 1 movement (the wormhole jump).
+    var net = nets[x + ',' + y];
+    var neigh = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+    if (net) {
+      for (var w in nets) {
+        if (nets[w] === net && w !== x + ',' + y) {
+          var wxy = w.split(',');
+          neigh.push([Number(wxy[0]), Number(wxy[1])]);
+        }
+      }
+    }
+    for (k = 0; k < neigh.length; k++) {
+      nx = neigh[k][0]; ny = neigh[k][1];
       if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
       key = nx + ',' + ny;
       if (key in seen) continue;
-      if (pathBlocked(nx, ny, color)) continue;
-      seen[key] = x + ',' + y;
-      if (key === targetKey) {
+      if (key === targetKey) {          // destination may be a shared chip cell
         var path = [], cur = key, name;
         while (cur) {
           name = cur.split(',');
@@ -1170,6 +1414,8 @@ function findMovePath(fromX, fromY, tx, ty, color) {
         path.reverse();
         return path;
       }
+      if (pathBlocked(nx, ny, color)) continue;
+      seen[key] = x + ',' + y;
       qx.push(nx); qy.push(ny);
     }
   }
@@ -1220,13 +1466,16 @@ function clearMovePath() {
 
 function projectedMoveLeft(obj, tx, ty) {
   var used = 0, st = null, d, i, p, oldCost = 0;
-  for (i = 0; i < state.pieces.length; i++) {
-    p = state.pieces[i];
-    st = moveState.starts[p.id];
-    if (!st) continue;
-    d = moveDistance(st.x, st.y, p.x, p.y, actorColor);
-    if (d > 0) used += d;
-    if (p.id === obj.id) oldCost = Math.max(d, 0);
+  var lists = [state.pieces, state.chips];
+  for (var li = 0; li < lists.length; li++) {
+    for (i = 0; i < lists[li].length; i++) {
+      p = lists[li][i];
+      st = moveState.starts[p.id];
+      if (!st) continue;
+      d = moveDistance(st.x, st.y, p.x, p.y, actorColor);
+      if (d > 0) used += d;
+      if (p.id === obj.id) oldCost = Math.max(d, 0);
+    }
   }
   st = moveState.starts[obj.id];
   var newCost = 0;
@@ -1510,7 +1759,9 @@ wireCounters(chipsEl);
 function showCreateList() {
   popListEl.innerHTML = '';
   if (pieceCatalog.length === 0) {
-    popStatusEl.textContent = 'no pieces found — drop PNGs into pieces/images';
+    var empty = el('span', 'no-pieces');
+    empty.textContent = 'no pieces found — drop PNGs into pieces/images';
+    popListEl.appendChild(empty);
     return;
   }
   var i;
@@ -1531,18 +1782,14 @@ function showCreateList() {
   }
 }
 function refreshCatalog(cb) {
-  popStatusEl.textContent = 'scanning pieces/images …';
   fetch('../server/board.php?pieces&_=' + Date.now()).then(function (r) { return r.json(); }).then(function (data) {
     if (data && data.ok) {
       pieceCatalog = data.pieces || [];
       var i;
       for (i = 0; i < pieceCatalog.length; i++) loadMaster(pieceCatalog[i].file);
-    } else {
-      popStatusEl.textContent = 'scan failed — upload board.php to a PHP host';
     }
     if (cb) cb();
   }).catch(function () {
-    popStatusEl.textContent = 'scan failed — board.php unreachable';
     if (cb) cb();
   });
 }
@@ -1569,9 +1816,75 @@ popupEl.querySelectorAll('.pv').forEach(function (b) {
   b.addEventListener('click', function () { setCreateType(b.getAttribute('data-createtype')); });
 });
 document.getElementById('popClose').addEventListener('click', hideCreate);
-document.getElementById('popReload').addEventListener('click', function () { refreshCatalog(function () { showCreateList(); }); });
 popupEl.addEventListener('click', function (e) {
   if (e.target === popupEl) hideCreate();
+});
+
+/* ===== anomalies popup ===== */
+var anomPopupEl = document.getElementById('anomPopup');
+var anomListEl = document.getElementById('anomList');
+var anomCellEl = document.getElementById('anomCell');
+function makeAnomalyPreview(k) {
+  var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'anom-preview' });
+  ANOMALY_BUILDERS[k](svg, 0.47, ANOMALIES[k]);
+  return svg;
+}
+function openAnomalyPopup() {
+  anomCellEl.textContent = 'ANOMALIES AT ' + lastCreate.x + ',' + lastCreate.y;
+  anomListEl.innerHTML = '';
+  var keys = Object.keys(ANOMALIES);
+  for (var i = 0; i < keys.length; i++) {
+    (function (k) {
+      var def = ANOMALIES[k];
+      var b = el('button', 'choose');
+      b.type = 'button';
+      b.appendChild(makeAnomalyPreview(k));
+      b.appendChild(el('span')).textContent = def.label;
+      if (def.size > 1) {
+        var sz = el('span', 'anom-size');
+        sz.textContent = def.size + '×' + def.size;
+        b.appendChild(sz);
+      }
+      b.addEventListener('click', function () { createAnomaly(k); });
+      anomListEl.appendChild(b);
+    })(keys[i]);
+  }
+  anomPopupEl.classList.remove('hidden');
+}
+function hideAnomalyPopup() { anomPopupEl.classList.add('hidden'); }
+function createAnomaly(k) {
+  var def = ANOMALIES[k];
+  var gs = state.grid.size;
+  for (var dx = 0; dx < def.size; dx++) {
+    for (var dy = 0; dy < def.size; dy++) {
+      var cx = lastCreate.x + dx, cy = lastCreate.y + dy;
+      if (cx >= gs || cy >= gs || occupancy(cx, cy)) {
+        flashBlocked(lastCreate.x, lastCreate.y);
+        return;
+      }
+    }
+  }
+  var obj = {
+    id: uid('p'),
+    img: k,
+    color: 'grey',
+    x: lastCreate.x,
+    y: lastCreate.y,
+    size: def.size,
+    buttons: { red: 0, grey: 0 },
+    exhausted: 0
+  };
+  state.pieces.push(obj);
+  renderPieces();
+  hideAnomalyPopup();
+  queue('cr:' + obj.id, { action: 'create', type: 'piece', id: obj.id, img: k, size: def.size, x: obj.x, y: obj.y, color: 'grey', exhausted: 0 });
+}
+document.getElementById('popAnoms').addEventListener('click', function () {
+  openAnomalyPopup();
+});
+document.getElementById('anomClose').addEventListener('click', hideAnomalyPopup);
+anomPopupEl.addEventListener('click', function (e) {
+  if (e.target === anomPopupEl) hideAnomalyPopup();
 });
 
 /* ===== create / move ===== */
@@ -1595,6 +1908,7 @@ function createObject(type, file) {
   hideCreate();
   queue('cr:' + obj.id, { action: 'create', type: type, id: obj.id, img: file, x: obj.x, y: obj.y, color: actorColor, exhausted: 0 });
   if (moveState && type === 'piece' && isActorPiece(obj)) moveState.starts[obj.id] = { x: obj.x, y: obj.y };
+  else if (moveState && type === 'chip' && obj.color === actorColor) moveState.starts[obj.id] = { x: obj.x, y: obj.y };
 }
 function moveObject(type, id, x, y) {
   var obj = findObj(type, id);
@@ -1640,18 +1954,21 @@ var moveBudgetOk = document.getElementById('moveBudgetOk');
 var movePopupClose = document.getElementById('movePopupClose');
 
 function isActorPiece(o) {
-  return !!o && o.color === actorColor && !isAsteroidPiece(o);
+  return !!o && o.color === actorColor && !isAnomaly(o);
 }
 
 function updateMoveCounter() {
   if (!moveState) return;
   var used = 0, st, p, d, i;
-  for (i = 0; i < state.pieces.length; i++) {
-    p = state.pieces[i];
-    st = moveState.starts[p.id];
-    if (st) {
-      d = moveDistance(st.x, st.y, p.x, p.y, actorColor);
-      if (d > 0) used += d;
+  var lists = [state.pieces, state.chips];
+  for (var li = 0; li < lists.length; li++) {
+    for (i = 0; i < lists[li].length; i++) {
+      p = lists[li][i];
+      st = moveState.starts[p.id];
+      if (st) {
+        d = moveDistance(st.x, st.y, p.x, p.y, actorColor);
+        if (d > 0) used += d;
+      }
     }
   }
   var left = moveState.budget - used;
@@ -1667,10 +1984,15 @@ function startMove(budget) {
     p = state.pieces[i];
     if (isActorPiece(p)) moveState.starts[p.id] = { x: p.x, y: p.y };
   }
+  for (i = 0; i < state.chips.length; i++) {   // owned chips move too, same budget
+    p = state.chips[i];
+    if (p.color === actorColor) moveState.starts[p.id] = { x: p.x, y: p.y };
+  }
   moveBtn.textContent = 'FINISH MOVE';
   moveBtn.title = 'End the movement phase and save';
   moveBtn.classList.add('active');
   renderPieces();
+  renderChips();
   updateMoveCounter();
 }
 
@@ -1683,6 +2005,7 @@ function endMove() {
   moveCounter.classList.add('hidden');
   clearMovePath();
   renderPieces();
+  renderChips();
   saveChanges();
 }
 
@@ -2080,7 +2403,7 @@ document.getElementById('gameDeckAllBtn').addEventListener('click', function () 
   }
 });
 function isAsteroidPiece(o) {
-  return !!o && o.color === 'grey' && o.img === 'square-module';
+  return anomalyKey(o) === 'asteroid';
 }
 function scatterAsteroids() {
   var size = Number(state.grid.size) || 0;
@@ -2104,27 +2427,25 @@ function scatterAsteroids() {
     }
   }
   if (candidates.length === 0) return;
-  var occ = {};
-  for (i = 0; i < state.pieces.length; i++) occ[state.pieces[i].x + ',' + state.pieces[i].y] = 1;
-  for (i = 0; i < state.chips.length; i++) occ[state.chips[i].x + ',' + state.chips[i].y] = 1;
   var count = Math.max(1, Math.round(size * size * 0.1));
   var placed = 0;
   var idx, c, obj;
   while (placed < count && candidates.length > 0) {
     idx = Math.floor(Math.random() * candidates.length);
     c = candidates.splice(idx, 1)[0];
-    if (occ[c.x + ',' + c.y]) continue;
+    if (occupancy(c.x, c.y)) continue;
     obj = {
       id: uid('p'),
-      img: 'square-module',
+      img: 'asteroid',
       color: 'grey',
       x: c.x,
       y: c.y,
+      size: 1,
       buttons: { red: 0, grey: 0 },
       exhausted: 0
     };
     state.pieces.push(obj);
-    queue('cr:' + obj.id, { action: 'create', type: 'piece', id: obj.id, img: 'square-module', x: c.x, y: c.y, color: 'grey', exhausted: 0 });
+    queue('cr:' + obj.id, { action: 'create', type: 'piece', id: obj.id, img: 'asteroid', size: 1, x: c.x, y: c.y, color: 'grey', exhausted: 0 });
     placed++;
   }
   renderPieces();

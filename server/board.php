@@ -36,6 +36,7 @@ define('MAX_SIZE', 40);
 $VALID_ACTIONS = array('resize', 'create', 'move', 'counter', 'exhaust', 'ping', 'delete');
 $VALID_COLORS  = array('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'grey');
 $PACKET_LIMIT  = 65536;
+$ANOMALY_IMGS  = array('asteroid' => 1, 'moon' => 1, 'planet' => 1, 'gas-giant' => 1, 'wormhole-a' => 1, 'wormhole-b' => 1, 'black-hole' => 1);
 
 function respond($data) {
     $data['v'] = BOARD_VERSION;
@@ -123,6 +124,7 @@ function isSafeId($id) {
 }
 
 function isSafeImg($img) {
+    if (isset($GLOBALS['ANOMALY_IMGS'][$img])) return true;   // anomalies need no PNG file
     return is_string($img)
         && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $img) === 1
         && is_file(IMAGES_DIR . '/' . $img . '.png');
@@ -132,13 +134,33 @@ function coordOk($xy, $size) {
     return is_numeric($xy) && $xy >= 0 && $xy < $size;
 }
 
-function cellBlocked($s, $type, $x, $y) {
-    foreach ($s['pieces'] as $p) {
-        if ((int)$p['x'] === (int)$x && (int)$p['y'] === (int)$y) return 'piece';
-    }
-    if ($type === 'piece') {
-        foreach ($s['chips'] as $c) {
-            if ((int)$c['x'] === (int)$x && (int)$c['y'] === (int)$y) return 'chip';
+function pieceSize($p) {
+    return isset($p['size']) ? max(1, min(4, (int)$p['size'])) : 1;
+}
+
+function covers($p, $x, $y) {
+    $sz = pieceSize($p);
+    return (int)$p['x'] <= $x && $x < (int)$p['x'] + $sz
+        && (int)$p['y'] <= $y && $y < (int)$p['y'] + $sz;
+}
+
+/* Returns null when an x,y,size footprint (minus the piece to ignore) is free;
+   otherwise the reason it is not ('out of bounds' | 'piece' | 'chip'). */
+function footprintBlocked($s, $key, $x, $y, $size, $ignoreId) {
+    $gs = $s['grid']['size'];
+    for ($dx = 0; $dx < $size; $dx++) {
+        for ($dy = 0; $dy < $size; $dy++) {
+            $cx = $x + $dx; $cy = $y + $dy;
+            if ($cx < 0 || $cy < 0 || $cx >= $gs || $cy >= $gs) return 'out of bounds';
+            foreach ($s['pieces'] as $p) {
+                if ($ignoreId !== null && (string)$p['id'] === (string)$ignoreId) continue;
+                if (covers($p, $cx, $cy)) return 'piece';
+            }
+            if ($key === 'pieces') {
+                foreach ($s['chips'] as $c) {
+                    if ((int)$c['x'] === $cx && (int)$c['y'] === $cy) return 'chip';
+                }
+            }
         }
     }
     return null;
@@ -153,7 +175,8 @@ function actResize(&$s, $a) {
     $s['grid']['size'] = $size;
     foreach (array('pieces', 'chips') as $k) {
         $s[$k] = array_values(array_filter($s[$k], function ($o) use ($size) {
-            return (int)$o['x'] < $size && (int)$o['y'] < $size;
+            if ((int)$o['x'] >= $size || (int)$o['y'] >= $size) return false;
+            return (int)$o['x'] + pieceSize($o) <= $size && (int)$o['y'] + pieceSize($o) <= $size;
         }));
     }
     foreach ($s['pings'] as $c => $p) {
@@ -177,7 +200,9 @@ function actCreate(&$s, $a) {
 
     $key = ($type === 'piece') ? 'pieces' : 'chips';
     foreach ($s[$key] as $o) if ($o['id'] === $a['id']) return array('error' => 'id taken');
-    if (cellBlocked($s, $type, $x, $y)) return array('error' => 'cell occupied');
+    $size = ($type === 'piece') ? (isset($a['size']) ? max(1, min(4, (int)$a['size'])) : 1) : 1;
+    $fb = footprintBlocked($s, $key, $x, $y, $size, null);
+    if ($fb !== null) return array('error' => $fb);
 
     $s[$key][] = array(
         'id'        => $a['id'],
@@ -185,6 +210,7 @@ function actCreate(&$s, $a) {
         'color'     => $color,
         'x'         => $x,
         'y'         => $y,
+        'size'      => $size,
         'buttons'   => array('red' => 0, 'grey' => 0),
         'exhausted' => isset($a['exhausted']) ? ((int)$a['exhausted'] ? 1 : 0) : 1,
     );
@@ -229,9 +255,8 @@ function actMove(&$s, $a) {
         }
     }
 
-    $blocked = cellBlocked($s, $type, $x, $y);
-    $sameCell = $target['x'] == $x && $target['y'] == $y;
-    if ($blocked && !$sameCell) return array('error' => 'cell occupied');
+    $blocked = footprintBlocked($s, $key, $x, $y, pieceSize($target), $target['id']);
+    if ($blocked !== null) return array('error' => $blocked);
 
     $target['x'] = $x;
     $target['y'] = $y;
