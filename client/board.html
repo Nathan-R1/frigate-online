@@ -569,7 +569,6 @@ function buildMoonSvg(svg, seed) {
 
 function buildPlanetSvg(svg, seed) {
   var g = svgEl('g', { transform: 'translate(36 36)' });
-  var bandCols = ['#5a6069', '#7e848c', '#6b7178', '#8a9199', '#5f656c'];
   var base = 31;
   var defs = svgEl('defs');
   var sid = 'pl' + (shadeSeq++);
@@ -577,21 +576,34 @@ function buildPlanetSvg(svg, seed) {
   clp.appendChild(svgEl('circle', { r: base }));
   defs.appendChild(clp);
   svg.appendChild(defs);
+  var ocean = svgEl('radialGradient', { id: 'plo-' + sid, cx: '35%', cy: '35%', r: '85%' });
+  ocean.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#3d86c4' }));
+  ocean.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#1d4f8c' }));
+  defs.appendChild(ocean);
   var body = svgEl('g', { 'clip-path': 'url(#plc-' + sid + ')' });
-  body.appendChild(svgEl('circle', { r: base, fill: '#646a72' }));
-  var y = -base;
-  while (y < base) {
-    var h = 7 + hashStr('b' + y + seed) * 12;
-    body.appendChild(svgEl('rect', { x: -base, y: y, width: base * 2, height: h, fill: bandCols[Math.floor(hashStr('g' + y + seed) * bandCols.length)] }));
-    y += h;
+  body.appendChild(svgEl('circle', { r: base, fill: 'url(#plo-' + sid + ')' }));
+  var contCols = ['#3e8a4a', '#4a9a56', '#357c42', '#5aa363'];
+  var nCont = 6 + Math.floor(hashStr('nc' + seed) * 3);
+  for (var c = 0; c < nCont; c++) {
+    var ccx = (hashStr('ccx' + c + seed) - 0.5) * base * 1.4;
+    var ccy = (hashStr('ccy' + c + seed) - 0.5) * base * 1.4;
+    var nBlob = 2 + Math.floor(hashStr('nb' + c + seed) * 3);
+    for (var b = 0; b < nBlob; b++) {
+      var ck = c + '_' + b + seed;
+      var rx = base * (0.16 + hashStr('rx' + ck) * 0.16);
+      var ry = rx * (0.7 + hashStr('ry' + ck) * 0.7);
+      var bx = ccx + (hashStr('bx' + ck) - 0.5) * base * 0.38;
+      var by = ccy + (hashStr('by' + ck) - 0.5) * base * 0.38;
+      body.appendChild(svgEl('ellipse', {
+        cx: bx.toFixed(1), cy: by.toFixed(1),
+        rx: rx.toFixed(1), ry: ry.toFixed(1),
+        fill: contCols[Math.floor(hashStr('co' + ck) * contCols.length)],
+        transform: 'rotate(' + Math.floor(hashStr('ra' + ck) * 180) + ' ' + bx.toFixed(1) + ' ' + by.toFixed(1) + ')'
+      }));
+    }
   }
   body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
   g.appendChild(body);
-  var ringG = svgEl('g');
-  ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 9, ry: 9, fill: 'none', stroke: '#9aa2ac', 'stroke-width': 5, opacity: 0.55, transform: 'rotate(-16)' }));
-  ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 3, ry: 7, fill: 'none', stroke: 'rgba(0,0,0,.35)', 'stroke-width': 6, opacity: 0.4, transform: 'rotate(-16)' }));
-  addRotate(ringG, '26s', false);
-  g.appendChild(ringG);
   svg.appendChild(g);
 }
 
@@ -622,6 +634,11 @@ function buildGasGiantSvg(svg, seed) {
   body.appendChild(storm);
   body.appendChild(svgEl('circle', { r: base, fill: 'none', stroke: '#3f444a', 'stroke-width': 2 }));
   g.appendChild(body);
+  var ringG = svgEl('g');
+  ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 9, ry: 9, fill: 'none', stroke: '#9aa2ac', 'stroke-width': 5, opacity: 0.55, transform: 'rotate(-16)' }));
+  ringG.appendChild(svgEl('ellipse', { cx: 0, cy: 0, rx: base + 3, ry: 7, fill: 'none', stroke: 'rgba(0,0,0,.35)', 'stroke-width': 6, opacity: 0.4, transform: 'rotate(-16)' }));
+  addRotate(ringG, '104s', false);
+  g.appendChild(ringG);
   svg.appendChild(g);
 }
 
