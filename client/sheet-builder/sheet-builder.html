@@ -124,6 +124,8 @@
     font-family: var(--mono); font-size: 16px; line-height: 1;
   }
   .exp-add:hover { border-color: var(--amber); color: var(--amber); }
+  .exp-add.locked, .exp-add:disabled { cursor: not-allowed; opacity: .35; border-color: var(--line-dim); color: var(--line-dim); }
+  .exp-add.locked:hover, .exp-add:disabled:hover { border-color: var(--line-dim); color: var(--line-dim); }
   .exp-count {
     position: absolute; top: 8px; right: 42px;
     font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--amber);
@@ -367,7 +369,7 @@
     return out;
   }
 
-  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null, inv: emptyInv() };
+  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, inv: emptyInv() };
   var step = 0;
   var screen = 'landing'; // landing | win | exp
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
@@ -377,7 +379,7 @@
 
   /* ===== persistence ===== */
   function emptyInv() { return { crew: {}, tech: {}, mod: {} }; }
-  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillBoost: null, inv: emptyInv() }; }
+  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -389,7 +391,7 @@
         c.tech = s.tech || null;
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
-        c.skillBoost = s.skillBoost || null;
+        c.skillPickSel = s.skillPickSel || null;
         if (s.inv && typeof s.inv === 'object') {
           c.inv = { crew: {}, tech: {}, mod: {} };
           ['crew', 'tech', 'mod'].forEach(function (ik) {
@@ -495,10 +497,17 @@
   // expand: array of { tag, name, desc } to list under the card when opened
   function expandPanelHtml(key, expand, id) {
     if (!expand || !expand.length) return '';
-    var addCount = (choices.inv && choices.inv[key] && choices.inv[key][id]) || 0;
+    var isSI = key === 'crew' && id === '[Skill Increase]';
+    var invName = id;
+    var canAdd = true;
+    if (isSI) {
+      if (!choices.skillPickSel) canAdd = false;
+      else invName = 'Skill Increase -> ' + choices.skillPickSel;
+    }
+    var addCount = (choices.inv && choices.inv[key] && choices.inv[key][invName]) || 0;
     var html = '<div class="opt-panel" data-panel="' + key + '">';
     if (addCount) html += '<span class="exp-count">×' + addCount + '</span>';
-    html += '<button type="button" class="exp-add" data-add="' + key + '">+</button>';
+    html += '<button type="button" class="exp-add' + (canAdd ? '' : ' locked') + '" data-add="' + key + '"' + (canAdd ? '' : ' disabled') + '>+</button>';
     for (var i = 0; i < expand.length; i++) {
       var it = expand[i];
       html += '<div class="exp-item">' +
@@ -617,10 +626,10 @@
     return out.join('');
   }
   function crewPickHtml() {
-    var html = '<div class="sk-note">Gain a +2 to any Crew Skill (up to max 4).</div><div class="skill-pick">';
+    var html = '<div class="sk-note">Gain a +2 to any Crew Skill (up to max 4). Pick a skill, then press + to add it.</div><div class="skill-pick">';
     for (var i = 0; i < SKILL_NAMES.length; i++) {
       var n = SKILL_NAMES[i];
-      var on = choices.skillBoost === n;
+      var on = choices.skillPickSel === n;
       html += '<button type="button" class="skill-pick-btn' + (on ? ' on' : '') + '" data-boost="' + esc(n) + '">' + esc(n) + '</button>';
     }
     html += '</div>';
@@ -668,10 +677,23 @@
     return out.join('');
   }
 
+  function skillBoosts(name) {
+    var total = 0;
+    var inv = choices.inv && choices.inv.crew;
+    if (inv) {
+      for (var key in inv) {
+        if (inv[key] > 0 && key.indexOf('Skill Increase -> ') === 0 && key.slice('Skill Increase -> '.length) === name) {
+          total += inv[key];
+        }
+      }
+    }
+    return total;
+  }
   function skillEffective(name) {
     var base = parseInt(choices.skills[name].points, 10);
     if (isNaN(base)) base = 0;
-    if (choices.crew === '[Skill Increase]' && choices.skillBoost === name) return Math.min(4, base + 2);
+    var boost = skillBoosts(name) * 2;
+    if (boost) return Math.min(4, base + boost);
     return base;
   }
   function skillsTotal() {
@@ -742,7 +764,7 @@
     else if (k === 'mod') html = modOptions();
     else html = skillsOptions();
     document.getElementById('winOptions').innerHTML = html;
-    document.getElementById('continueBtn').disabled = (k !== 'skills' && !hasPick(k)) || (k === 'crew' && choices.crew === '[Skill Increase]' && !choices.skillBoost);
+    document.getElementById('continueBtn').disabled = (k !== 'skills' && !hasPick(k));
     updateProgress();
   }
 
@@ -866,18 +888,22 @@
       var wrap = e.target.closest('.opt-wrap');
       var optEl = wrap ? wrap.querySelector('.opt') : null;
       var id = optEl ? optEl.getAttribute('data-id') : null;
-      if (kk && id) {
-        if (!choices.inv[kk]) choices.inv[kk] = {};
-        choices.inv[kk][id] = (choices.inv[kk][id] || 0) + 1;
-        saveChoices();
-        renderOptions();
+      if (!kk || !id) return;
+      var itemName = id;
+      if (kk === 'crew' && id === '[Skill Increase]') {
+        if (!choices.skillPickSel) return;
+        itemName = 'Skill Increase -> ' + choices.skillPickSel;
       }
+      if (!choices.inv[kk]) choices.inv[kk] = {};
+      choices.inv[kk][itemName] = (choices.inv[kk][itemName] || 0) + 1;
+      saveChoices();
+      renderOptions();
       return;
     }
     var pk = e.target.closest('.skill-pick-btn');
     if (pk) {
+      choices.skillPickSel = pk.getAttribute('data-boost');
       choices.crew = '[Skill Increase]';
-      choices.skillBoost = pk.getAttribute('data-boost');
       expandedFor.crew = '[Skill Increase]';
       saveChoices();
       renderOptions();
@@ -912,7 +938,6 @@
     var k = steps[step].key;
     var wasOpen = expandedFor[k] === id;
     choices[k] = id;
-    if (k === 'crew' && id !== '[Skill Increase]') choices.skillBoost = null;
     if (btn.getAttribute('data-exp')) expandedFor[k] = wasOpen ? null : id;
     saveChoices();
     renderOptions();
@@ -1042,7 +1067,7 @@
   /* ===== export ===== */
   function renderExport() {
     document.getElementById('shipName').value = choices.shipName;
-    var skillBoostLabel = choices.crew === '[Skill Increase]' && choices.skillBoost ? '[Skill Increase] → ' + choices.skillBoost : null;
+    var isSIprimary = choices.crew === '[Skill Increase]';
     var html = '';
 
     function pickList(t, invArr, singleVal, opts) {
@@ -1050,10 +1075,12 @@
       if (invArr) {
         for (var n in invArr) if (invArr[n] > 0) names.push(n);
       }
+      if (singleVal && !invArr) names.push(singleVal);
+      else if (singleVal && invArr[singleVal] === undefined) names.unshift(singleVal);
       var chips = '';
       if (names.length) {
         for (var i = 0; i < names.length; i++) {
-          var c = invArr[names[i]];
+          var c = invArr ? (invArr[names[i]] || 0) : 1;
           chips += '<span class="exp-skill">' + esc(names[i]) + (c > 1 ? ' <b>×' + c + '</b>' : '') + '</span>';
         }
       } else if (opts) {
@@ -1066,8 +1093,8 @@
 
     html += '<div class="exp-pick exp-wide"><div class="opt-title">Hull Class</div><div>' +
       (choices.shipClass ? esc(choices.shipClass) : '<span class="exp-none">Not chosen</span>') + '</div></div>';
-    if (skillBoostLabel) pickList('Trait / Officer (Skill Increase)', null, null, skillBoostLabel);
-    pickList('Traits / Officers', choices.inv.crew, choices.crew);
+    if (isSIprimary && !Object.keys(choices.inv.crew).length) pickList('Traits / Officers', null, null, '[Skill Increase] (pick a skill, then +)');
+    else pickList('Traits / Officers', choices.inv.crew, isSIprimary ? null : choices.crew);
     pickList('Technologies', choices.inv.tech, choices.tech);
     pickList('Modules / Deployables', choices.inv.mod, choices.mod);
 
@@ -1116,16 +1143,22 @@
         skills[name].points = bumpNum(skills[name].points, preset.skills[name]);
       });
     }
-    if (choices.crew === '[Skill Increase]' && choices.skillBoost && skills[choices.skillBoost]) {
-      var boost = parseInt(skills[choices.skillBoost].points, 10);
-      if (isNaN(boost)) boost = 0;
-      skills[choices.skillBoost].points = String(Math.min(4, boost + 2));
+    var invCrew = choices.inv && choices.inv.crew;
+    if (invCrew) {
+      for (var siKey in invCrew) {
+        if (siKey.indexOf('Skill Increase -> ') !== 0 || !(invCrew[siKey] > 0)) continue;
+        var sName = siKey.slice('Skill Increase -> '.length);
+        if (!skills[sName]) continue;
+        var b = parseInt(skills[sName].points, 10);
+        if (isNaN(b)) b = 0;
+        skills[sName].points = String(Math.min(4, b + 2 * invCrew[siKey]));
+      }
     }
     s.skills = skills;
 
     s.crew = [];
     var crew = findCrew(choices.crew);
-    if (crew && !(choices.inv.crew && choices.inv.crew[crew.name])) {
+    if (crew) {
       s.crew.push({
         name: crew.name,
         text: crew.text_description || '',
@@ -1167,7 +1200,7 @@
       }
     }
     var soloTech = findTech(choices.tech);
-    if (soloTech && !choices.inv.tech[soloTech.name]) {
+    if (soloTech) {
       s.tech.push({
         name: soloTech.name,
         traits: soloTech.traits || '',
@@ -1206,7 +1239,7 @@
       }
     }
     var soloMod = findMod(choices.mod);
-    if (soloMod && !choices.inv.mod[soloMod.name]) {
+    if (soloMod) {
       s.mods.push({
         name: soloMod.name,
         req: soloMod.req || '',
