@@ -505,10 +505,10 @@ function buildFrigateSvg(svg, c) {
   svg.appendChild(g);
 }
 
-/* Fixed-orientation terraced shading overlay: concentric dark steps clipped to
-   the body circle, light from the top-left. Rendered as a separate layer that
-   never rotates with the rock, and sized to each body's radius so it scales
-   with the anomaly. */
+/* Fixed-orientation stylized shading overlay: nested filled discs stepping in
+   tone from light (top-left) to dark (bottom-right), clipped to the body
+   circle. A separate non-spinning layer, scaled to each body's radius so it
+   grows with the anomaly. */
 var shadeSeq = 0;
 function buildShadeNode(def) {
   var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'body-shade' });
@@ -520,18 +520,12 @@ function buildShadeNode(def) {
   defs.appendChild(clp);
   svg.appendChild(defs);
   var g = svgEl('g', { transform: 'translate(36 36)', 'clip-path': 'url(#tsc-' + sid + ')' });
-  var tiers = 6;
+  var ox = -6, oy = -7;                       // light comes from the top-left
+  var tiers = 5;
   for (var i = 0; i < tiers; i++) {
     var t = i / (tiers - 1);
-    var r = R * (1 - t * 0.6);
-    g.appendChild(svgEl('ellipse', {
-      cx: -8, cy: -9,
-      rx: r, ry: r * 0.9,
-      fill: 'none',
-      stroke: '#05070a',
-      'stroke-width': R * 0.1,
-      opacity: 0.1 + t * t * 0.4
-    }));
+    var r = R * (1.3 - t);
+    g.appendChild(svgEl('circle', { cx: ox, cy: oy, r: r, fill: '#05070a', opacity: 0.5 / tiers }));
   }
   svg.appendChild(g);
   return svg;
@@ -741,13 +735,13 @@ function frigateAngle(p) {
    their anchor. Wormholes are passable during movement and teleport between
    their own network. */
 var ANOMALIES = {
-  asteroid:    { label: 'Asteroid',  size: 1, bodyR: 30, spin: 0 },
-  moon:        { label: 'Moon',      size: 2, bodyR: 27, spin: 56 },
-  planet:      { label: 'Planet',    size: 3, bodyR: 31, spin: 184 },
-  'gas-giant': { label: 'Gas Giant', size: 4, bodyR: 33, spin: 120 },
-  'wormhole-a': { label: 'Wormhole A', size: 1, bodyR: 30, spin: 5, tint: '#ff5ecf' },
-  'wormhole-b': { label: 'Wormhole B', size: 1, bodyR: 30, spin: 5, tint: '#35d0e0' },
-  'black-hole': { label: 'Black Hole', size: 1, bodyR: 30, spin: 8 }
+  asteroid:     { label: 'Asteroid',   size: 1, bodyR: 30, spin: 0,  shade: true },
+  moon:         { label: 'Moon',       size: 2, bodyR: 27, spin: 56, shade: true },
+  planet:       { label: 'Planet',     size: 3, bodyR: 31, spin: 184, shade: true },
+  'gas-giant':  { label: 'Gas Giant',  size: 4, bodyR: 33, spin: 120, shade: true },
+  'wormhole-a': { label: 'Wormhole A', size: 1, bodyR: 30, spin: 5,  shade: false, tint: '#ff5ecf' },
+  'wormhole-b': { label: 'Wormhole B', size: 1, bodyR: 30, spin: 5,  shade: false, tint: '#35d0e0' },
+  'black-hole': { label: 'Black Hole', size: 1, bodyR: 30, spin: 8,  shade: false }
 };
 function anomalyKey(o) {
   if (!o) return null;
@@ -995,7 +989,7 @@ function buildPieceNode(p) {
     var def = ANOMALIES[key];
     sv.style.setProperty('--astro-start', (key === 'asteroid' ? Math.floor(seed * 360) : 0) + 'deg');
     sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 48))) + 's');
-    d.appendChild(buildShadeNode(def));
+    if (def.shade !== false) d.appendChild(buildShadeNode(def));
     var cornerWrap = el('div', 'astro-corners');
     var corners = [
       { cls: 'ac-tl', at: [0, 0], adj: [[0, -1], [-1, 0]] },
