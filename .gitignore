@@ -3,6 +3,10 @@ server/board-state.json
 server/board-state.json.lock
 server/board-state.json.tmp
 
+# Player-sheet exports — source of truth is client/frigate-sheet/presets/
+Z_Viable.json
+Z-Viable-sheet.json
+
 # Logs
 *.log
 nohup.out
