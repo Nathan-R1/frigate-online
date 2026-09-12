@@ -577,12 +577,12 @@ function buildPlanetSvg(svg, seed) {
   defs.appendChild(clp);
   svg.appendChild(defs);
   var ocean = svgEl('radialGradient', { id: 'plo-' + sid, cx: '35%', cy: '35%', r: '85%' });
-  ocean.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#3d86c4' }));
-  ocean.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#1d4f8c' }));
+  ocean.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#4aa3e0' }));
+  ocean.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#1e5fa8' }));
   defs.appendChild(ocean);
   var body = svgEl('g', { 'clip-path': 'url(#plc-' + sid + ')' });
   body.appendChild(svgEl('circle', { r: base, fill: 'url(#plo-' + sid + ')' }));
-  var contCols = ['#3e8a4a', '#4a9a56', '#357c42', '#5aa363'];
+  var contCols = ['#46a055', '#58b066', '#39904b', '#6cb96f'];
   var nCont = 6 + Math.floor(hashStr('nc' + seed) * 3);
   for (var c = 0; c < nCont; c++) {
     var ccx = (hashStr('ccx' + c + seed) - 0.5) * base * 1.4;
@@ -789,7 +789,7 @@ function wormholeNetIndex() {
 }
 
 /* ===== ship connections ===== */
-var connStyle = 'mech';   // 'mech' | 'wide' | 'glow' | 'station'
+var connStyle = 'station'; // 'mech' | 'wide' | 'glow' | 'station'
 function connPairs() {
   var pairs = [], i, j, a, b;
   for (i = 0; i < state.pieces.length; i++) {

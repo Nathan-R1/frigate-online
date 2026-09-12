@@ -182,6 +182,7 @@ body.resizing #playerFrame { pointer-events: none; }
 .piece { position: absolute; pointer-events: auto; cursor: grab; }
 .piece .module-svg {
   width: 100%; height: 100%; display: block; user-select: none; -webkit-user-select: none;
+  overflow: visible;
   transform-origin: 50% 50%;
   filter: drop-shadow(0 0 5px var(--pc)) drop-shadow(0 0 12px var(--pc));
 }
