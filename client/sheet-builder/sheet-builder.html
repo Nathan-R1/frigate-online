@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sheet Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../frigate-sheet/css/style.css">
+<link rel="stylesheet" href="../frigate-sheet/css/frigate.css">
+<style>
+  body { padding: 28px 18px 110px; }
+  .builder { max-width: 1200px; margin: 0 auto; }
+  .builder-panel { margin-top: 16px; padding: 22px 26px; position: relative; }
+  .builder-panel .eyebrow { margin-bottom: 14px; }
+  .builder-hidden { display: none !important; }
+
+  /* options grid */
+  .opt-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px; margin-top: 4px;
+  }
+  .opt {
+    position: relative; text-align: left; cursor: pointer;
+    background: var(--panel-alt); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px;
+    color: var(--ink); font-family: var(--body); font-size: 13.5px; line-height: 1.45;
+    display: flex; flex-direction: column; gap: 8px; min-height: 120px;
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  .opt:hover { border-color: var(--cyan); }
+  .opt.sel {
+    border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 0 18px rgba(232,169,74,.25);
+  }
+  .opt.sel::after {
+    content: '✓'; position: absolute; top: 8px; right: 10px;
+    color: var(--amber); font-family: var(--mono); font-weight: 700; font-size: 16px;
+  }
+  .opt-title {
+    font-family: var(--disp); font-size: 14px; letter-spacing: .04em;
+    color: var(--ink); text-transform: uppercase;
+  }
+  .opt-meta {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  }
+  .opt-meta span { padding: 2px 7px; border: 1px solid var(--line); color: var(--ink-mid); border-radius: 4px; }
+  .opt-meta span.t-cyan { color: var(--cyan); border-color: var(--cyan-dim); }
+  .opt-meta span.t-amber { color: var(--amber); border-color: var(--brown-dim); }
+  .opt-meta span.t-red { color: var(--red); border-color: var(--red-dim); }
+  .opt-body {
+    color: var(--ink-mid); font-size: 12.5px; white-space: pre-line;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* progress steps */
+  .psteps { display: flex; gap: 10px; align-items: center; margin: 22px 0 6px; flex-wrap: wrap; }
+  .pstep {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-dim); border: 1px solid var(--line); border-radius: 20px; padding: 4px 12px;
+  }
+  .pstep.done { color: var(--cyan); border-color: var(--cyan-dim); }
+  .pstep.cur { color: var(--ink); border-color: var(--cyan); background: rgba(79,216,201,.08); }
+
+  /* window nav */
+  .win-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 26px; gap: 12px; }
+  .b-btn {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    background: none; border: 1px solid var(--line-bright); color: var(--ink-mid);
+    padding: 9px 18px; border-radius: 6px; cursor: pointer;
+    transition: border-color .12s ease, color .12s ease;
+  }
+  .b-btn:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
+  .b-btn:disabled { opacity: .35; cursor: default; }
+  .b-btn.primary {
+    background: rgba(79,216,201,.08); border-color: var(--cyan); color: var(--cyan);
+  }
+  .b-btn.primary:hover:not(:disabled) { background: rgba(79,216,201,.15); }
+
+  /* landing */
+  .land-btns { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+  .land-btns .b-btn { padding: 14px 22px; font-size: 12px; }
+  .hint-text { color: var(--ink-dim); font-size: 12px; margin-top: 18px; line-height: 1.55; }
+
+  /* export screen */
+  .exp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+  .exp-pick {
+    background: var(--panel-alt); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  }
+  .exp-pick .opt-title { font-size: 12px; margin-bottom: 4px; }
+  .exp-pick .exp-none { color: var(--ink-dim); font-style: italic; font-size: 12.5px; }
+  .exp-field { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .exp-field label { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mid); text-transform: uppercase; }
+  .exp-field input {
+    background: var(--panel-alt); border: 1px solid var(--line); color: var(--ink);
+    font-size: 13px; font-family: var(--body); padding: 8px 12px; border-radius: 6px; min-width: 240px;
+  }
+  .exp-field input:focus { outline: none; border-color: var(--cyan); }
+</style>
+</head>
+<body>
+<nav class="menu-bar">
+  <div class="menu-brand">
+    <div class="ship-class-label">Sheet Builder</div>
+  </div>
+  <div class="menu-actions">
+    <button type="button" class="menu-toggle" onclick="window.close()" title="Close the sheet builder"><span class="menu-ico" aria-hidden="true">✕</span><span class="menu-label">Close</span></button>
+  </div>
+</nav>
+
+<main class="builder">
+
+  <!-- LANDING -->
+  <section class="panel builder-panel" id="landing">
+    <div class="bl"></div><div class="br"></div>
+    <div class="eyebrow"><span class="eb-text">Build a Character</span></div>
+    <p style="color:var(--ink-mid);font-size:13.5px;line-height:1.6;margin:8px 0 4px;">
+      Run through a few windows to assemble your frigate: pick a hull class, a trait or officer,
+      a starting technology and a starting module. Choices are remembered in this browser and can
+      be exported to a full frigate sheet JSON.
+    </p>
+    <div class="land-btns">
+      <button type="button" class="b-btn primary" onclick="startNew()">Create new character</button>
+      <button type="button" class="b-btn" onclick="loadExisting()">Load existing character</button>
+      <button type="button" class="b-btn" id="resumeBtn" onclick="resumeRun()" style="display:none;">Continue run in progress</button>
+    </div>
+    <div class="hint-text" id="landingHint">No saved choices yet.</div>
+  </section>
+
+  <!-- PROGRESS -->
+  <div class="psteps" id="psteps"></div>
+
+  <!-- CHOICE WINDOW -->
+  <section class="panel builder-panel builder-hidden" id="win">
+    <div class="bl"></div><div class="br"></div>
+    <div class="eyebrow"><span class="eb-text" id="winTitle">…</span></div>
+    <div class="opt-grid" id="winOptions"></div>
+    <div class="win-nav">
+      <button type="button" class="b-btn" id="backBtn">← Back</button>
+      <button type="button" class="b-btn primary" id="continueBtn">Continue →</button>
+    </div>
+  </section>
+
+  <!-- EXPORT WINDOW -->
+  <section class="panel builder-panel builder-hidden" id="exp">
+    <div class="bl"></div><div class="br"></div>
+    <div class="eyebrow"><span class="eb-text">Review &amp; Export</span></div>
+    <div class="exp-grid" id="expSummary"></div>
+    <div class="exp-field">
+      <label for="shipName">Ship Name</label>
+      <input type="text" id="shipName" maxlength="40" placeholder="e.g. The Inevitable">
+    </div>
+    <div class="win-nav">
+      <button type="button" class="b-btn" id="expBackBtn">← Back</button>
+      <button type="button" class="b-btn primary" onclick="exportSheet()">⇩ Export</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="../frigate-sheet/presets/crew-presets.js"></script>
+<script src="../frigate-sheet/presets/tech-presets.js"></script>
+<script src="../frigate-sheet/presets/mod-presets.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var BUILDER_KEY = 'frigateBuilderChoices';
+
+  /* class presets mirror frigate.html CLASS_PRESETS (stat/skill bonuses only) */
+  var CLASS_PRESETS = {
+    'Support Class': { stats: { hull: 2, shield: 2, storage: 2 }, techName: 'Repulsor Unit', modName: 'Repulsor Unit' },
+    'Jump Class': { stats: { speed: 2 }, skills: { Sensors: 1 }, techName: 'Phantom' },
+    'Discovery Class': { stats: { storage: 2 }, skills: { Logistics: 2, Science: 1 }, techName: 'Experimental Reconnaissance' },
+    'Striker Class': { stats: { storage: 2 }, skills: { Leadership: 2 }, techName: 'Decomp Strikes' },
+    'Bulwark Class': { stats: { hull: 4 }, crewTraits: ['Citadel'] }
+  };
+
+  /* matches the values a fresh frigate.html sheet starts with */
+  var SHEET_DEFAULTS = {
+    dcHex: '6',
+    stats: {
+      hullCur: '5', hullBase: '5', shieldCur: '6', shieldBase: '6',
+      speedCur: '2', speedBase: '2', storageBase: '0',
+      sensorRangeBase: '0', drawPlayBase: '1', drawDrawBase: '4'
+    },
+    skills: {
+      Cyber: '1', Diplomacy: '0', Engineering: '3', Leadership: '0',
+      Logistics: '2', Navigation: '3', Piloting: '3', Sensors: '2', Science: '-1'
+    }
+  };
+
+  var SKILL_NAMES = ['Cyber', 'Diplomacy', 'Engineering', 'Leadership', 'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science'];
+
+  var steps = [
+    { key: 'shipClass', label: 'Hull Class' },
+    { key: 'crew', label: 'Trait / Officer' },
+    { key: 'tech', label: 'Starting Technology' },
+    { key: 'mod', label: 'Starting Module' }
+  ];
+
+  var choices = { shipClass: null, crew: null, tech: null, mod: null, shipName: '' };
+  var step = 0;
+  var screen = 'landing'; // landing | win | exp
+
+  /* ===== persistence ===== */
+  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, shipName: '' }; }
+  function loadChoices() {
+    try {
+      var raw = localStorage.getItem(BUILDER_KEY);
+      var s = raw ? JSON.parse(raw) : {};
+      var c = emptyChoices();
+      if (s && typeof s === 'object') {
+        c.shipClass = s.shipClass || null;
+        c.crew = s.crew || null;
+        c.tech = s.tech || null;
+        c.mod = s.mod || null;
+        c.shipName = s.shipName || '';
+      }
+      return c;
+    } catch (e) { return emptyChoices(); }
+  }
+  function saveChoices() {
+    try { localStorage.setItem(BUILDER_KEY, JSON.stringify(choices)); } catch (e) {}
+  }
+  function choicesHaveAny() {
+    return !!(choices.shipClass || choices.crew || choices.tech || choices.mod || choices.shipName);
+  }
+  function firstUnanswered() {
+    for (var i = 0; i < steps.length; i++) {
+      if (!choices[steps[i].key]) return i;
+    }
+    return steps.length; // all answered -> export
+  }
+
+  /* ===== find helpers ===== */
+  function findCrew(name) {
+    for (var i = 0; i < CREW_PRESETS.length; i++) if (CREW_PRESETS[i].name === name) return CREW_PRESETS[i];
+    return null;
+  }
+  function findTech(name) {
+    for (var i = 0; i < TECH_PRESETS.length; i++) if (TECH_PRESETS[i].name === name) return TECH_PRESETS[i];
+    return null;
+  }
+  function findMod(name) {
+    for (var i = 0; i < MOD_PRESETS.length; i++) if (MOD_PRESETS[i].name === name) return MOD_PRESETS[i];
+    return null;
+  }
+  function stripTags(s) {
+    return String(s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  /* ===== screens ===== */
+  var landing = document.getElementById('landing');
+  var win = document.getElementById('win');
+  var exp = document.getElementById('exp');
+
+  function show(s) {
+    screen = s;
+    landing.classList.toggle('builder-hidden', s !== 'landing');
+    win.classList.toggle('builder-hidden', s !== 'win');
+    exp.classList.toggle('builder-hidden', s !== 'exp');
+    if (s === 'landing') refreshLanding();
+    if (s === 'exp') renderExport();
+    window.scrollTo(0, 0);
+  }
+
+  function refreshLanding() {
+    var hint = document.getElementById('landingHint');
+    var resumeBtn = document.getElementById('resumeBtn');
+    if (choicesHaveAny()) {
+      hint.textContent = 'Saved choices are ready to continue — resume, or start fresh.';
+      resumeBtn.style.display = '';
+    } else {
+      hint.textContent = 'No saved choices yet.';
+      resumeBtn.style.display = 'none';
+    }
+  }
+
+  /* ===== option cards ===== */
+  function metaTags(list) {
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      html += '<span class="' + (list[i].cls || '') + '">' + list[i].text + '</span>';
+    }
+    return html;
+  }
+  function optionHtml(key, id, title, body, meta) {
+    var sel = choices[key] === id;
+    return '<button type="button" class="opt' + (sel ? ' sel' : '') + '" data-id="' +
+      id.replace(/"/g, '&quot;') + '">' +
+      '<span class="opt-title">' + esc(title) + '</span>' +
+      (meta && meta.length ? '<span class="opt-meta">' + metaTags(meta) + '</span>' : '') +
+      '<span class="opt-body">' + body + '</span></button>';
+  }
+
+  function classOptions() {
+    var out = [];
+    var keys = Object.keys(CLASS_PRESETS);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i], p = CLASS_PRESETS[k];
+      var parts = [];
+      if (p.stats) {
+        Object.keys(p.stats).forEach(function (s) { parts.push('+' + p.stats[s] + ' ' + cap(s)); });
+      }
+      if (p.skills) {
+        Object.keys(p.skills).forEach(function (s) { parts.push('+' + p.skills[s] + ' ' + s); });
+      }
+      var meta = [];
+      if (p.techName) meta.push({ text: 'Tech: ' + p.techName, cls: 't-cyan' });
+      if (p.modName) meta.push({ text: 'Mod: ' + p.modName, cls: 't-cyan' });
+      if (p.crewTraits && p.crewTraits.length) meta.push({ text: 'Trait: ' + p.crewTraits.join(', '), cls: 't-amber' });
+      out.push(optionHtml('shipClass', k, k, parts.join(' · ') || 'No stat bonuses.', meta));
+    }
+    return out.join('');
+  }
+
+  function crewOptions() {
+    var out = [];
+    for (var i = 0; i < CREW_PRESETS.length; i++) {
+      var c = CREW_PRESETS[i];
+      var meta = [{ text: cap(c.type), cls: 't-amber' }];
+      if (c.combat_only) meta.push({ text: 'Combat only', cls: 't-red' });
+      out.push(optionHtml('crew', c.name, c.name, escapeHtml(stripTags(c.text_description)), meta));
+    }
+    return out.join('');
+  }
+
+  function techOptions() {
+    var out = [];
+    for (var i = 0; i < TECH_PRESETS.length; i++) {
+      var t = TECH_PRESETS[i];
+      var lines = [];
+      if (t.traits) lines.push('Traits: ' + t.traits);
+      if (t.onbuild) lines.push('On Play: ' + t.onbuild);
+      if (t.passive) lines.push('Passive: ' + t.passive);
+      if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
+      var meta = [{ text: cap(t.tt), cls: 't-cyan' }];
+      if (t.storage && t.storage !== '0') meta.push({ text: 'Storage ' + t.storage, cls: '' });
+      if (t.charges) meta.push({ text: t.charges + ' charges', cls: '' });
+      out.push(optionHtml('tech', t.name, t.name, escapeHtml(lines.join('\n') || 'No text.'), meta));
+    }
+    return out.join('');
+  }
+
+  function modOptions() {
+    var out = [];
+    for (var i = 0; i < MOD_PRESETS.length; i++) {
+      var m = MOD_PRESETS[i];
+      var lines = [];
+      if (m.req) lines.push('Requires: ' + m.req);
+      if (m.onbuild) lines.push('On Play: ' + m.onbuild);
+      if (m.passive) lines.push('Passive: ' + m.passive);
+      if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
+      var meta = [{ text: cap(m.tt), cls: 't-cyan' }, { text: m.type === 'deployable' ? 'Deployable' : 'Module', cls: 't-amber' }];
+      if (m.hull) meta.push({ text: 'Hull ' + m.hull, cls: '' });
+      out.push(optionHtml('mod', m.name, m.name, escapeHtml(lines.join('\n') || 'No text.'), meta));
+    }
+    return out.join('');
+  }
+
+  function cap(s) {
+    return String(s).charAt(0).toUpperCase() + String(s).slice(1);
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function renderOptions() {
+    document.getElementById('winTitle').textContent = steps[step].label;
+    var html = '';
+    if (steps[step].key === 'shipClass') html = classOptions();
+    else if (steps[step].key === 'crew') html = crewOptions();
+    else if (steps[step].key === 'tech') html = techOptions();
+    else html = modOptions();
+    document.getElementById('winOptions').innerHTML = html;
+    document.getElementById('continueBtn').disabled = !choices[steps[step].key];
+    updateProgress();
+  }
+  function renderProgressDots() {
+    var el = document.getElementById('psteps');
+    var html = '';
+    for (var i = 0; i < steps.length; i++) {
+      var answered = !!choices[steps[i].key];
+      var cls = i === step ? 'cur' : (answered ? 'done' : '');
+      html += '<span class="pstep ' + cls + '">' + (i + 1) + '. ' + esc(steps[i].label) + '</span>';
+    }
+    html += '<span class="pstep ' + (screen === 'exp' ? 'cur' : (firstUnanswered() === steps.length ? 'done' : '')) + '">' + (steps.length + 1) + '. Export</span>';
+    el.innerHTML = html;
+  }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function updateProgress() {
+    var el = document.getElementById('psteps');
+    el.classList.toggle('builder-hidden', screen !== 'win' && screen !== 'exp');
+    renderProgressDots();
+  }
+
+  /* ===== navigation ===== */
+  function goToWin(i) {
+    step = i;
+    show('win');
+    renderOptions();
+    renderProgressDots();
+  }
+  function onContinue() {
+    if (step < steps.length - 1) { goToWin(step + 1); }
+    else { step = steps.length; show('exp'); renderProgressDots(); }
+  }
+  function onBack() {
+    if (step > 0) { goToWin(step - 1); }
+    else if (screen === 'exp') { goToWin(steps.length - 1); }
+    else { show('landing'); }
+  }
+
+  document.getElementById('winOptions').addEventListener('click', function (e) {
+    var btn = e.target.closest('.opt');
+    if (!btn) return;
+    var id = btn.getAttribute('data-id');
+    choices[steps[step].key] = id;
+    saveChoices();
+    renderOptions();
+  });
+
+  document.getElementById('continueBtn').addEventListener('click', onContinue);
+  document.getElementById('backBtn').addEventListener('click', onBack);
+  document.getElementById('expBackBtn').addEventListener('click', onBack);
+
+  document.getElementById('shipName').addEventListener('input', function () {
+    choices.shipName = this.value;
+    saveChoices();
+  });
+
+  /* ===== landing actions ===== */
+  function startNew() {
+    choices = emptyChoices();
+    saveChoices();
+    step = 0;
+    goToWin(0);
+  }
+  function resumeRun() {
+    step = firstUnanswered();
+    if (step >= steps.length) { step = steps.length - 1; }
+    goToWin(step);
+  }
+  function loadExisting() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = function () {
+      var file = input.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          var json = JSON.parse(e.target.result);
+          applyLoadedSheet(json);
+          startNew(false);
+        } catch (err) {
+          alert('Load failed: invalid JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+  function applyLoadedSheet(json) {
+    var c = emptyChoices();
+    c.shipName = (json && json.shipName) || '';
+    if (json && json.shipClass && CLASS_PRESETS[json.shipClass]) c.shipClass = json.shipClass;
+    if (json && json.crew && json.crew[0] && findCrew(json.crew[0].name)) c.crew = json.crew[0].name;
+    if (json && json.tech && json.tech[0] && findTech(json.tech[0].name)) c.tech = json.tech[0].name;
+    if (json && json.mods && json.mods[0] && findMod(json.mods[0].name)) c.mod = json.mods[0].name;
+    choices = c;
+    saveChoices();
+  }
+
+  /* ===== export ===== */
+  function renderExport() {
+    document.getElementById('shipName').value = choices.shipName;
+    var items = [
+      { t: 'Hull Class', v: choices.shipClass, e: 'Not chosen' },
+      { t: 'Trait / Officer', v: choices.crew, e: 'Not chosen' },
+      { t: 'Starting Technology', v: choices.tech, e: 'Not chosen' },
+      { t: 'Starting Module', v: choices.mod, e: 'Not chosen' }
+    ];
+    var html = '';
+    for (var i = 0; i < items.length; i++) {
+      html += '<div class="exp-pick"><div class="opt-title">' + esc(items[i].t) + '</div><div>' +
+        (items[i].v ? esc(items[i].v) : '<span class="exp-none">' + esc(items[i].e) + '</span>') +
+        '</div></div>';
+    }
+    document.getElementById('expSummary').innerHTML = html;
+  }
+
+  function bumpNum(cur, delta) {
+    var n = parseInt(cur, 10);
+    if (isNaN(n)) n = 0;
+    return String(n + delta);
+  }
+
+  function buildSheet() {
+    var s = JSON.parse(JSON.stringify(SHEET_DEFAULTS));
+    s.shipName = choices.shipName || '';
+    s.shipClass = choices.shipClass || 'Unclassified';
+    var preset = choices.shipClass ? CLASS_PRESETS[choices.shipClass] : null;
+    if (preset && preset.stats) {
+      var st = preset.stats || {};
+      if (st.hull) { s.stats.hullCur = bumpNum(s.stats.hullCur, st.hull); s.stats.hullBase = bumpNum(s.stats.hullBase, st.hull); }
+      if (st.shield) { s.stats.shieldCur = bumpNum(s.stats.shieldCur, st.shield); s.stats.shieldBase = bumpNum(s.stats.shieldBase, st.shield); }
+      if (st.speed) { s.stats.speedCur = bumpNum(s.stats.speedCur, st.speed); s.stats.speedBase = bumpNum(s.stats.speedBase, st.speed); }
+      if (st.storage) { s.stats.storageBase = bumpNum(s.stats.storageBase, st.storage); }
+    }
+    if (preset && preset.skills) {
+      Object.keys(preset.skills).forEach(function (name) {
+        s.skills[name] = bumpNum(s.skills[name], preset.skills[name]);
+      });
+    }
+    var skills = {};
+    for (var si = 0; si < SKILL_NAMES.length; si++) {
+      skills[SKILL_NAMES[si]] = { points: s.skills[SKILL_NAMES[si]], penalty: '' };
+    }
+    s.skills = skills;
+
+    s.crew = [];
+    var crew = findCrew(choices.crew);
+    if (crew) {
+      s.crew.push({
+        name: crew.name,
+        text: crew.text_description || '',
+        combat: crew.combat_only === true,
+        type: crew.type
+      });
+    }
+
+    s.tech = [];
+    var tech = findTech(choices.tech);
+    if (tech) {
+      s.tech.push({
+        name: tech.name,
+        traits: tech.traits || '',
+        onbuild: tech.onbuild || '',
+        passive: tech.passive || '',
+        onactivate: tech.onactivate || '',
+        techType: tech.tt || 'offense',
+        storage: tech.storage || '0',
+        hull: '',
+        charges: tech.charges || '',
+        deploy: deployKey(tech.deploy),
+        state: 'deck'
+      });
+    }
+
+    s.mods = [];
+    var mod = findMod(choices.mod);
+    if (mod) {
+      s.mods.push({
+        name: mod.name,
+        req: mod.req || '',
+        hull: mod.hull || '',
+        duration: mod.duration || '',
+        speed: mod.speed || '',
+        charges: mod.charges || '',
+        onbuild: mod.onbuild || '',
+        passive: mod.passive || '',
+        onactivate: mod.onactivate || '',
+        type: mod.type || 'module',
+        tt: mod.tt || 'offense',
+        shape: '',
+        exhaust: false
+      });
+    }
+    return s;
+  }
+
+  function deployKey(d) {
+    if (d === 'module') return 'module';
+    if (d === true || d === 'true' || d === 1 || d === '1') return 'deployable';
+    if (d === 'deployable' || d === 2 || d === '2') return 'deployable';
+    return 'normal';
+  }
+
+  function exportSheet() {
+    var data = buildSheet();
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var name = (data.shipName || 'frigate-sheet').replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '') || 'frigate-sheet';
+    a.href = url;
+    a.download = name + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /* expose export for the inline onclick */
+  window.exportSheet = exportSheet;
+  window.buildSheet = buildSheet;
+
+  /* ===== init ===== */
+  choices = loadChoices();
+  document.getElementById('shipName').value = choices.shipName;
+  window.startNew = function () { startNew(); };
+  window.loadExisting = function () { loadExisting(); };
+  window.resumeRun = function () { resumeRun(); };
+  show('landing');
+  renderProgressDots();
+})();
+</script>
+</body>
+</html>
