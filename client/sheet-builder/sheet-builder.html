@@ -44,6 +44,12 @@
   .opt-title-row {
     display: flex; align-items: center; gap: 8px;
   }
+  .opt-count {
+    margin-left: auto; flex: none;
+    padding: 2px 7px; border: 1px solid var(--brown-dim); border-radius: 4px;
+    background: rgba(232,169,74,.08); color: var(--amber);
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em; line-height: 1;
+  }
   .opt-title-row .ticon { width: 15px; height: 15px; flex: none; }
   .opt-meta {
     display: flex; flex-wrap: wrap; gap: 6px;
@@ -148,7 +154,14 @@
   .draw-close:hover { color: var(--amber); }
   .deck-count { color: var(--amber); font-family: var(--mono); font-size: 11px; }
   /* expandable option cards */
-  .opt-wrap { display: flex; flex-direction: column; }
+  .opt-wrap { display: flex; flex-direction: column; position: relative; }
+  .tick-x {
+    position: absolute; right: 8px; bottom: 8px; z-index: 2;
+    width: 20px; height: 20px; padding: 0; border-radius: 4px; cursor: pointer;
+    background: rgba(176,58,58,.12); border: 1px solid var(--red); color: var(--red);
+    font-family: var(--mono); font-size: 11px; line-height: 1;
+  }
+  .tick-x:hover { background: var(--red); color: var(--ink-strong); }
   .opt-wrap .opt { flex: 1; }
   .opt-chev {
     margin-top: auto; align-self: flex-end; line-height: 1;
@@ -196,7 +209,7 @@
   .pstep.cur { color: var(--ink); border-color: var(--cyan); background: rgba(79,216,201,.08); }
 
   /* window nav */
-  .win-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 26px; gap: 12px; }
+  .win-nav { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 18px; gap: 12px; }
   .b-btn {
     font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
     background: none; border: 1px solid var(--line-bright); color: var(--ink-mid);
@@ -209,6 +222,11 @@
     background: rgba(79,216,201,.08); border-color: var(--cyan); color: var(--cyan);
   }
   .b-btn.primary:hover:not(:disabled) { background: rgba(79,216,201,.15); }
+  .b-btn.primary.ready {
+    background: rgba(232,169,74,.12); border-color: var(--amber); color: var(--amber);
+    box-shadow: 0 0 0 1px var(--amber), 0 0 16px rgba(232,169,74,.3);
+  }
+  .b-btn.primary.ready:hover:not(:disabled) { background: var(--amber); color: var(--ink-strong); }
 
   /* landing */
   .land-btns { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
@@ -339,27 +357,27 @@
   <section class="panel builder-panel builder-hidden" id="win">
     <div class="bl"></div><div class="br"></div>
     <div class="eyebrow"><span class="eb-text" id="winTitle">…</span></div>
-    <div class="inv-bar" id="invBar"></div>
-    <div class="filter-bar" id="filterBar"></div>
-    <div class="opt-grid" id="winOptions"></div>
     <div class="win-nav">
       <button type="button" class="b-btn" id="backBtn">← Back</button>
       <button type="button" class="b-btn primary" id="continueBtn">Continue →</button>
     </div>
+    <div class="inv-bar" id="invBar"></div>
+    <div class="filter-bar" id="filterBar"></div>
+    <div class="opt-grid" id="winOptions"></div>
   </section>
 
   <!-- EXPORT WINDOW -->
   <section class="panel builder-panel builder-hidden" id="exp">
     <div class="bl"></div><div class="br"></div>
     <div class="eyebrow"><span class="eb-text">Review &amp; Export</span></div>
+    <div class="win-nav">
+      <button type="button" class="b-btn" id="expBackBtn">← Back</button>
+      <button type="button" class="b-btn primary ready" onclick="exportSheet()">⇩ Export</button>
+    </div>
     <div class="exp-grid" id="expSummary"></div>
     <div class="exp-field">
       <label for="shipName">Ship Name</label>
       <input type="text" id="shipName" maxlength="40" placeholder="e.g. The Inevitable">
-    </div>
-    <div class="win-nav">
-      <button type="button" class="b-btn" id="expBackBtn">← Back</button>
-      <button type="button" class="b-btn primary" onclick="exportSheet()">⇩ Export</button>
     </div>
   </section>
 
@@ -433,8 +451,9 @@
     }
   };
 
-  /* points spent drawing cards into the deck; core-option grants are free */
-  var DECK_POINTS = 10;
+  /* the budget, applied separately to each side: this many hull ticks AND this many drawn cards.
+     core-option grants are free. */
+  var DECK_POINTS = 2;
 
   var SKILL_NAMES = ['Cyber', 'Diplomacy', 'Engineering', 'Leadership', 'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science'];
 
@@ -466,7 +485,7 @@
     return out;
   }
 
-  var choices = { shipClass: null, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() };
+  var choices = { hulls: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() };
   var step = 0;
   var coreSection = 0; // which Core Options section is expanded; the rest show as headers
   var drawOffer = null; // the 3 tech names currently on offer, or null when no draw is open
@@ -483,20 +502,30 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) o[CORE_SECTIONS[i].key] = null;
     return o;
   }
-  function emptyChoices() { return { shipClass: null, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() }; }
+  function emptyChoices() { return { hulls: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
       var s = raw ? JSON.parse(raw) : {};
       var c = emptyChoices();
       if (s && typeof s === 'object') {
-        c.shipClass = (s.shipClass && CLASS_PRESETS[s.shipClass]) ? s.shipClass : null;
+        if (s.hulls && typeof s.hulls === 'object') {
+          Object.keys(s.hulls).forEach(function (hn) {
+            var n = parseInt(s.hulls[hn], 10);
+            if (n > 0 && CLASS_PRESETS[hn]) c.hulls[hn] = n;
+          });
+        } else if (s.shipClass && CLASS_PRESETS[s.shipClass]) {
+          c.hulls[s.shipClass] = 1; /* pre-multi-hull save */
+        }
+        var prevHulls = choices.hulls;
+        choices.hulls = c.hulls;
         if (s.core && typeof s.core === 'object') {
           for (var ci = 0; ci < CORE_SECTIONS.length; ci++) {
             var sk = CORE_SECTIONS[ci].key;
-            c.core[sk] = validCorePick(c.shipClass, sk, s.core[sk]);
+            c.core[sk] = validCorePick(sk, s.core[sk]);
           }
         }
+        choices.hulls = prevHulls;
         c.tech = s.tech || null;
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
@@ -535,10 +564,37 @@
     try { localStorage.setItem(BUILDER_KEY, JSON.stringify(choices)); } catch (e) {}
   }
   function choicesHaveAny() {
-    return !!(choices.shipClass || corePick(CORE_SECTIONS[0].key) || choices.tech || choices.mod || choices.shipName);
+    return !!(hullTicks() || corePick(CORE_SECTIONS[0].key) || choices.tech || choices.mod || choices.shipName);
   }
+  /* hulls are ticked, not picked: a name -> tick count map */
+  function hullNames() {
+    var out = [];
+    var keys = Object.keys(CLASS_PRESETS);
+    for (var i = 0; i < keys.length; i++) if ((choices.hulls[keys[i]] || 0) > 0) out.push(keys[i]);
+    return out;
+  }
+  function hullLabel() {
+    var names = hullNames();
+    var out = [];
+    for (var i = 0; i < names.length; i++) {
+      var c = choices.hulls[names[i]];
+      out.push(c > 1 ? names[i] + ' ×' + c : names[i]);
+    }
+    return out.join(', ');
+  }
+  function hullTicks() {
+    var total = 0;
+    for (var n in choices.hulls) if (choices.hulls[n] > 0) total += choices.hulls[n];
+    return total;
+  }
+  function countFor(key, id) {
+    if (key === 'shipClass') return (choices.hulls && choices.hulls[id]) || 0;
+    var inv = choices.inv && choices.inv[key];
+    return (inv && inv[id]) || 0;
+  }
+
   /* steps that hold one pick rather than a counted inventory; core keys are 'core:<section>' */
-  function isSingle(k) { return k === 'shipClass' || k.indexOf('core') === 0; }
+  function isSingle(k) { return k.indexOf('core') === 0; }
   function coreSecKey(k) { return k.indexOf('core:') === 0 ? k.slice(5) : null; }
   function corePick(secKey) { return (choices.core && choices.core[secKey]) || null; }
   function pickOf(k) {
@@ -554,24 +610,33 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) if (CORE_SECTIONS[i].key === secKey) return CORE_SECTIONS[i];
     return null;
   }
-  /* options in a section are its own, plus the class-given box when the hull is offered one */
-  function sectionOptions(shipClass, secKey) {
+  /* options in a section are its own, plus one box per class option any ticked hull unlocks.
+     two hulls granting the same box (Jump and Tank both give Heavyweight) still show it once. */
+  function sectionOptions(secKey) {
     var sec = findSection(secKey);
     if (!sec) return [];
     var out = (sec.options || []).slice();
-    var co = (sec.classOptions && shipClass) ? sec.classOptions[shipClass] : null;
-    if (co) out.push({ name: co.name, desc: co.desc, grants: co.grants, isClass: true, fromClass: shipClass });
+    if (!sec.classOptions) return out;
+    var seen = {};
+    var hulls = hullNames();
+    for (var i = 0; i < hulls.length; i++) {
+      var co = sec.classOptions[hulls[i]];
+      if (!co) continue;
+      if (seen[co.name]) { seen[co.name].fromClass.push(hulls[i]); continue; }
+      seen[co.name] = { name: co.name, desc: co.desc, grants: co.grants, isClass: true, fromClass: [hulls[i]] };
+      out.push(seen[co.name]);
+    }
     return out;
   }
   function findSectionOption(secKey, name) {
-    var list = sectionOptions(choices.shipClass, secKey);
+    var list = sectionOptions(secKey);
     for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
     return null;
   }
-  /* a stored pick survives only while it is still offered (class swaps change the third box) */
-  function validCorePick(shipClass, secKey, name) {
+  /* a stored pick survives only while it is still offered (changing hulls changes the class boxes) */
+  function validCorePick(secKey, name) {
     if (!name) return null;
-    var list = sectionOptions(shipClass, secKey);
+    var list = sectionOptions(secKey);
     for (var i = 0; i < list.length; i++) if (list[i].name === name) return name;
     return null;
   }
@@ -592,7 +657,12 @@
     }
     return total;
   }
-  function deckPointsLeft() { return DECK_POINTS - drawnCount(); }
+  function hullPointsLeft() {
+    return choices.disableLimits ? DECK_POINTS : DECK_POINTS - hullTicks();
+  }
+  function deckPointsLeft() {
+    return choices.disableLimits ? DECK_POINTS : DECK_POINTS - drawnCount();
+  }
   function rollDraw() {
     var pool = TECH_PRESETS.slice();
     var out = [];
@@ -618,7 +688,7 @@
   function revalidateCore() {
     for (var i = 0; i < CORE_SECTIONS.length; i++) {
       var sk = CORE_SECTIONS[i].key;
-      choices.core[sk] = validCorePick(choices.shipClass, sk, choices.core[sk]);
+      choices.core[sk] = validCorePick(sk, choices.core[sk]);
     }
   }
   function coreComplete() {
@@ -630,6 +700,7 @@
     return CORE_SECTIONS.length - 1;
   }
   function hasPick(k) {
+    if (k === 'shipClass') return hullTicks() > 0;
     if (k === 'core') return coreComplete();
     if (k === 'tech') { for (var dn in deckCounts()) return true; return false; }
     if (isSingle(k)) return !!pickOf(k);
@@ -709,19 +780,20 @@
     html += '</div>';
     return html;
   }
-  function optionHtml(key, id, title, body, meta, expand, leadIcon, extraCls) {
-    var sel = isSingle(key) ? pickOf(key) === id : (!!(choices.inv && choices.inv[key] && choices.inv[key][id] > 0));
+  function optionHtml(key, id, title, body, meta, expand, leadIcon, extraCls, titleTag, afterCard) {
+    var sel = isSingle(key) ? pickOf(key) === id : countFor(key, id) > 0;
     var isExp = !!(expand && expand.length);
     var open = isExp && expandedFor[key] === id;
     return '<div class="opt-wrap">' +
       '<button type="button" class="opt' + (body ? '' : ' compact') + (sel ? ' sel' : '') + (open ? ' open' : '') + (extraCls ? ' ' + extraCls : '') + '" data-id="' +
       id.replace(/"/g, '&quot;') + '" data-okey="' + esc(key) + '"' + (isExp ? ' data-exp="1"' : '') + '>' +
-      '<span class="opt-title-row">' + (leadIcon || '') + '<span class="opt-title">' + esc(title) + '</span></span>' +
+      '<span class="opt-title-row">' + (leadIcon || '') + '<span class="opt-title">' + esc(title) + '</span>' + (titleTag || '') + '</span>' +
       (meta && meta.length ? '<span class="opt-meta">' + metaTags(meta) + '</span>' : '') +
       (body ? '<span class="opt-body">' + body + '</span>' : '') +
       (isExp ? '<span class="opt-chev">' + (open ? '▾' : '▸') + '</span>' : '') +
       '</button>' +
       (open ? expandPanelHtml(key, expand, id) : '') +
+      (afterCard || '') +
       '</div>';
   }
 
@@ -765,7 +837,10 @@
     var keys = Object.keys(CLASS_PRESETS);
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i], p = CLASS_PRESETS[k];
-      out.push(optionHtml('shipClass', k, k, escapeHtml(p.desc || '')));
+      var ticks = countFor('shipClass', k);
+      var tag = ticks > 1 ? '<span class="opt-count">×' + ticks + '</span>' : '';
+      out.push(optionHtml('shipClass', k, k, escapeHtml(p.desc || ''), null, null, null, '', tag,
+        ticks > 0 ? '<button type="button" class="tick-x" data-untick="' + esc(k) + '" title="Remove one tick">✕</button>' : ''));
     }
     out.push('<label class="dl-row"><input type="checkbox" id="limitsBox"' + (choices.disableLimits ? ' checked' : '') + '> Disable limits</label>');
     return out.join('');
@@ -795,12 +870,12 @@
     if (!open) return html + '</div>';
 
     var key = 'core:' + sec.key;
-    var list = sectionOptions(choices.shipClass, sec.key);
+    var list = sectionOptions(sec.key);
     var body = '';
     for (var i = 0; i < list.length; i++) {
       var o = list[i];
       var meta = [];
-      if (o.isClass) meta.push({ text: 'Class: ' + o.fromClass, cls: 't-class-tech' });
+      if (o.isClass) meta.push({ text: 'Class: ' + o.fromClass.join(', '), cls: 't-class-tech' });
       if (o.grants.length) {
         var parts = [];
         for (var g = 0; g < o.grants.length; g++) parts.push(o.grants[g][1] + '× ' + o.grants[g][0]);
@@ -808,9 +883,9 @@
       }
       body += optionHtml(key, o.name, o.name, escapeHtml(o.desc || ''), meta, grantExpand(o), null, o.isClass ? 'classopt' : '');
     }
-    if (sec.classOptions && !choices.shipClass) {
+    if (sec.classOptions && !hullNames().length) {
       body += '<div class="opt compact locked-opt"><span class="opt-title-row"><span class="opt-title">Class option</span></span>' +
-        '<span class="opt-body">Pick a hull class in step 1 to see whether your hull is offered a third box here.</span></div>';
+        '<span class="opt-body">Tick a hull class in step 1 to see which extra boxes your hulls unlock here.</span></div>';
     }
     return html + '<div class="core-sec-body"><div class="opt-grid">' + body + '</div></div></div>';
   }
@@ -830,14 +905,14 @@
     var st = parseInt(t.storage, 10);
     var hasCh = t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0;
     var meta = [{ text: typeIcon(t.tt) + ' ' + cap(t.tt), cls: 't-cyan' }];
-    if (count > 1) meta.push({ text: '×' + count, cls: 't-amber' });
     if (metaTraits.indexOf('Class Tech') !== -1) meta.push({ text: 'Class Tech', cls: 't-class-tech' });
     if (isMod) meta.push({ text: MODULE_ICON, cls: 't-cyan' });
     if (isDep) meta.push({ text: DEPLOYABLE_ICON, cls: 't-amber' });
     if (!isNaN(st) && st > 0) meta.push({ text: STORAGE_ICON + t.storage, cls: '' });
     if (hasCh) meta.push({ text: CHARGES_ICON + t.charges, cls: '' });
     var expand = [{ tag: 'Tech ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
-    return optionHtml(key, t.name, t.name, traitHtml(t.traits), meta, expand);
+    var countTag = count > 1 ? '<span class="opt-count">×' + count + '</span>' : '';
+    return optionHtml(key, t.name, t.name, traitHtml(t.traits), meta, expand, null, '', countTag);
   }
   function techPassesFilters(t) {
     var metaTraits = t.traits || '';
@@ -1047,7 +1122,9 @@ function skillsOptions() {
     document.getElementById('winOptions').innerHTML = html;
     /* on the core step Continue closes the open section, so it only needs that section answered */
     var canGo = (k === 'core') ? !!corePick(CORE_SECTIONS[coreSection].key) : (k === 'skills' || hasPick(k));
-    document.getElementById('continueBtn').disabled = !canGo;
+    var cb = document.getElementById('continueBtn');
+    cb.disabled = !canGo;
+    cb.classList.toggle('ready', canGo && stepReady(k));
     updateProgress();
   }
 
@@ -1089,6 +1166,12 @@ function skillsOptions() {
     var invEl = document.getElementById('invBar');
     invEl.classList.remove('deck-bar');
     if (k === 'tech') { renderDeckBar(invEl); return; }
+    if (k === 'shipClass') {
+      invEl.classList.remove('builder-hidden');
+      invEl.classList.add('deck-bar');
+      invEl.innerHTML = '<div class="deck-points">Total Points remaining: <b>' + hullPointsLeft() + '</b></div>';
+      return;
+    }
     var inv = choices.inv && choices.inv[k];
     var names = [];
     if (inv) for (var n in inv) if (inv[n] > 0) names.push(n);
@@ -1135,6 +1218,15 @@ function skillsOptions() {
     html += '</div>';
     html += '<input type="text" class="fsearch" value="' + esc(filters.q) + '" placeholder="Filter by name…">';
     bar.innerHTML = html;
+  }
+  /* gold Continue: the step is not merely passable but finished */
+  function stepReady(k) {
+    if (k === 'shipClass') return hullPointsLeft() <= 0;
+    if (k === 'tech') return deckPointsLeft() <= 0;
+    if (k === 'core') return coreComplete();
+    if (k === 'mod') return hasPick('mod');
+    if (k === 'skills') return skillsTotal() >= 13;
+    return hasPick(k);
   }
   function renderProgressDots() {
     var el = document.getElementById('psteps');
@@ -1259,13 +1351,29 @@ function skillsOptions() {
       renderOptions();
       return;
     }
+    var untick = e.target.closest('.tick-x');
+    if (untick) {
+      var un = untick.getAttribute('data-untick');
+      if (choices.hulls[un]) {
+        choices.hulls[un] -= 1;
+        if (choices.hulls[un] <= 0) delete choices.hulls[un];
+        revalidateCore();
+        saveChoices();
+        renderOptions();
+      }
+      return;
+    }
     var btn = e.target.closest('.opt');
     if (!btn || btn.classList.contains('locked-opt')) return;
     var id = btn.getAttribute('data-id');
     var k = btn.getAttribute('data-okey') || steps[step].key;
     var wasOpen = expandedFor[k] === id;
+    if (k === 'shipClass') {
+      if (hullPointsLeft() <= 0) return;
+      choices.hulls[id] = (choices.hulls[id] || 0) + 1;
+      revalidateCore();
+    }
     if (isSingle(k)) setPick(k, id);
-    if (k === 'shipClass') revalidateCore();
     if (btn.getAttribute('data-exp')) expandedFor[k] = wasOpen ? null : id;
     saveChoices();
     renderOptions();
@@ -1393,14 +1501,21 @@ function skillsOptions() {
     var c = emptyChoices();
     var matched = false;
     c.shipName = (json && json.shipName) || '';
-    if (json && json.shipClass && CLASS_PRESETS[json.shipClass]) {
-      c.shipClass = json.shipClass;
+    if (json && json.hulls && typeof json.hulls === 'object') {
+      Object.keys(json.hulls).forEach(function (hn) {
+        var n = parseInt(json.hulls[hn], 10);
+        if (n > 0 && CLASS_PRESETS[hn]) { c.hulls[hn] = n; matched = true; }
+      });
+    } else if (json && json.shipClass && CLASS_PRESETS[json.shipClass]) {
+      c.hulls[json.shipClass] = 1;
       matched = true;
     }
+    var beforeHulls = choices.hulls;
+    choices.hulls = c.hulls;
     if (json && json.coreOptions && typeof json.coreOptions === 'object') {
       for (var oi = 0; oi < CORE_SECTIONS.length; oi++) {
         var osk = CORE_SECTIONS[oi].key;
-        var got = validCorePick(c.shipClass, osk, json.coreOptions[osk]);
+        var got = validCorePick(osk, json.coreOptions[osk]);
         if (got) { c.core[osk] = got; matched = true; }
       }
     }
@@ -1432,6 +1547,7 @@ function skillsOptions() {
         }
       }
     }
+    choices.hulls = beforeHulls;
     choices = c;
     saveChoices();
     return matched;
@@ -1460,7 +1576,7 @@ function skillsOptions() {
     }
 
     html += '<div class="exp-pick exp-wide"><div class="opt-title">Hull Class</div><div>' +
-      (choices.shipClass ? esc(choices.shipClass) : '<span class="exp-none">Not chosen</span>') + '</div></div>';
+      (hullTicks() ? esc(hullLabel()) : '<span class="exp-none">Not chosen</span>') + '</div></div>';
     for (var ci = 0; ci < CORE_SECTIONS.length; ci++) {
       var sec = CORE_SECTIONS[ci];
       var pick = corePick(sec.key);
@@ -1486,7 +1602,9 @@ function skillsOptions() {
   function buildSheet() {
     var s = JSON.parse(JSON.stringify(SHEET_DEFAULTS));
     s.shipName = choices.shipName || '';
-    s.shipClass = choices.shipClass || 'Unclassified';
+    s.shipClass = hullTicks() ? hullLabel() : 'Unclassified';
+    s.hulls = {};
+    for (var hk in choices.hulls) if (choices.hulls[hk] > 0) s.hulls[hk] = choices.hulls[hk];
     s.coreOptions = {};
     for (var ck = 0; ck < CORE_SECTIONS.length; ck++) {
       s.coreOptions[CORE_SECTIONS[ck].key] = corePick(CORE_SECTIONS[ck].key) || '';
