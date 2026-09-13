@@ -50,11 +50,13 @@ function respond($data) {
 }
 
 /*
- * Long-lived SSE connection: emits "hello" on connect, then "changed" every
- * time board-state.json's mtime changes, plus a comment heartbeat every 15 s.
- * Carries no state payload — clients treat it as a "go fetch" signal and use
- * the normal ?get + applyServer path. Runs in its own PHP worker so it never
- * blocks saves; it never writes or locks anything.
+ * Long-lived SSE connection: on connect it immediately sends the current
+ * board state, then re-sends the full state every time it changes, plus a
+ * comment heartbeat every 15 s. The event data IS the state JSON, so clients
+ * apply it directly — the push replaces polling AND the per-change ?get.
+ * Content is compared verbatim (not mtime) so rapid same-second saves are
+ * never missed. Runs in its own PHP worker so it never blocks saves; it never
+ * writes or locks anything.
  */
 function streamState() {
     header('Content-Type: text/event-stream; charset=utf-8');
@@ -66,19 +68,23 @@ function streamState() {
     while (ob_get_level() > 0) { ob_end_flush(); }
     ob_implicit_flush(true);
 
-    $lastMtime = @filemtime(STATE_FILE);
+    $lastRaw = json_encode(defaultState());
+    if (is_readable(STATE_FILE)) {
+        $raw = @file_get_contents(STATE_FILE);
+        if ($raw !== false) $lastRaw = $raw;
+    }
     $lastBeat = time();
 
-    echo "data: hello\n\n";
+    echo 'data: ' . $lastRaw . "\n\n";
     flush();
 
     while (!connection_aborted()) {
-        usleep(250000);
+        usleep(500000);
         clearstatcache(true, STATE_FILE);
-        $mtime = @filemtime(STATE_FILE);
-        if ($mtime !== false && $mtime !== $lastMtime) {
-            $lastMtime = $mtime;
-            echo "data: changed\n\n";
+        $raw = is_readable(STATE_FILE) ? @file_get_contents(STATE_FILE) : false;
+        if ($raw !== false && $raw !== $lastRaw) {
+            $lastRaw = $raw;
+            echo 'data: ' . $raw . "\n\n";
             flush();
         }
         if (time() - $lastBeat >= 15) {

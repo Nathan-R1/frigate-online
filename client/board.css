@@ -179,6 +179,12 @@ body.resizing #playerFrame { pointer-events: none; }
   stroke-width: 2;
 }
 
+html.gfx-low *,
+html.gfx-low *::before,
+html.gfx-low *::after {
+  animation: none !important;
+  transition: none !important;
+}
 .piece { position: absolute; pointer-events: auto; cursor: grab; }
 .piece .module-svg {
   width: 100%; height: 100%; display: block; user-select: none; -webkit-user-select: none;

@@ -68,6 +68,12 @@ width:1px;height:14px;background:var(--line-bright);margin:0 6px;
 .hand-draw:hover{
 color:var(--cyan);border-color:var(--cyan);
   }
+.hand-draw .nt-ico, .hand-newturn .nt-ico{
+display:inline-flex;align-items:center;flex:none;
+  }
+.hand-draw .nt-ico svg, .hand-newturn .nt-ico svg{
+width:13px;height:13px;display:block;
+  }
 .hand-tab .hand-count{
 
     display:inline-flex;align-items:center;justify-content:center;
