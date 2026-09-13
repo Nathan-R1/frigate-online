@@ -33,5 +33,6 @@ var TECH_PRESETS = [
     {name:'SU Scanners', traits:'', onbuild:'', passive:'', onactivate:'Exhaust to identify the location of any Stealth Objects in sensor range.', tt:'science', storage:'0', deploy:false},
     {name:'TAT Launcher', traits:'[Deployable]', onbuild:'Place 1 charge on this card', passive:'', onactivate:'Exhaust and remove 1 charge to Create Deployable TAT Guided', tt:'offense', storage:'1', charges:'1', deploy:true},
     {name:'Thrust Unit', traits:'[Module]', onbuild:'Create Module Thrust Engine. Trash.', passive:'', onactivate:'', tt:'movement', storage:'0', deploy:'module'},
-    {name:'Boost', traits:'', onbuild:'Play 2 more, Discard.', passive:'', onactivate:'', tt:'science', storage:'0', deploy:false}
+    {name:'Boost', traits:'', onbuild:'Play 2 more, Discard.', passive:'', onactivate:'', tt:'science', storage:'0', deploy:false},
+    {name:'Dynamo', traits:'', onbuild:'Draw 2. Play 1. Discard.', passive:'', onactivate:'', tt:'science', storage:'0', deploy:false}
   ];

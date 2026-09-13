@@ -57,11 +57,26 @@
   .opt-meta span.t-hull { background: rgba(232,169,74,.12); color: var(--amber); border-color: var(--amber); }
   .opt-meta span.t-class-tech { color: var(--icon-charged); border-color: var(--icon-charged); background: rgba(156,63,102,.12); }
   .opt-meta .ticon { width: 11px; height: 11px; flex: none; display: block; }
-  .sk-note { margin: 0 0 8px; color: var(--ink-mid); font-size: 12px; }
-  .skill-pick { display: flex; flex-wrap: wrap; gap: 6px; }
-  .skill-pick-btn { padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--ink-mid); font-family: var(--mono); font-size: 11px; letter-spacing: .06em; cursor: pointer; }
-  .skill-pick-btn:hover { border-color: var(--amber); color: var(--amber); }
-  .skill-pick-btn.on { border-color: var(--icon-cyan); color: var(--cyan); background: rgba(92,168,182,.1); }
+  /* core options: stacked sections that collapse to a header once passed */
+  .opt-grid.opt-flat { display: block; }
+  .core-sec { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .core-sec.open { border-color: var(--cyan-dim); }
+  .core-sec-head {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    background: transparent; border: 0; padding: 11px 14px; cursor: pointer; text-align: left;
+    font-family: var(--disp); font-size: 13px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink);
+  }
+  .core-sec-head:hover { color: var(--cyan); }
+  .core-sec-head .cs-num { font-family: var(--mono); font-size: 11px; color: var(--cyan); }
+  .core-sec-head .cs-pick { margin-left: auto; font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: none; color: var(--amber); }
+  .core-sec-head .cs-pick.none { color: var(--ink-mid); }
+  .core-sec.open > .core-sec-head { border-bottom: 1px solid var(--line); }
+  .core-sec-body { padding: 14px; }
+  .opt.classopt:not(.sel) { border-color: var(--icon-charged); background: rgba(156,63,102,.08); }
+  .opt.classopt:not(.sel):hover { border-color: var(--icon-charged); }
+  .opt.classopt .opt-title { color: var(--icon-charged); }
+  .opt.locked-opt { opacity: .55; cursor: default; }
+  .grant-line { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; color: var(--ink-mid); }
   .sk-top { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-bottom: 6px; }
   .recbtn {
     background: var(--panel-alt); border: 1px solid var(--cyan); color: var(--cyan);
@@ -70,7 +85,6 @@
   .recbtn:hover { background: var(--cyan); color: var(--ink-strong); border-color: var(--cyan); }
   .sk-total { grid-column: 1 / -1; font-family: var(--mono); font-size: 12px; letter-spacing: .08em; color: var(--ink-mid); margin-bottom: 10px; }
   .sk-total b { color: var(--amber); }
-  .sk-num.boosted { color: var(--amber); }
   .opt-body {
     color: var(--ink-mid); font-size: 12.5px; white-space: pre-line;
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
@@ -283,7 +297,7 @@
     <div class="bl"></div><div class="br"></div>
     <div class="eyebrow"><span class="eb-text">Build a Character</span></div>
     <p style="color:var(--ink-mid);font-size:13.5px;line-height:1.6;margin:8px 0 4px;">
-      Run through a few windows to assemble your frigate: pick a hull class, a trait or officer,
+      Run through a few windows to assemble your frigate: pick a hull class, a core option,
       a starting technology and a starting module. Choices are remembered in this browser and can
       be exported to a full frigate sheet JSON.
     </p>
@@ -328,7 +342,6 @@
 
 </main>
 
-<script src="../frigate-sheet/presets/crew-presets.js"></script>
 <script src="../frigate-sheet/presets/tech-presets.js"></script>
 <script src="../frigate-sheet/presets/mod-presets.js"></script>
 <script>
@@ -337,14 +350,51 @@
 
   var BUILDER_KEY = 'frigateBuilderChoices';
 
-  /* class presets mirror frigate.html CLASS_PRESETS (stat/skill bonuses only) */
+  /* hull classes: name only, no stat/skill/tech/mod/trait grants */
   var CLASS_PRESETS = {
-    'Support Class': { stats: { hull: 2, shield: 2, storage: 2 }, techName: 'Repulsor Unit', modName: 'Repulsor Unit' },
-    'Jump Class': { stats: { speed: 2 }, skills: { Sensors: 1 }, techName: 'Phantom' },
-    'Discovery Class': { stats: { storage: 2 }, skills: { Logistics: 2, Science: 1 }, techName: 'Experimental Reconnaissance' },
-    'Striker Class': { stats: { storage: 2 }, skills: { Leadership: 2 }, techName: 'Decomp Strikes' },
-    'Bulwark Class': { stats: { hull: 4 }, crewTraits: ['Citadel'] }
+    'Controller': { desc: 'Placeholder description for the Controller hull.' },
+    'Jump': { desc: 'Placeholder description for the Jump hull.' },
+    'Tank': { desc: 'Placeholder description for the Tank hull.' },
+    'Striker': { desc: 'Placeholder description for the Striker hull.' }
   };
+
+  /* core options: three sections, each a single pick. grants are [tech name, count] pairs. */
+  var WEAPON_OPTIONS = [
+    { name: 'Standard', desc: 'Mid range modules that can perform destruction in a variety of ways.', grants: [['Cannon Unit', 5]] },
+    { name: 'Close Range', desc: 'Short range guns that pack a punch and provide added defense.', grants: [['P.D. Unit', 5]] }
+  ];
+  var CLASS_WEAPONS = {
+    'Controller': { name: 'Tactician', desc: 'Standard weapons, supplemented with weapons that can mess with enemy ships.', grants: [['Cannon Unit', 4], ['Tract Beam', 1]] },
+    'Jump': { name: 'Lightweight', desc: 'Standard weapons, but not so many to slow you down.', grants: [['Cannon Unit', 4], ['Boost', 1]] },
+    'Tank': { name: 'Armored', desc: '3 armor units, 2 Point Defense units, 1 Cannon unit, well rounded and tanky.', grants: [['Armor Unit', 3], ['P.D. Unit', 2], ['Cannon Unit', 1]] },
+    'Striker': { name: 'Large', desc: 'Standard weapons and close range weapons to ensure you can respond to any situation.', grants: [['Cannon Unit', 4], ['P.D. Unit', 2]] }
+  };
+
+  var ENGINE_OPTIONS = [
+    { name: 'Standard', desc: 'Basic modules to fly your ship. Nothing fancy.', grants: [['Graviton Unit', 3]] },
+    { name: 'Lightweight', desc: 'Less reliable but move flexible.', grants: [['Grav Jet', 2]] }
+  ];
+  /* only some hulls are offered a third engine box */
+  var CLASS_ENGINES = {
+    'Jump': { name: 'Heavyweight', desc: 'Less speed individually these engines are ideal for large ships moving quick.', grants: [['Thrust Unit', 3]] },
+    'Tank': { name: 'Heavyweight', desc: 'Less speed individually these engines are ideal for large ships moving quick.', grants: [['Thrust Unit', 3]] }
+  };
+
+  var GENERATOR_OPTIONS = [
+    { name: 'Standard', desc: 'Power extra Techs over time to keep your deck moving.', grants: [['Boost', 1]] }
+  ];
+  /* only some hulls are offered a second generator box */
+  var CLASS_GENERATORS = {
+    'Controller': { name: 'Flexible', desc: 'Power larger decks.', grants: [['Dynamo', 1]] },
+    'Striker': { name: 'Flexible', desc: 'Power larger decks.', grants: [['Dynamo', 1]] }
+  };
+
+  /* a section's boxes are its own options plus, where offered, one granted by the hull class */
+  var CORE_SECTIONS = [
+    { key: 'weapons', title: 'Weaponary', options: WEAPON_OPTIONS, classOptions: CLASS_WEAPONS },
+    { key: 'engines', title: 'Engines', options: ENGINE_OPTIONS, classOptions: CLASS_ENGINES },
+    { key: 'generator', title: 'Generator', options: GENERATOR_OPTIONS, classOptions: CLASS_GENERATORS }
+  ];
 
   /* matches the values a fresh frigate.html sheet starts with */
   var SHEET_DEFAULTS = {
@@ -376,7 +426,7 @@
 
   var steps = [
     { key: 'shipClass', label: 'Hull Class' },
-    { key: 'crew', label: 'Trait / Officer' },
+    { key: 'core', label: 'Core Options' },
     { key: 'tech', label: 'Technology Deck' },
     { key: 'mod', label: 'Modules/Deployables' },
     { key: 'skills', label: 'Crew Skills' }
@@ -390,33 +440,43 @@
     return out;
   }
 
-  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, disableLimits: false, inv: emptyInv() };
+  var choices = { shipClass: null, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() };
   var step = 0;
+  var coreSection = 0; // which Core Options section is expanded; the rest show as headers
   var screen = 'landing'; // landing | win | exp
-  var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
-  var filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false };
-  function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false, cbt: false, sk: false }; }
+  var expandedFor = {};
+  var filters = { q: '', types: [], vehs: [], st: false, ch: false };
+  function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false }; }
   var skillInfoOpen = null;
 
   /* ===== persistence ===== */
-  function emptyInv() { return { crew: {}, tech: {}, mod: {} }; }
-  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, disableLimits: false, inv: emptyInv() }; }
+  function emptyInv() { return { tech: {}, mod: {} }; }
+  function emptyCore() {
+    var o = {};
+    for (var i = 0; i < CORE_SECTIONS.length; i++) o[CORE_SECTIONS[i].key] = null;
+    return o;
+  }
+  function emptyChoices() { return { shipClass: null, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
       var s = raw ? JSON.parse(raw) : {};
       var c = emptyChoices();
       if (s && typeof s === 'object') {
-        c.shipClass = s.shipClass || null;
-        c.crew = s.crew || null;
+        c.shipClass = (s.shipClass && CLASS_PRESETS[s.shipClass]) ? s.shipClass : null;
+        if (s.core && typeof s.core === 'object') {
+          for (var ci = 0; ci < CORE_SECTIONS.length; ci++) {
+            var sk = CORE_SECTIONS[ci].key;
+            c.core[sk] = validCorePick(c.shipClass, sk, s.core[sk]);
+          }
+        }
         c.tech = s.tech || null;
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
-        c.skillPickSel = s.skillPickSel || null;
         c.disableLimits = !!s.disableLimits;
         if (s.inv && typeof s.inv === 'object') {
-          c.inv = { crew: {}, tech: {}, mod: {} };
-          ['crew', 'tech', 'mod'].forEach(function (ik) {
+          c.inv = emptyInv();
+          ['tech', 'mod'].forEach(function (ik) {
             var src = s.inv[ik];
             if (src && typeof src === 'object') {
               Object.keys(src).forEach(function (name) {
@@ -427,7 +487,6 @@
           });
         } else {
           c.inv = emptyInv();
-          if (s.crew) c.inv.crew[s.crew] = 1;
           if (s.tech) c.inv.tech[s.tech] = 1;
           if (s.mod) c.inv.mod[s.mod] = 1;
         }
@@ -449,10 +508,76 @@
     try { localStorage.setItem(BUILDER_KEY, JSON.stringify(choices)); } catch (e) {}
   }
   function choicesHaveAny() {
-    return !!(choices.shipClass || choices.crew || choices.tech || choices.mod || choices.shipName);
+    return !!(choices.shipClass || corePick(CORE_SECTIONS[0].key) || choices.tech || choices.mod || choices.shipName);
+  }
+  /* steps that hold one pick rather than a counted inventory; core keys are 'core:<section>' */
+  function isSingle(k) { return k === 'shipClass' || k.indexOf('core') === 0; }
+  function coreSecKey(k) { return k.indexOf('core:') === 0 ? k.slice(5) : null; }
+  function corePick(secKey) { return (choices.core && choices.core[secKey]) || null; }
+  function pickOf(k) {
+    var sec = coreSecKey(k);
+    return sec ? corePick(sec) : choices[k];
+  }
+  function setPick(k, id) {
+    var sec = coreSecKey(k);
+    if (sec) { if (!choices.core) choices.core = emptyCore(); choices.core[sec] = id; }
+    else choices[k] = id;
+  }
+  function findSection(secKey) {
+    for (var i = 0; i < CORE_SECTIONS.length; i++) if (CORE_SECTIONS[i].key === secKey) return CORE_SECTIONS[i];
+    return null;
+  }
+  /* options in a section are its own, plus the class-given box when the hull is offered one */
+  function sectionOptions(shipClass, secKey) {
+    var sec = findSection(secKey);
+    if (!sec) return [];
+    var out = (sec.options || []).slice();
+    var co = (sec.classOptions && shipClass) ? sec.classOptions[shipClass] : null;
+    if (co) out.push({ name: co.name, desc: co.desc, grants: co.grants, isClass: true, fromClass: shipClass });
+    return out;
+  }
+  function findSectionOption(secKey, name) {
+    var list = sectionOptions(choices.shipClass, secKey);
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return null;
+  }
+  /* a stored pick survives only while it is still offered (class swaps change the third box) */
+  function validCorePick(shipClass, secKey, name) {
+    if (!name) return null;
+    var list = sectionOptions(shipClass, secKey);
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return name;
+    return null;
+  }
+  /* techs handed out by the chosen core options, as name -> count */
+  function coreTechCounts() {
+    var out = {};
+    for (var i = 0; i < CORE_SECTIONS.length; i++) {
+      var sk = CORE_SECTIONS[i].key;
+      var opt = findSectionOption(sk, corePick(sk));
+      if (!opt || !opt.grants) continue;
+      for (var g = 0; g < opt.grants.length; g++) {
+        out[opt.grants[g][0]] = (out[opt.grants[g][0]] || 0) + opt.grants[g][1];
+      }
+    }
+    return out;
+  }
+  function revalidateCore() {
+    for (var i = 0; i < CORE_SECTIONS.length; i++) {
+      var sk = CORE_SECTIONS[i].key;
+      choices.core[sk] = validCorePick(choices.shipClass, sk, choices.core[sk]);
+    }
+  }
+  function coreComplete() {
+    for (var i = 0; i < CORE_SECTIONS.length; i++) if (!corePick(CORE_SECTIONS[i].key)) return false;
+    return true;
+  }
+  function firstUnansweredSection() {
+    for (var i = 0; i < CORE_SECTIONS.length; i++) if (!corePick(CORE_SECTIONS[i].key)) return i;
+    return CORE_SECTIONS.length - 1;
   }
   function hasPick(k) {
-    if (k === 'shipClass') return !!choices.shipClass;
+    if (k === 'core') return coreComplete();
+    if (isSingle(k)) return !!pickOf(k);
     if (k === 'skills') return true;
     var inv = choices.inv && choices.inv[k];
     if (inv) for (var n in inv) if (inv[n] > 0) return true;
@@ -466,10 +591,6 @@
   }
 
   /* ===== find helpers ===== */
-  function findCrew(name) {
-    for (var i = 0; i < CREW_PRESETS.length; i++) if (CREW_PRESETS[i].name === name) return CREW_PRESETS[i];
-    return null;
-  }
   function findTech(name) {
     for (var i = 0; i < TECH_PRESETS.length; i++) if (TECH_PRESETS[i].name === name) return TECH_PRESETS[i];
     return null;
@@ -477,9 +598,6 @@
   function findMod(name) {
     for (var i = 0; i < MOD_PRESETS.length; i++) if (MOD_PRESETS[i].name === name) return MOD_PRESETS[i];
     return null;
-  }
-  function stripTags(s) {
-    return String(s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   }
 
   /* ===== screens ===== */
@@ -520,19 +638,11 @@
   // expand: array of { tag, name, desc } to list under the card when opened
   function expandPanelHtml(key, expand, id) {
     if (!expand || !expand.length) return '';
-    var isSI = key === 'crew' && id === '[Skill Increase]';
-    var invName = id;
-    var canAdd = true;
-    if (key === 'crew' && limitsActive() && crewCount() >= 4) canAdd = false;
-    if (isSI) {
-      if (!choices.skillPickSel) canAdd = false;
-      else invName = 'Skill Increase -> ' + choices.skillPickSel;
-    }
-    var addCount = (choices.inv && choices.inv[key] && choices.inv[key][invName]) || 0;
+    var addCount = (choices.inv && choices.inv[key] && choices.inv[key][id]) || 0;
     var html = '<div class="opt-panel" data-panel="' + key + '">';
-    if (key !== 'shipClass') {
+    if (!isSingle(key)) {
       if (addCount) html += '<span class="exp-count">×' + addCount + '</span>';
-      html += '<button type="button" class="exp-add' + (canAdd ? '' : ' locked') + '" data-add="' + key + '"' + (canAdd ? '' : ' disabled') + '>+</button>';
+      html += '<button type="button" class="exp-add" data-add="' + key + '">+</button>';
     }
     for (var i = 0; i < expand.length; i++) {
       var it = expand[i];
@@ -544,13 +654,13 @@
     html += '</div>';
     return html;
   }
-  function optionHtml(key, id, title, body, meta, expand, leadIcon) {
-    var sel = key === 'shipClass' ? choices.shipClass === id : (!!(choices.inv && choices.inv[key] && choices.inv[key][id] > 0));
+  function optionHtml(key, id, title, body, meta, expand, leadIcon, extraCls) {
+    var sel = isSingle(key) ? pickOf(key) === id : (!!(choices.inv && choices.inv[key] && choices.inv[key][id] > 0));
     var isExp = !!(expand && expand.length);
     var open = isExp && expandedFor[key] === id;
     return '<div class="opt-wrap">' +
-      '<button type="button" class="opt' + (body ? '' : ' compact') + (sel ? ' sel' : '') + (open ? ' open' : '') + '" data-id="' +
-      id.replace(/"/g, '&quot;') + '"' + (isExp ? ' data-exp="1"' : '') + '>' +
+      '<button type="button" class="opt' + (body ? '' : ' compact') + (sel ? ' sel' : '') + (open ? ' open' : '') + (extraCls ? ' ' + extraCls : '') + '" data-id="' +
+      id.replace(/"/g, '&quot;') + '" data-okey="' + esc(key) + '"' + (isExp ? ' data-exp="1"' : '') + '>' +
       '<span class="opt-title-row">' + (leadIcon || '') + '<span class="opt-title">' + esc(title) + '</span></span>' +
       (meta && meta.length ? '<span class="opt-meta">' + metaTags(meta) + '</span>' : '') +
       (body ? '<span class="opt-body">' + body + '</span>' : '') +
@@ -600,67 +710,59 @@
     var keys = Object.keys(CLASS_PRESETS);
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i], p = CLASS_PRESETS[k];
-      var parts = [];
-      if (p.stats) {
-        Object.keys(p.stats).forEach(function (s) { parts.push('+' + p.stats[s] + ' ' + cap(s)); });
-      }
-      if (p.skills) {
-        Object.keys(p.skills).forEach(function (s) { parts.push('+' + p.skills[s] + ' ' + s); });
-      }
-      var meta = [];
-      if (p.techName) meta.push({ text: 'Tech: ' + p.techName, cls: 't-cyan' });
-      if (p.modName) meta.push({ text: 'Mod: ' + p.modName, cls: 't-cyan' });
-      if (p.crewTraits && p.crewTraits.length) meta.push({ text: 'Trait: ' + p.crewTraits.join(', '), cls: 't-amber' });
-      var expand = [];
-      if (p.techName) {
-        var pt = findTech(p.techName);
-        expand.push({ tag: 'Class Tech', name: p.techName, desc: techDesc(pt) });
-      }
-      if (p.modName) {
-        var pm = findMod(p.modName);
-        expand.push({ tag: 'Class Module', name: p.modName, desc: modDesc(pm) });
-      }
-      if (p.crewTraits) {
-        for (var t = 0; t < p.crewTraits.length; t++) {
-          var pc = findCrew(p.crewTraits[t]);
-          expand.push({ tag: 'Crew Trait', name: p.crewTraits[t], desc: pc ? escapeHtml(stripTags(pc.text_description)) : '' });
-        }
-      }
-      out.push(optionHtml('shipClass', k, k, parts.join(' · ') || 'No stat bonuses.', meta, expand));
+      out.push(optionHtml('shipClass', k, k, escapeHtml(p.desc || '')));
     }
     out.push('<label class="dl-row"><input type="checkbox" id="limitsBox"' + (choices.disableLimits ? ' checked' : '') + '> Disable limits</label>');
     return out.join('');
   }
 
-  function crewOptions() {
+  /* one expand row per granted tech, plus the tech's own rules text */
+  function grantExpand(opt) {
     var out = [];
-    var SK = '[Skill Increase]';
-    if (!filters.cbt && nameMatch(SK) && filterTypes('science')) {
-      var meta = [{ text: '⚛︎ Science', cls: 't-cyan' }, { text: '⭐ Crew Skill', cls: 't-skill' }];
-      out.push(optionHtml('crew', SK, SK, '', meta, [{ tag: 'Science', name: SK, desc: crewPickHtml() }]));
+    for (var i = 0; i < opt.grants.length; i++) {
+      var name = opt.grants[i][0], n = opt.grants[i][1];
+      var t = findTech(name);
+      out.push({ tag: '×' + n, name: name, desc: t ? techDesc(t) : 'Not in the tech list.' });
     }
-    for (var i = 0; i < CREW_PRESETS.length; i++) {
-      var c = CREW_PRESETS[i];
-      if (!nameMatch(c.name) || !filterTypes(c.type)) continue;
-      if (filters.cbt && !c.combat_only) continue;
-      if (filters.sk && !c.skill_increase) continue;
-      var meta = [{ text: typeIcon(c.type) + ' ' + cap(c.type), cls: 't-cyan' }];
-      if (c.skill_increase) meta.push({ text: '⭐ Crew Skill', cls: 't-skill' });
-      if (c.combat_only) meta.push({ text: '⚔ Combat only', cls: 't-red' });
-      var expand = [{ tag: cap(c.type), name: c.name, desc: escapeHtml(stripTags(c.text_description)) }];
-      out.push(optionHtml('crew', c.name, c.name, traitHtml(c.traits), meta, expand));
-    }
-    return out.join('');
+    return out;
   }
-  function crewPickHtml() {
-    var html = '<div class="sk-note">Gain a +2 to any Crew Skill (up to max 4). Pick a skill, then press + to add it.</div><div class="skill-pick">';
-    for (var i = 0; i < SKILL_NAMES.length; i++) {
-      var n = SKILL_NAMES[i];
-      var on = choices.skillPickSel === n;
-      html += '<button type="button" class="skill-pick-btn' + (on ? ' on' : '') + '" data-boost="' + esc(n) + '">' + esc(n) + '</button>';
+  function coreSectionHtml(secIdx) {
+    var sec = CORE_SECTIONS[secIdx];
+    var open = secIdx === coreSection;
+    var pick = corePick(sec.key);
+    var html = '<div class="core-sec' + (open ? ' open' : '') + '">' +
+      '<button type="button" class="core-sec-head" data-sec="' + secIdx + '">' +
+      '<span class="cs-num">' + (secIdx + 1) + '</span>' +
+      '<span>' + esc(sec.title) + '</span>' +
+      '<span class="cs-pick' + (pick ? '' : ' none') + '">' + (pick ? esc(pick) : 'Not chosen') + '</span>' +
+      '<span class="opt-chev">' + (open ? '▾' : '▸') + '</span>' +
+      '</button>';
+    if (!open) return html + '</div>';
+
+    var key = 'core:' + sec.key;
+    var list = sectionOptions(choices.shipClass, sec.key);
+    var body = '';
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      var meta = [];
+      if (o.isClass) meta.push({ text: 'Class: ' + o.fromClass, cls: 't-class-tech' });
+      if (o.grants.length) {
+        var parts = [];
+        for (var g = 0; g < o.grants.length; g++) parts.push(o.grants[g][1] + '× ' + o.grants[g][0]);
+        meta.push({ text: parts.join('  ·  '), cls: 't-cyan' });
+      }
+      body += optionHtml(key, o.name, o.name, escapeHtml(o.desc || ''), meta, grantExpand(o), null, o.isClass ? 'classopt' : '');
     }
-    html += '</div>';
-    return html;
+    if (sec.classOptions && !choices.shipClass) {
+      body += '<div class="opt compact locked-opt"><span class="opt-title-row"><span class="opt-title">Class option</span></span>' +
+        '<span class="opt-body">Pick a hull class in step 1 to see whether your hull is offered a third box here.</span></div>';
+    }
+    return html + '<div class="core-sec-body"><div class="opt-grid">' + body + '</div></div></div>';
+  }
+  function coreOptions() {
+    var out = [];
+    for (var i = 0; i < CORE_SECTIONS.length; i++) out.push(coreSectionHtml(i));
+    return out.join('');
   }
 
   function techOptions() {
@@ -704,34 +806,9 @@
     return out.join('');
   }
 
-  function crewCount() {
-    var count = 0;
-    var inv = choices.inv && choices.inv.crew;
-    if (inv) {
-      for (var k in inv) if (inv[k] > 0) count += inv[k];
-    }
-    return count;
-  }
-  function limitsActive() {
-    return !choices.disableLimits;
-  }
-  function skillBoosts(name) {
-    var total = 0;
-    var inv = choices.inv && choices.inv.crew;
-    if (inv) {
-      for (var key in inv) {
-        if (inv[key] > 0 && key.indexOf('Skill Increase -> ') === 0 && key.slice('Skill Increase -> '.length) === name) {
-          total += inv[key];
-        }
-      }
-    }
-    return total;
-  }
   function skillEffective(name) {
     var base = parseInt(choices.skills[name].points, 10);
     if (isNaN(base)) base = 0;
-    var boost = skillBoosts(name) * 2;
-    if (boost) return choices.disableLimits ? (base + boost) : Math.min(4, base + boost);
     return base;
   }
   function skillsTotal() {
@@ -743,7 +820,6 @@
     return total;
   }
   function presetFor(invKey, name) {
-    if (invKey === 'crew') return findCrew(name);
     if (invKey === 'tech') return findTech(name);
     return findMod(name);
   }
@@ -763,7 +839,7 @@
   function countTraits(trait) {
     var re = new RegExp('\\b' + trait + '\\b', 'i');
     var total = 0;
-    ['crew', 'tech', 'mod'].forEach(function (invKey) {
+    ['tech', 'mod'].forEach(function (invKey) {
       var inv = choices.inv && choices.inv[invKey];
       if (!inv) return;
       for (var k in inv) {
@@ -801,7 +877,7 @@
     sk['Sensors'] = sensCount >= 2 ? 4 : (sensCount === 1 ? 3 : 0);
     sk['Navigation'] = gravJet ? 4 : 0;
     sk['Logistics'] = storage;
-    sk['Leadership'] = crewCount();
+    sk['Leadership'] = 0;
 
     var d;
     if (sensCount === 0) d = 'Sensors';
@@ -844,17 +920,15 @@ function skillsOptions() {
       var base = parseInt(v.points, 10);
       if (isNaN(base)) base = 0;
       var eff = skillEffective(n);
-      var boosted = eff !== base;
       var canPlus = remaining > 0 && (choices.disableLimits || base < 4);
       var canMinus = base > -1;
       var desc = SKILL_DESC[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
-      var leadWarn = n === 'Leadership' && eff < crewCount();
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
-        '<div class="sk-head' + (leadWarn ? ' sk-warn' : '') + '">' +
+        '<div class="sk-head">' +
         '<span class="sk-name">' + esc(n) + '</span>' +
-        '<span class="sk-num' + (boosted ? ' boosted' : '') + '">' + esc(String(eff)) + '</span>' +
+        '<span class="sk-num">' + esc(String(eff)) + '</span>' +
         '<span class="sk-btns">' +
         '<button type="button" class="sbtn sminus" data-d="-1" title="Decrease ' + esc(n) + '"' + (canMinus ? '' : ' disabled') + '>−</button>' +
         '<button type="button" class="sbtn splus" data-d="1" title="Increase ' + esc(n) + '"' + (canPlus ? '' : ' disabled') + '>+</button>' +
@@ -866,7 +940,6 @@ function skillsOptions() {
         (desc ? '<button type="button" class="skinfo' + (infoOpen ? ' on' : '') + '" title="' + esc(desc) + '"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg></button>' : '') +
         '</div>' +
         (infoOpen ? '<span class="sk-desc">' + esc(desc) + '</span>' : '') +
-        (leadWarn ? '<span class="sk-warn-desc">⚠ You have too many Traits and Officers, increase Leadership to match.</span>' : '') +
         '</div>'
       );
     }
@@ -889,13 +962,16 @@ function skillsOptions() {
   function renderOptionsList() {
     var k = steps[step].key;
     var html = '';
+    document.getElementById('winOptions').classList.toggle('opt-flat', k === 'core');
     if (k === 'shipClass') html = classOptions();
-    else if (k === 'crew') html = crewOptions();
+    else if (k === 'core') html = coreOptions();
     else if (k === 'tech') html = techOptions();
     else if (k === 'mod') html = modOptions();
     else html = skillsOptions();
     document.getElementById('winOptions').innerHTML = html;
-    document.getElementById('continueBtn').disabled = (k !== 'skills' && !hasPick(k));
+    /* on the core step Continue closes the open section, so it only needs that section answered */
+    var canGo = (k === 'core') ? !!corePick(CORE_SECTIONS[coreSection].key) : (k === 'skills' || hasPick(k));
+    document.getElementById('continueBtn').disabled = !canGo;
     updateProgress();
   }
 
@@ -920,7 +996,7 @@ function skillsOptions() {
     var inv = choices.inv && choices.inv[k];
     var names = [];
     if (inv) for (var n in inv) if (inv[n] > 0) names.push(n);
-    if (k === 'shipClass' || k === 'skills' || !names.length) {
+    if (isSingle(k) || k === 'skills' || !names.length) {
       invEl.classList.add('builder-hidden');
       invEl.innerHTML = '';
       return;
@@ -940,7 +1016,7 @@ function skillsOptions() {
   function renderFilterBar(k) {
     renderInv(k);
     var bar = document.getElementById('filterBar');
-    if (k !== 'crew' && k !== 'tech' && k !== 'mod') {
+    if (k !== 'tech' && k !== 'mod') {
       bar.classList.add('builder-hidden');
       bar.innerHTML = '';
       return;
@@ -951,16 +1027,9 @@ function skillsOptions() {
     for (var i = 0; i < FE.length; i++) {
       html += filterChip(FE[i][1], 't:' + FE[i][0], cap(FE[i][0]) + ' type', filters.types.indexOf(FE[i][0]) !== -1);
     }
-    if (k === 'tech' || k === 'mod') {
-      html += '<span class="ff-div"></span>';
-      html += filterChip(MODULE_ICON, 'v:module', 'Modules', filters.vehs.indexOf('module') !== -1);
-      html += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', filters.vehs.indexOf('deployable') !== -1);
-    }
-    if (k === 'crew') {
-      html += '<span class="ff-div"></span>';
-      html += filterChip('⚔', 'cbt', 'Combat only', filters.cbt);
-      html += filterChip('⭐', 'sk', 'Crew Skill', filters.sk);
-    }
+    html += '<span class="ff-div"></span>';
+    html += filterChip(MODULE_ICON, 'v:module', 'Modules', filters.vehs.indexOf('module') !== -1);
+    html += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', filters.vehs.indexOf('deployable') !== -1);
     if (k === 'tech') {
       html += '<span class="ff-div"></span>';
       html += filterChip(STORAGE_ICON, 'st', 'Has storage cost', filters.st);
@@ -1004,18 +1073,29 @@ function skillsOptions() {
   }
 
   /* ===== navigation ===== */
-  function goToWin(i) {
+  function goToWin(i, sec) {
     step = i;
+    if (steps[i].key === 'core') coreSection = (sec === undefined) ? firstUnansweredSection() : sec;
     resetFilters();
     show('win');
     renderOptions();
     renderProgressDots();
   }
   function onContinue() {
+    if (steps[step] && steps[step].key === 'core' && coreSection < CORE_SECTIONS.length - 1) {
+      coreSection += 1;
+      renderOptions();
+      return;
+    }
     if (step < steps.length - 1) { goToWin(step + 1); }
     else { enterExport(); }
   }
   function onBack() {
+    if (screen === 'win' && steps[step].key === 'core' && coreSection > 0) {
+      coreSection -= 1;
+      renderOptions();
+      return;
+    }
     if (step > 0) { goToWin(step - 1); }
     else if (screen === 'exp') { goToWin(steps.length - 1); }
     else { show('landing'); }
@@ -1039,22 +1119,8 @@ function skillsOptions() {
       var optEl = wrap ? wrap.querySelector('.opt') : null;
       var id = optEl ? optEl.getAttribute('data-id') : null;
       if (!kk || !id) return;
-      if (kk === 'crew' && limitsActive() && crewCount() >= 4) return;
-      var itemName = id;
-      if (kk === 'crew' && id === '[Skill Increase]') {
-        if (!choices.skillPickSel) return;
-        itemName = 'Skill Increase -> ' + choices.skillPickSel;
-      }
       if (!choices.inv[kk]) choices.inv[kk] = {};
-      choices.inv[kk][itemName] = (choices.inv[kk][itemName] || 0) + 1;
-      saveChoices();
-      renderOptions();
-      return;
-    }
-    var pk = e.target.closest('.skill-pick-btn');
-    if (pk) {
-      choices.skillPickSel = pk.getAttribute('data-boost');
-      expandedFor.crew = '[Skill Increase]';
+      choices.inv[kk][id] = (choices.inv[kk][id] || 0) + 1;
       saveChoices();
       renderOptions();
       return;
@@ -1089,12 +1155,19 @@ function skillsOptions() {
       renderOptions();
       return;
     }
+    var head = e.target.closest('.core-sec-head');
+    if (head) {
+      coreSection = parseInt(head.getAttribute('data-sec'), 10) || 0;
+      renderOptions();
+      return;
+    }
     var btn = e.target.closest('.opt');
-    if (!btn) return;
+    if (!btn || btn.classList.contains('locked-opt')) return;
     var id = btn.getAttribute('data-id');
-    var k = steps[step].key;
+    var k = btn.getAttribute('data-okey') || steps[step].key;
     var wasOpen = expandedFor[k] === id;
-    if (k === 'shipClass') choices.shipClass = id;
+    if (isSingle(k)) setPick(k, id);
+    if (k === 'shipClass') revalidateCore();
     if (btn.getAttribute('data-exp')) expandedFor[k] = wasOpen ? null : id;
     saveChoices();
     renderOptions();
@@ -1136,8 +1209,6 @@ function skillsOptions() {
     else if (f.charAt(0) === 'v') toggleIn(filters.vehs, f.slice(2));
     else if (f === 'st') filters.st = !filters.st;
     else if (f === 'ch') filters.ch = !filters.ch;
-    else if (f === 'cbt') filters.cbt = !filters.cbt;
-    else if (f === 'sk') filters.sk = !filters.sk;
     renderOptions();
   });
   document.getElementById('filterBar').addEventListener('input', function (e) {
@@ -1198,13 +1269,11 @@ function skillsOptions() {
       c.shipClass = json.shipClass;
       matched = true;
     }
-    if (json && json.crew) {
-      for (var ci = 0; ci < json.crew.length; ci++) {
-        if (json.crew[ci] && findCrew(json.crew[ci].name)) {
-          var cn = findCrew(json.crew[ci].name).name;
-          c.inv.crew[cn] = (c.inv.crew[cn] || 0) + 1;
-          matched = true;
-        }
+    if (json && json.coreOptions && typeof json.coreOptions === 'object') {
+      for (var oi = 0; oi < CORE_SECTIONS.length; oi++) {
+        var osk = CORE_SECTIONS[oi].key;
+        var got = validCorePick(c.shipClass, osk, json.coreOptions[osk]);
+        if (got) { c.core[osk] = got; matched = true; }
       }
     }
     if (json && json.tech) {
@@ -1264,7 +1333,12 @@ function skillsOptions() {
 
     html += '<div class="exp-pick exp-wide"><div class="opt-title">Hull Class</div><div>' +
       (choices.shipClass ? esc(choices.shipClass) : '<span class="exp-none">Not chosen</span>') + '</div></div>';
-    pickList('Traits / Officers', choices.inv.crew);
+    for (var ci = 0; ci < CORE_SECTIONS.length; ci++) {
+      var sec = CORE_SECTIONS[ci];
+      var pick = corePick(sec.key);
+      html += '<div class="exp-pick exp-wide"><div class="opt-title">' + esc(sec.title) + '</div><div>' +
+        (pick ? esc(pick) : '<span class="exp-none">Not chosen</span>') + '</div></div>';
+    }
     pickList('Technologies', choices.inv.tech);
     pickList('Modules / Deployables', choices.inv.mod);
 
@@ -1281,23 +1355,13 @@ function skillsOptions() {
     document.getElementById('expSummary').innerHTML = html;
   }
 
-  function bumpNum(cur, delta) {
-    var n = parseInt(cur, 10);
-    if (isNaN(n)) n = 0;
-    return String(n + delta);
-  }
-
   function buildSheet() {
     var s = JSON.parse(JSON.stringify(SHEET_DEFAULTS));
     s.shipName = choices.shipName || '';
     s.shipClass = choices.shipClass || 'Unclassified';
-    var preset = choices.shipClass ? CLASS_PRESETS[choices.shipClass] : null;
-    if (preset && preset.stats) {
-      var st = preset.stats || {};
-      if (st.hull) { s.stats.hullCur = bumpNum(s.stats.hullCur, st.hull); s.stats.hullBase = bumpNum(s.stats.hullBase, st.hull); }
-      if (st.shield) { s.stats.shieldCur = bumpNum(s.stats.shieldCur, st.shield); s.stats.shieldBase = bumpNum(s.stats.shieldBase, st.shield); }
-      if (st.speed) { s.stats.speedCur = bumpNum(s.stats.speedCur, st.speed); s.stats.speedBase = bumpNum(s.stats.speedBase, st.speed); }
-      if (st.storage) { s.stats.storageBase = bumpNum(s.stats.storageBase, st.storage); }
+    s.coreOptions = {};
+    for (var ck = 0; ck < CORE_SECTIONS.length; ck++) {
+      s.coreOptions[CORE_SECTIONS[ck].key] = corePick(CORE_SECTIONS[ck].key) || '';
     }
     var skills = {};
     for (var si = 0; si < SKILL_NAMES.length; si++) {
@@ -1308,43 +1372,19 @@ function skillsOptions() {
         penalty: cv.penalty || ''
       };
     }
-    if (preset && preset.skills) {
-      Object.keys(preset.skills).forEach(function (name) {
-        skills[name].points = bumpNum(skills[name].points, preset.skills[name]);
-      });
-    }
-    var invCrew = choices.inv && choices.inv.crew;
-    if (invCrew) {
-      for (var siKey in invCrew) {
-        if (siKey.indexOf('Skill Increase -> ') !== 0 || !(invCrew[siKey] > 0)) continue;
-        var sName = siKey.slice('Skill Increase -> '.length);
-        if (!skills[sName]) continue;
-        var b = parseInt(skills[sName].points, 10);
-        if (isNaN(b)) b = 0;
-        skills[sName].points = String(choices.disableLimits ? (b + 2 * invCrew[siKey]) : Math.min(4, b + 2 * invCrew[siKey]));
-      }
-    }
     s.skills = skills;
 
     s.crew = [];
-    for (var cn in choices.inv.crew) {
-      var cp = findCrew(cn);
-      if (!cp) continue;
-      for (var ck = 0; ck < choices.inv.crew[cn]; ck++) {
-        s.crew.push({
-          name: cp.name,
-          text: cp.text_description || '',
-          combat: cp.combat_only === true,
-          type: cp.type
-        });
-      }
-    }
 
     s.tech = [];
-    for (var tn in choices.inv.tech) {
+    var techCounts = coreTechCounts();
+    for (var itn in choices.inv.tech) {
+      if (choices.inv.tech[itn] > 0) techCounts[itn] = (techCounts[itn] || 0) + choices.inv.tech[itn];
+    }
+    for (var tn in techCounts) {
       var tech = findTech(tn);
       if (!tech) continue;
-      for (var tk = 0; tk < choices.inv.tech[tn]; tk++) {
+      for (var tk = 0; tk < techCounts[tn]; tk++) {
         s.tech.push({
           name: tech.name,
           traits: tech.traits || '',
