@@ -38,7 +38,8 @@
           <button type="button" class="settings-item" id="statsToggleBtn" title="Hide the stats bar">Hide Stats</button>
           <button type="button" class="settings-item" id="menuToggleBtn" title="Hide the top menu bar">Hide Menu</button>
           <button type="button" class="settings-item" id="cardPopToggleBtn" title="Cards pop up on hover. Toggle to only pop them up when clicked.">Hover</button>
-          <button type="button" class="settings-item conn-btn glow" id="connBtn" title="Switch how connected modules join together">◫ Connect: GLOW</button>
+<button type="button" class="settings-item conn-btn glow" id="connBtn" title="Switch how connected modules join together">◫ Connect: GLOW</button>
+          <button type="button" class="settings-item" id="gfxToggleBtn" title="Low graphics: animations and anomaly shading off. Click to toggle.">Graphics: High</button>
         </div>
       </div>
       <div class="settings-submenu-wrap">
@@ -320,9 +321,14 @@ function svgEl(tag, attrs) {
   return s;
 }
 
+/* Low-graphics mode: skips SMIL rotates and anomaly shading; the CSS side kills
+   every CSS animation/transition via the html.gfx-low rule. */
+var GFX_LOW = false;
+
 /* SMIL rotates/scales about the element's local origin; animated groups live
    inside a translate(36 36), so their origin IS the module centre. */
 function addRotate(node, dur, reverse) {
+  if (GFX_LOW) return;
   node.appendChild(svgEl('animateTransform', {
     attributeName: 'transform', type: 'rotate',
     from: reverse ? '360' : '0', to: reverse ? '0' : '360',
@@ -1008,7 +1014,7 @@ function buildPieceNode(p) {
     var def = ANOMALIES[key];
     sv.style.setProperty('--astro-start', (key === 'asteroid' ? Math.floor(seed * 360) : 0) + 'deg');
     sv.style.setProperty('--astro-speed', ((def.spin ? def.spin : (key === 'asteroid' ? 28 + seed * 42 : 48))) + 's');
-    if (def.shade !== false) d.appendChild(buildShadeNode(def));
+    if (def.shade !== false && !GFX_LOW) d.appendChild(buildShadeNode(def));
   }
   var mc = ['mc-tl', 'mc-tr', 'mc-bl', 'mc-br'];
   for (var m = 0; m < mc.length; m++) d.appendChild(el('span', 'move-corner ' + mc[m]));
@@ -1515,6 +1521,7 @@ boardEl.addEventListener('mousedown', function (e) {
     if (c.x >= 0 && c.y >= 0 && c.x < state.grid.size && c.y < state.grid.size) {
       placeLocalPing(c.x, c.y);
       queue('pg:' + actorColor, { action: 'ping', x: c.x, y: c.y, color: actorColor });
+      saveChanges();              // pings are broadcast immediately (SSE pushes state to everyone)
     }
     return;
   }
@@ -2248,10 +2255,16 @@ function initSse() {
   catch (e) { startSlowPoll(); return; }
   sseEl.onopen = function () {
     stopSlowPoll();
-    scheduleRefresh();
   };
   sseEl.onmessage = function (ev) {
-    if (ev.data === 'changed') scheduleRefresh();
+    var d;
+    try { d = JSON.parse(ev.data); } catch (e) { return; }
+    if (!d || typeof d.rev !== 'number') return;
+    if (pending.order.length > 0) return;   // never clobber unsaved edits
+    if (d.rev <= state.rev) return;         // own echo / stale — already applied it
+    synced = true;
+    applyServer(d);
+    setBadge();
   };
   sseEl.onerror = function () {
     if (sseEl && sseEl.readyState === EventSource.CLOSED) startSlowPoll();
@@ -2300,6 +2313,7 @@ function saveViewState() {
       menu: topbarEl && topbarEl.classList.contains('hidden-menu') ? 1 : 0,
       vertical: statsBar && statsBar.classList.contains('vertical-stats') ? 1 : 0,
       cardPop: cardPopMode || 'hover',
+      gfx: GFX_LOW ? 1 : 0,
       width: (playerPanel && playerPanel.style.width) || '',
       view: { x: view.x, y: view.y, zoom: view.zoom }
     }));
@@ -2689,6 +2703,25 @@ function toggleCardPop() {
 }
 applyCardPopToggle();
 cardPopToggleBtn.addEventListener('click', toggleCardPop);
+
+var gfxToggleBtn = document.getElementById('gfxToggleBtn');
+function setGfxLow(low) {
+  GFX_LOW = !!low;
+  document.documentElement.classList.toggle('gfx-low', GFX_LOW);
+  gfxToggleBtn.textContent = GFX_LOW ? 'Graphics: Low' : 'Graphics: High';
+  gfxToggleBtn.title = GFX_LOW
+    ? 'Low graphics: animations and anomaly shading off. Click for high.'
+    : 'High graphics: animations and anomaly shading on. Click for low.';
+}
+function toggleGfx() {
+  setGfxLow(!GFX_LOW);
+  saveViewState();
+  closeSettingsMenu();
+  renderPieces();
+  renderChips();
+}
+setGfxLow(!!(loadViewState().gfx));
+gfxToggleBtn.addEventListener('click', toggleGfx);
 
 /* restore persisted view preferences (survives hard refresh via localStorage) */
 var restoredBoardView = false;
