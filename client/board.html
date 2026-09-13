@@ -1515,6 +1515,7 @@ boardEl.addEventListener('mousedown', function (e) {
     if (c.x >= 0 && c.y >= 0 && c.x < state.grid.size && c.y < state.grid.size) {
       placeLocalPing(c.x, c.y);
       queue('pg:' + actorColor, { action: 'ping', x: c.x, y: c.y, color: actorColor });
+      saveChanges();              // pings are broadcast immediately (SSE pushes state to everyone)
     }
     return;
   }
@@ -2248,10 +2249,16 @@ function initSse() {
   catch (e) { startSlowPoll(); return; }
   sseEl.onopen = function () {
     stopSlowPoll();
-    scheduleRefresh();
   };
   sseEl.onmessage = function (ev) {
-    if (ev.data === 'changed') scheduleRefresh();
+    var d;
+    try { d = JSON.parse(ev.data); } catch (e) { return; }
+    if (!d || typeof d.rev !== 'number') return;
+    if (pending.order.length > 0) return;   // never clobber unsaved edits
+    if (d.rev <= state.rev) return;         // own echo / stale — already applied it
+    synced = true;
+    applyServer(d);
+    setBadge();
   };
   sseEl.onerror = function () {
     if (sseEl && sseEl.readyState === EventSource.CLOSED) startSlowPoll();
