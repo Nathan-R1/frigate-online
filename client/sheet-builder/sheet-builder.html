@@ -78,6 +78,12 @@
   .core-sec-head .cs-pick.none { color: var(--ink-mid); }
   .core-sec.open > .core-sec-head { border-bottom: 1px solid var(--line); }
   .core-sec-body { padding: 14px; }
+  .opt.rar-uncommon:not(.sel) { border-color: var(--icon-hull); background: rgba(127,216,138,.07); }
+  .opt.rar-uncommon:not(.sel):hover { border-color: var(--icon-hull); }
+  .opt.rar-uncommon .opt-title { color: var(--icon-hull); }
+  .opt.rar-rare:not(.sel) { border-color: var(--amber); background: rgba(232,169,74,.08); }
+  .opt.rar-rare:not(.sel):hover { border-color: var(--amber); }
+  .opt.rar-rare .opt-title { color: var(--amber); }
   .opt.classopt:not(.sel) { border-color: var(--icon-charged); background: rgba(156,63,102,.08); }
   .opt.classopt:not(.sel):hover { border-color: var(--icon-charged); }
   .opt.classopt .opt-title { color: var(--icon-charged); }
@@ -422,12 +428,15 @@
   };
 
   var GENERATOR_OPTIONS = [
-    { name: 'Standard', desc: 'Power extra Techs over time to keep your deck moving.', grants: [['Boost', 1]] }
+    { name: 'Standard', desc: 'Power extra Techs over time to keep your deck moving.', grants: [['Boost', 1], ['Shield Generator', 1]] }
   ];
   /* only some hulls are offered a second generator box */
+  var CITADEL_GEN = { name: 'Citadel', desc: 'A double size core which can power more weapons and cover more space on the battlefield.', grants: [['Citadel', 1], ['Shield Generator', 1]] };
+  var FLEXIBLE_GEN = { name: 'Flexible', desc: 'Power larger decks.', grants: [['Boost', 1], ['Dynamo', 1]] };
   var CLASS_GENERATORS = {
-    'Controller': { name: 'Flexible', desc: 'Power larger decks.', grants: [['Dynamo', 1]] },
-    'Striker': { name: 'Flexible', desc: 'Power larger decks.', grants: [['Dynamo', 1]] }
+    'Controller': FLEXIBLE_GEN,
+    'Striker': FLEXIBLE_GEN,
+    'Tank': CITADEL_GEN
   };
 
   /* a section's boxes are its own options plus, where offered, one granted by the hull class */
@@ -663,11 +672,26 @@
   function deckPointsLeft() {
     return choices.disableLimits ? DECK_POINTS : DECK_POINTS - drawnCount();
   }
+  /* a draw offers one classless card plus one card per hull tick, from that hull's own pool */
   function rollDraw() {
-    var pool = TECH_PRESETS.slice();
     var out = [];
-    for (var i = 0; i < 3 && pool.length; i++) {
-      out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].name);
+    var used = {};
+    function take(cls) {
+      var pool = [];
+      for (var i = 0; i < TECH_PRESETS.length; i++) {
+        var t = TECH_PRESETS[i];
+        if (techClasses(t).indexOf(cls) !== -1 && !used[t.name]) pool.push(t.name);
+      }
+      if (!pool.length) return;
+      var name = pool[Math.floor(Math.random() * pool.length)];
+      used[name] = true;
+      out.push(name);
+    }
+    take('none');
+    var hulls = Object.keys(CLASS_PRESETS);
+    for (var h = 0; h < hulls.length; h++) {
+      var n = choices.hulls[hulls[h]] || 0;
+      for (var j = 0; j < n; j++) take(hulls[h].toLowerCase());
     }
     return out;
   }
@@ -717,9 +741,44 @@
   }
 
   /* ===== find helpers ===== */
+  /* hullClass is one class or a list of them; always read it as a list */
+  function techClasses(t) {
+    var hc = (t && t.hullClass) || 'none';
+    return (Object.prototype.toString.call(hc) === '[object Array]') ? hc : [hc];
+  }
   function findTech(name) {
     for (var i = 0; i < TECH_PRESETS.length; i++) if (TECH_PRESETS[i].name === name) return TECH_PRESETS[i];
     return null;
+  }
+  /* "Create Module Cannon." / "Create deployable Fusion Mine" -> the preset it names.
+     matched by longest preset name so "Create Module P.D. Trash." finds P.D., not nothing. */
+  function modsNamedIn(text, found) {
+    var re = /create\s+(?:module|deployable)\s+/gi;
+    var m;
+    while ((m = re.exec(text)) !== null) {
+      var rest = text.slice(re.lastIndex).toLowerCase();
+      var best = null;
+      for (var i = 0; i < MOD_PRESETS.length; i++) {
+        var nm = MOD_PRESETS[i].name;
+        if (rest.indexOf(nm.toLowerCase()) === 0 && (!best || nm.length > best.length)) best = nm;
+      }
+      if (best) found[best] = true;
+    }
+  }
+  /* every module or deployable the deck can create, one of each, refreshed on entering the step */
+  function syncModsFromDeck() {
+    var deck = deckCounts();
+    var found = {};
+    for (var name in deck) {
+      var t = findTech(name);
+      if (!t) continue;
+      modsNamedIn([t.onbuild || '', t.passive || '', t.onactivate || ''].join('\n'), found);
+    }
+    var added = false;
+    for (var mn in found) {
+      if (!(choices.inv.mod[mn] > 0)) { choices.inv.mod[mn] = 1; added = true; }
+    }
+    if (added) saveChoices();
   }
   function findMod(name) {
     for (var i = 0; i < MOD_PRESETS.length; i++) if (MOD_PRESETS[i].name === name) return MOD_PRESETS[i];
@@ -781,7 +840,8 @@
     return html;
   }
   function optionHtml(key, id, title, body, meta, expand, leadIcon, extraCls, titleTag, afterCard) {
-    var sel = isSingle(key) ? pickOf(key) === id : countFor(key, id) > 0;
+    /* the Current Deck is a read-out of what you own, not a picker: nothing in it is selected */
+    var sel = (key === 'tech') ? false : (isSingle(key) ? pickOf(key) === id : countFor(key, id) > 0);
     var isExp = !!(expand && expand.length);
     var open = isExp && expandedFor[key] === id;
     return '<div class="opt-wrap">' +
@@ -807,7 +867,7 @@
   // renders tech traits: module/deployable become tags, leftover trait text (e.g. "active 1") stays
   function traitHtml(traits) {
     var rest = String(traits || '').replace('[Module]', '').replace('[Deployable]', '').trim();
-    if (!rest || rest.indexOf('Class Tech') !== -1) return '';
+    if (!rest) return '';
     return '<span>' + esc(rest) + '</span>';
   }
 
@@ -905,14 +965,19 @@
     var st = parseInt(t.storage, 10);
     var hasCh = t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0;
     var meta = [{ text: typeIcon(t.tt) + ' ' + cap(t.tt), cls: 't-cyan' }];
-    if (metaTraits.indexOf('Class Tech') !== -1) meta.push({ text: 'Class Tech', cls: 't-class-tech' });
+    var classes = techClasses(t);
+    for (var ci = 0; ci < classes.length; ci++) {
+      if (classes[ci] !== 'none') meta.push({ text: cap(classes[ci]), cls: 't-class-tech' });
+    }
     if (isMod) meta.push({ text: MODULE_ICON, cls: 't-cyan' });
     if (isDep) meta.push({ text: DEPLOYABLE_ICON, cls: 't-amber' });
     if (!isNaN(st) && st > 0) meta.push({ text: STORAGE_ICON + t.storage, cls: '' });
     if (hasCh) meta.push({ text: CHARGES_ICON + t.charges, cls: '' });
-    var expand = [{ tag: 'Tech ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
+    var expand = [{ tag: typeIcon(t.tt) + ' ' + cap(t.tt), name: t.name, desc: techDesc(t) }];
     var countTag = count > 1 ? '<span class="opt-count">×' + count + '</span>' : '';
-    return optionHtml(key, t.name, t.name, traitHtml(t.traits), meta, expand, null, '', countTag);
+    var rarity = t.rarity || 'common';
+    var rarCls = rarity === 'common' ? '' : 'rar-' + rarity;
+    return optionHtml(key, t.name, t.name, traitHtml(t.traits), meta, expand, null, rarCls, countTag);
   }
   function techPassesFilters(t) {
     var metaTraits = t.traits || '';
@@ -1265,6 +1330,7 @@ function skillsOptions() {
   function goToWin(i, sec) {
     drawOffer = null;
     step = i;
+    if (steps[i].key === 'mod') syncModsFromDeck();
     if (steps[i].key === 'core') coreSection = (sec === undefined) ? firstUnansweredSection() : sec;
     resetFilters();
     show('win');

@@ -6,7 +6,6 @@ var CREW_PRESETS = [
      {name:'Co-leadership', type:'science', traits:'Leadership', text_description:'At the start of your turn if you succeed a DC 12 Leadership Check, draw 1 extra card.', combat_only:true},
     {name:'Conservative', type:'defense', traits:'', text_description:'At the start of your turn, if you did not activate any “Offense” technologies, modules or deployables last round, gain 2 shields.', combat_only:true},
      {name:'Hoarding', type:'science', traits:'', text_description:'+4 Storage', combat_only:false, skill_increase:1},
-     {name:'Heat Sinks', type:'movement', traits:'Heat', text_description:'When you roll an attack, add one Heat here or to any ability that can take Heat. When you Move, discard any Heat here, gain 1 Move per 2 Heat discarded.', combat_only:true},
     {name:'Jamming', type:'science', traits:'Deployables', text_description:'When you Create Deployables, you may put them aside instead of on the board. They cannot activate or be targetted and do not occupy a particular space. At the start of your next turn, place them on the board following their normal Creation rules.', combat_only:true},
     {name:'Junk Hater', type:'science', traits:'Asteroid', text_description:'If you hit an asteroid and deal 2+ dmg it is destroyed.', combat_only:true},
     {name:'Crew Munitions Assignment', type:'offense', traits:'Charge', text_description:'When you add 1 or more charges to a Technology, Module or Deployable you may add 1 additional. Take 1 penalty to any Crew Skill.', combat_only:true},
