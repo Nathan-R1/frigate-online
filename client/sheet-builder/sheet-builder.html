@@ -188,6 +188,19 @@
   .exp-field input:focus { outline: none; border-color: var(--cyan); }
 
   /* skills window */
+  .dl-row {
+    display: flex; align-items: center; gap: 9px; margin-top: 16px; cursor: pointer; user-select: none;
+    font-family: var(--disp); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-mid);
+  }
+  .dl-row input { width: 16px; height: 16px; accent-color: var(--cyan); cursor: pointer; }
+  .dl-row:hover { color: var(--cyan); }
+  .sk .sk-head.sk-warn .sk-name,
+  .sk .sk-head.sk-warn .sk-num { color: var(--red); }
+  .sk-warn-desc {
+    margin-top: 8px; padding: 8px 10px;
+    background: var(--panel); border: 1px solid var(--red-dim); border-left: 3px solid var(--red);
+    border-radius: 6px; color: var(--red); font-size: 12px; line-height: 1.4;
+  }
   .sk-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: 12px; margin-top: 4px;
@@ -369,7 +382,7 @@
     return out;
   }
 
-  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, inv: emptyInv() };
+  var choices = { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, disableLimits: false, inv: emptyInv() };
   var step = 0;
   var screen = 'landing'; // landing | win | exp
   var expandedFor = { shipClass: null, crew: null, tech: null, mod: null };
@@ -379,7 +392,7 @@
 
   /* ===== persistence ===== */
   function emptyInv() { return { crew: {}, tech: {}, mod: {} }; }
-  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, inv: emptyInv() }; }
+  function emptyChoices() { return { shipClass: null, crew: null, tech: null, mod: null, skills: defaultSkills(), shipName: '', skillPickSel: null, disableLimits: false, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -392,6 +405,7 @@
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
         c.skillPickSel = s.skillPickSel || null;
+        c.disableLimits = !!s.disableLimits;
         if (s.inv && typeof s.inv === 'object') {
           c.inv = { crew: {}, tech: {}, mod: {} };
           ['crew', 'tech', 'mod'].forEach(function (ik) {
@@ -500,6 +514,7 @@
     var isSI = key === 'crew' && id === '[Skill Increase]';
     var invName = id;
     var canAdd = true;
+    if (key === 'crew' && limitsActive() && crewCount() >= 4) canAdd = false;
     if (isSI) {
       if (!choices.skillPickSel) canAdd = false;
       else invName = 'Skill Increase -> ' + choices.skillPickSel;
@@ -602,6 +617,7 @@
       }
       out.push(optionHtml('shipClass', k, k, parts.join(' · ') || 'No stat bonuses.', meta, expand));
     }
+    out.push('<label class="dl-row"><input type="checkbox" id="limitsBox"' + (choices.disableLimits ? ' checked' : '') + '> Disable limits</label>');
     return out.join('');
   }
 
@@ -677,6 +693,18 @@
     return out.join('');
   }
 
+  function crewCount() {
+    var count = 0;
+    if (choices.crew && choices.crew !== '[Skill Increase]') count = 1;
+    var inv = choices.inv && choices.inv.crew;
+    if (inv) {
+      for (var k in inv) if (inv[k] > 0) count += inv[k];
+    }
+    return count;
+  }
+  function limitsActive() {
+    return !choices.disableLimits;
+  }
   function skillBoosts(name) {
     var total = 0;
     var inv = choices.inv && choices.inv.crew;
@@ -693,7 +721,7 @@
     var base = parseInt(choices.skills[name].points, 10);
     if (isNaN(base)) base = 0;
     var boost = skillBoosts(name) * 2;
-    if (boost) return Math.min(4, base + boost);
+    if (boost) return choices.disableLimits ? (base + boost) : Math.min(4, base + boost);
     return base;
   }
   function skillsTotal() {
@@ -716,13 +744,14 @@
       if (isNaN(base)) base = 0;
       var eff = skillEffective(n);
       var boosted = eff !== base;
-      var canPlus = remaining > 0 && base < 4;
+      var canPlus = remaining > 0 && (choices.disableLimits || base < 4);
       var canMinus = base > -1;
       var desc = SKILL_DESC[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
+      var leadWarn = n === 'Leadership' && eff < crewCount();
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
-        '<div class="sk-head">' +
+        '<div class="sk-head' + (leadWarn ? ' sk-warn' : '') + '">' +
         '<span class="sk-name">' + esc(n) + '</span>' +
         '<span class="sk-num' + (boosted ? ' boosted' : '') + '">' + esc(String(eff)) + '</span>' +
         '<span class="sk-btns">' +
@@ -736,6 +765,7 @@
         (desc ? '<button type="button" class="skinfo' + (infoOpen ? ' on' : '') + '" title="' + esc(desc) + '"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg></button>' : '') +
         '</div>' +
         (infoOpen ? '<span class="sk-desc">' + esc(desc) + '</span>' : '') +
+        (leadWarn ? '<span class="sk-warn-desc">⚠ You have too many Traits and Officers, increase Leadership to match.</span>' : '') +
         '</div>'
       );
     }
@@ -850,8 +880,17 @@
     html += '<button type="button" class="pstep ' + (screen === 'exp' ? 'cur' : (firstUnanswered() === steps.length ? 'done' : '')) + '" onclick="goStep(' + steps.length + ')">' + (steps.length + 1) + '. Export</button>';
     el.innerHTML = html;
   }
+  function enterExport() {
+    step = steps.length;
+    show('exp');
+    renderProgressDots();
+    var ib = document.getElementById('invBar');
+    var fb = document.getElementById('filterBar');
+    if (ib) { ib.classList.add('builder-hidden'); ib.innerHTML = ''; }
+    if (fb) { fb.classList.add('builder-hidden'); fb.innerHTML = ''; }
+  }
   function goStep(i) {
-    if (i === steps.length) { step = steps.length; show('exp'); renderProgressDots(); return; }
+    if (i === steps.length) { enterExport(); return; }
     goToWin(i);
   }
   function esc(s) {
@@ -873,7 +912,7 @@
   }
   function onContinue() {
     if (step < steps.length - 1) { goToWin(step + 1); }
-    else { step = steps.length; show('exp'); renderProgressDots(); }
+    else { enterExport(); }
   }
   function onBack() {
     if (step > 0) { goToWin(step - 1); }
@@ -882,6 +921,14 @@
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
+    var dl = e.target.closest('.dl-row');
+    if (dl) {
+      var box = document.getElementById('limitsBox');
+      choices.disableLimits = !!(box && box.checked);
+      saveChoices();
+      renderOptions();
+      return;
+    }
     var addBtn = e.target.closest('.exp-add');
     if (addBtn) {
       var kk = addBtn.getAttribute('data-add');
@@ -889,6 +936,7 @@
       var optEl = wrap ? wrap.querySelector('.opt') : null;
       var id = optEl ? optEl.getAttribute('data-id') : null;
       if (!kk || !id) return;
+      if (kk === 'crew' && limitsActive() && crewCount() >= 4) return;
       var itemName = id;
       if (kk === 'crew' && id === '[Skill Increase]') {
         if (!choices.skillPickSel) return;
@@ -926,7 +974,7 @@
       var cur = parseInt(choices.skills[name].points, 10);
       if (isNaN(cur)) cur = 0;
       var d = parseInt(sbtn.getAttribute('data-d'), 10) || 0;
-      var nv = Math.max(-1, Math.min(4, cur + d));
+      var nv = Math.max(-1, Math.min(choices.disableLimits ? 13 : 4, cur + d));
       choices.skills[name].points = String(nv);
       saveChoices();
       renderOptions();
@@ -959,6 +1007,7 @@
   document.getElementById('expBackBtn').addEventListener('click', onBack);
 
   document.getElementById('invBar').addEventListener('click', function (e) {
+    if (screen !== 'win') return;
     var chip = e.target.closest('.invchip');
     if (!chip) return;
     var ik = chip.getAttribute('data-rk');
@@ -1003,7 +1052,7 @@
   }
   function resumeRun() {
     var next = firstUnanswered();
-    if (next >= steps.length) { step = steps.length; show('exp'); renderProgressDots(); return; }
+    if (next >= steps.length) { enterExport(); return; }
     step = next;
     goToWin(step);
   }
@@ -1151,7 +1200,7 @@
         if (!skills[sName]) continue;
         var b = parseInt(skills[sName].points, 10);
         if (isNaN(b)) b = 0;
-        skills[sName].points = String(Math.min(4, b + 2 * invCrew[siKey]));
+        skills[sName].points = String(choices.disableLimits ? (b + 2 * invCrew[siKey]) : Math.min(4, b + 2 * invCrew[siKey]));
       }
     }
     s.skills = skills;
