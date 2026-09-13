@@ -1176,8 +1176,12 @@ function skillsOptions() {
       reader.onload = function (e) {
         try {
           var json = JSON.parse(e.target.result);
-          applyLoadedSheet(json);
-          startNew(false);
+          var loaded = applyLoadedSheet(json);
+          if (!loaded) {
+            alert('Load failed: no matching cards found in that sheet file.');
+            return;
+          }
+          resumeRun();
         } catch (err) {
           alert('Load failed: invalid JSON file.');
         }
@@ -1188,24 +1192,37 @@ function skillsOptions() {
   }
   function applyLoadedSheet(json) {
     var c = emptyChoices();
+    var matched = false;
     c.shipName = (json && json.shipName) || '';
-    if (json && json.shipClass && CLASS_PRESETS[json.shipClass]) c.shipClass = json.shipClass;
-    if (json && json.crew && json.crew[0] && findCrew(json.crew[0].name)) {
-      c.crew = json.crew[0].name;
+    if (json && json.shipClass && CLASS_PRESETS[json.shipClass]) {
+      c.shipClass = json.shipClass;
+      matched = true;
+    }
+    if (json && json.crew) {
       for (var ci = 0; ci < json.crew.length; ci++) {
-        if (findCrew(json.crew[ci].name)) c.inv.crew[json.crew[ci].name] = (c.inv.crew[json.crew[ci].name] || 0) + 1;
+        if (json.crew[ci] && findCrew(json.crew[ci].name)) {
+          var cn = findCrew(json.crew[ci].name).name;
+          c.inv.crew[cn] = (c.inv.crew[cn] || 0) + 1;
+          matched = true;
+        }
       }
     }
-    if (json && json.tech && json.tech[0] && findTech(json.tech[0].name)) {
-      c.tech = json.tech[0].name;
+    if (json && json.tech) {
       for (var ti = 0; ti < json.tech.length; ti++) {
-        if (findTech(json.tech[ti].name)) c.inv.tech[json.tech[ti].name] = (c.inv.tech[json.tech[ti].name] || 0) + 1;
+        if (json.tech[ti] && findTech(json.tech[ti].name)) {
+          var tn = findTech(json.tech[ti].name).name;
+          c.inv.tech[tn] = (c.inv.tech[tn] || 0) + 1;
+          matched = true;
+        }
       }
     }
-    if (json && json.mods && json.mods[0] && findMod(json.mods[0].name)) {
-      c.mod = json.mods[0].name;
+    if (json && json.mods) {
       for (var mi = 0; mi < json.mods.length; mi++) {
-        if (findMod(json.mods[mi].name)) c.inv.mod[json.mods[mi].name] = (c.inv.mod[json.mods[mi].name] || 0) + 1;
+        if (json.mods[mi] && findMod(json.mods[mi].name)) {
+          var mn = findMod(json.mods[mi].name).name;
+          c.inv.mod[mn] = (c.inv.mod[mn] || 0) + 1;
+          matched = true;
+        }
       }
     }
     if (json && json.skills && typeof json.skills === 'object') {
@@ -1220,6 +1237,7 @@ function skillsOptions() {
     }
     choices = c;
     saveChoices();
+    return matched;
   }
 
   /* ===== export ===== */
