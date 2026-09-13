@@ -88,6 +88,10 @@
   .opt.classopt:not(.sel):hover { border-color: var(--icon-charged); }
   .opt.classopt .opt-title { color: var(--icon-charged); }
   .opt.locked-opt { opacity: .55; cursor: default; }
+  .rchip { font-size: 11px; line-height: 1; }
+  .rchip-common { color: var(--ink-mid); }
+  .rchip-uncommon { color: var(--icon-hull); }
+  .rchip-rare { color: var(--amber); }
   .grant-line { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; color: var(--ink-mid); }
   .sk-top { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-bottom: 6px; }
   .recbtn {
@@ -156,6 +160,12 @@
   .draw-sec { margin-top: 14px; }
   .draw-sec .core-sec-head { cursor: default; }
   .draw-sec .core-sec-head:hover { color: var(--ink); }
+  .rerollbtn {
+    width: 100%; margin-top: 12px; padding: 11px 16px; cursor: pointer; border-radius: 6px;
+    background: rgba(232,169,74,.1); border: 1px solid var(--amber); color: var(--amber);
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .rerollbtn:hover { background: var(--amber); color: var(--ink-strong); }
   .draw-close { margin-left: auto; background: transparent; border: 0; color: var(--ink-mid); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
   .draw-close:hover { color: var(--amber); }
   .deck-count { color: var(--amber); font-family: var(--mono); font-size: 11px; }
@@ -500,8 +510,8 @@
   var drawOffer = null; // the 3 tech names currently on offer, or null when no draw is open
   var screen = 'landing'; // landing | win | exp
   var expandedFor = {};
-  var filters = { q: '', types: [], vehs: [], st: false, ch: false };
-  function resetFilters() { filters = { q: '', types: [], vehs: [], st: false, ch: false }; }
+  var filters = { q: '', types: [], vehs: [], rars: [], st: false, ch: false };
+  function resetFilters() { filters = { q: '', types: [], vehs: [], rars: [], st: false, ch: false }; }
   var skillInfoOpen = null;
 
   /* ===== persistence ===== */
@@ -672,16 +682,37 @@
   function deckPointsLeft() {
     return choices.disableLimits ? DECK_POINTS : DECK_POINTS - drawnCount();
   }
+  /* each slot rolls its rarity: 1/2 common, 1/4 uncommon, 1/8 rare, 1/8 a free reroll */
+  var RARITY_ORDER = ['common', 'uncommon', 'rare'];
+  function rollRarity() {
+    var r = Math.random();
+    if (r < 0.5) return 'common';
+    if (r < 0.75) return 'uncommon';
+    if (r < 0.875) return 'rare';
+    return 'reroll';
+  }
   /* a draw offers one classless card plus one card per hull tick, from that hull's own pool */
   function rollDraw() {
     var out = [];
     var used = {};
-    function take(cls) {
+    var reroll = false;
+    function poolOf(cls, rarity) {
       var pool = [];
       for (var i = 0; i < TECH_PRESETS.length; i++) {
         var t = TECH_PRESETS[i];
-        if (techClasses(t).indexOf(cls) !== -1 && !used[t.name]) pool.push(t.name);
+        if (used[t.name]) continue;
+        if (techClasses(t).indexOf(cls) === -1) continue;
+        if ((t.rarity || 'common') !== rarity) continue;
+        pool.push(t.name);
       }
+      return pool;
+    }
+    function take(cls) {
+      var want = rollRarity();
+      if (want === 'reroll') { reroll = true; return; }
+      var pool = poolOf(cls, want);
+      /* that class may be out of cards at the rolled rarity; slide to another rather than drop the slot */
+      for (var i = 0; !pool.length && i < RARITY_ORDER.length; i++) pool = poolOf(cls, RARITY_ORDER[i]);
       if (!pool.length) return;
       var name = pool[Math.floor(Math.random() * pool.length)];
       used[name] = true;
@@ -693,7 +724,7 @@
       var n = choices.hulls[hulls[h]] || 0;
       for (var j = 0; j < n; j++) take(hulls[h].toLowerCase());
     }
-    return out;
+    return { names: out, reroll: reroll };
   }
 
   /* techs handed out by the chosen core options, as name -> count */
@@ -989,6 +1020,7 @@
     var hasCh = t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0;
     if (filters.st && !(st > 0)) return false;
     if (filters.ch && !hasCh) return false;
+    if (!filterRarity(t.rarity)) return false;
     return true;
   }
   function techOptions() {
@@ -1205,6 +1237,9 @@ function skillsOptions() {
     if (!filters.vehs.length) return true;
     return !!key && filters.vehs.indexOf(key) !== -1;
   }
+  function filterRarity(key) {
+    return !filters.rars.length || filters.rars.indexOf(key || 'common') !== -1;
+  }
   function toggleIn(arr, v) {
     var i = arr.indexOf(v);
     if (i === -1) arr.push(v); else arr.splice(i, 1);
@@ -1212,11 +1247,13 @@ function skillsOptions() {
   function drawSectionHtml() {
     if (!drawOffer) return '';
     var body = '';
-    for (var i = 0; i < drawOffer.length; i++) body += techCardHtml('draw', drawOffer[i], 0);
+    for (var i = 0; i < drawOffer.names.length; i++) body += techCardHtml('draw', drawOffer.names[i], 0);
+    var reroll = drawOffer.reroll
+      ? '<button type="button" class="rerollbtn">↻ Reroll for new options</button>' : '';
     return '<div class="core-sec open draw-sec">' +
       '<div class="core-sec-head"><span class="cs-num">✦</span><span>Choose a card</span>' +
       '<button type="button" class="draw-close" title="Cancel this draw">✕</button></div>' +
-      '<div class="core-sec-body"><div class="opt-grid">' + body + '</div></div></div>';
+      '<div class="core-sec-body"><div class="opt-grid">' + body + '</div>' + reroll + '</div></div>';
   }
   function renderDeckBar(invEl) {
     var left = deckPointsLeft();
@@ -1254,6 +1291,33 @@ function skillsOptions() {
     }
     invEl.innerHTML = html;
   }
+  /* which chips could ever match something on this step: a chip that can return
+     nothing is hidden, unless it is currently switched on */
+  function availableFacets(k) {
+    var f = { types: {}, vehs: {}, rars: {}, st: false, ch: false };
+    function noteTech(t) {
+      f.types[t.tt] = true;
+      f.rars[t.rarity || 'common'] = true;
+      var tr = t.traits || '';
+      if (tr.indexOf('[Module]') !== -1) f.vehs.module = true;
+      if (tr.indexOf('[Deployable]') !== -1) f.vehs.deployable = true;
+      if (parseInt(t.storage, 10) > 0) f.st = true;
+      if (t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0) f.ch = true;
+    }
+    if (k === 'tech') {
+      var deck = deckCounts();
+      for (var n in deck) {
+        var t = findTech(n);
+        if (t) noteTech(t);
+      }
+    } else if (k === 'mod') {
+      for (var i = 0; i < MOD_PRESETS.length; i++) {
+        f.types[MOD_PRESETS[i].tt] = true;
+        f.vehs[MOD_PRESETS[i].type] = true;
+      }
+    }
+    return f;
+  }
   function filterChip(iconHtml, fKey, label, on) {
     return '<button type="button" class="ffilter' + (on ? ' on' : '') + '" data-f="' + fKey + '" title="' + esc(label) + '">' + iconHtml + '</button>';
   }
@@ -1266,21 +1330,37 @@ function skillsOptions() {
       return;
     }
     bar.classList.remove('builder-hidden');
+    var f = availableFacets(k);
     var html = (k === 'tech') ? '<div class="sub-head">Current Deck</div>' : '';
-    html += '<div class="ff-row">';
+    var row = '';
     var FE = [['offense', '⚔'], ['defense', '🛡'], ['movement', '➤'], ['science', '⚛︎']];
     for (var i = 0; i < FE.length; i++) {
-      html += filterChip(FE[i][1], 't:' + FE[i][0], cap(FE[i][0]) + ' type', filters.types.indexOf(FE[i][0]) !== -1);
+      var on = filters.types.indexOf(FE[i][0]) !== -1;
+      if (f.types[FE[i][0]] || on) row += filterChip(FE[i][1], 't:' + FE[i][0], cap(FE[i][0]) + ' type', on);
     }
-    html += '<span class="ff-div"></span>';
-    html += filterChip(MODULE_ICON, 'v:module', 'Modules', filters.vehs.indexOf('module') !== -1);
-    html += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', filters.vehs.indexOf('deployable') !== -1);
+    var veh = '';
+    var vOn = filters.vehs.indexOf('module') !== -1;
+    if (f.vehs.module || vOn) veh += filterChip(MODULE_ICON, 'v:module', 'Modules', vOn);
+    var dOn = filters.vehs.indexOf('deployable') !== -1;
+    if (f.vehs.deployable || dOn) veh += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', dOn);
+    if (veh) row += '<span class="ff-div"></span>' + veh;
     if (k === 'tech') {
-      html += '<span class="ff-div"></span>';
-      html += filterChip(STORAGE_ICON, 'st', 'Has storage cost', filters.st);
-      html += filterChip(CHARGES_ICON, 'ch', 'Has charges', filters.ch);
+      var RA = [['common', '●'], ['uncommon', '◆'], ['rare', '★']];
+      var rars = '';
+      for (var r = 0; r < RA.length; r++) {
+        var rOn = filters.rars.indexOf(RA[r][0]) !== -1;
+        if (f.rars[RA[r][0]] || rOn) {
+          rars += filterChip('<span class="rchip rchip-' + RA[r][0] + '">' + RA[r][1] + '</span>',
+            'r:' + RA[r][0], cap(RA[r][0]), rOn);
+        }
+      }
+      if (rars) row += '<span class="ff-div"></span>' + rars;
+      var extras = '';
+      if (f.st || filters.st) extras += filterChip(STORAGE_ICON, 'st', 'Has storage cost', filters.st);
+      if (f.ch || filters.ch) extras += filterChip(CHARGES_ICON, 'ch', 'Has charges', filters.ch);
+      if (extras) row += '<span class="ff-div"></span>' + extras;
     }
-    html += '</div>';
+    if (row) html += '<div class="ff-row">' + row + '</div>';
     html += '<input type="text" class="fsearch" value="' + esc(filters.q) + '" placeholder="Filter by name…">';
     bar.innerHTML = html;
   }
@@ -1466,6 +1546,12 @@ function skillsOptions() {
       if (deckPointsLeft() > 0) { drawOffer = rollDraw(); renderOptions(); }
       return;
     }
+    if (e.target.closest('.rerollbtn')) {
+      drawOffer = rollDraw();
+      expandedFor.draw = null;
+      renderOptions();
+      return;
+    }
     if (e.target.closest('.draw-close')) {
       drawOffer = null;
       renderOptions();
@@ -1509,6 +1595,7 @@ function skillsOptions() {
     var f = b.getAttribute('data-f');
     if (f.charAt(0) === 't') toggleIn(filters.types, f.slice(2));
     else if (f.charAt(0) === 'v') toggleIn(filters.vehs, f.slice(2));
+    else if (f.charAt(0) === 'r') toggleIn(filters.rars, f.slice(2));
     else if (f === 'st') filters.st = !filters.st;
     else if (f === 'ch') filters.ch = !filters.ch;
     renderOptions();

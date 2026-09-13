@@ -1,4 +1,5 @@
 var MOD_PRESETS = [
+    {name:'Quantum Disrupter', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 3 Weapon Modules to Target an Object: Range: 12, Check:Sensors, Damage: 6 ☣ ; Create an anomaly on a random space 0-11 away from this Module.'},
     {name:'Citadel', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'defense', onbuild:'', passive:'Shares Hull HP with your Core, and counts as a Core Module for the purposes of fulfilling requirements.', onactivate:''},
     {name:'Core', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'movement', onbuild:'', passive:'Hull HP is shared by Core Modules.', onactivate:''},
     {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable.', onactivate:''},
