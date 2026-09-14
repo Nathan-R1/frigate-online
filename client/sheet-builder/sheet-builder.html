@@ -223,6 +223,13 @@
   .exp-add:hover { border-color: var(--amber); color: var(--amber); }
   .exp-add.locked, .exp-add:disabled { cursor: not-allowed; opacity: .35; border-color: var(--line-dim); color: var(--line-dim); }
   .exp-add.locked:hover, .exp-add:disabled:hover { border-color: var(--line-dim); color: var(--line-dim); }
+  .exp-del {
+    position: absolute; top: 8px; right: 10px;
+    width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+    background: rgba(176,58,58,.12); border: 1px solid var(--red); color: var(--red);
+    font-family: var(--mono); font-size: 13px; line-height: 1;
+  }
+  .exp-del:hover { background: var(--red); color: var(--ink-strong); }
   .exp-count {
     position: absolute; top: 8px; right: 42px;
     font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--amber);
@@ -507,6 +514,8 @@
   var DEFAULT_LEVEL = 2, MIN_LEVEL = 1, MAX_LEVEL = 5;
 
   var SKILL_NAMES = ['Cyber', 'Diplomacy', 'Engineering', 'Leadership', 'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science'];
+  /* the deck can outgrow Leadership and Logistics, so they lead the grid */
+  var SKILL_DISPLAY_ORDER = ['Leadership', 'Logistics', 'Cyber', 'Diplomacy', 'Engineering', 'Navigation', 'Piloting', 'Sensors', 'Science'];
 
   var SKILL_DESC = {
     'Cyber': 'Cyber is added to Draw (min. 0)',
@@ -550,7 +559,7 @@
     return out;
   }
 
-  var choices = { hulls: {}, level: DEFAULT_LEVEL, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() };
+  var choices = { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() };
   var step = 0;
   var coreSection = 0; // which Core Options section is expanded; the rest show as headers
   var drawOffer = null; // the 3 tech names currently on offer, or null when no draw is open
@@ -567,7 +576,7 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) o[CORE_SECTIONS[i].key] = null;
     return o;
   }
-  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() }; }
+  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -596,6 +605,12 @@
         c.shipName = s.shipName || '';
         c.disableLimits = !!s.disableLimits;
         c.statBlocks = !!s.statBlocks;
+        if (s.removed && typeof s.removed === 'object') {
+          Object.keys(s.removed).forEach(function (rn) {
+            var rv = parseInt(s.removed[rn], 10);
+            if (rv > 0) c.removed[rn] = rv;
+          });
+        }
         var lv = parseInt(s.level, 10);
         c.level = isNaN(lv) ? DEFAULT_LEVEL : Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, lv));
         if (s.inv && typeof s.inv === 'object') {
@@ -708,14 +723,31 @@
     for (var i = 0; i < list.length; i++) if (list[i].name === name) return name;
     return null;
   }
-  /* every tech in the deck: core-option grants plus everything drawn, as name -> count */
+  /* every tech in the deck: core-option grants plus everything drawn, less anything deleted */
   function deckCounts() {
     var out = coreTechCounts();
     var inv = choices.inv && choices.inv.tech;
     if (inv) {
       for (var n in inv) if (inv[n] > 0) out[n] = (out[n] || 0) + inv[n];
     }
+    var gone = choices.removed || {};
+    for (var g in gone) {
+      if (!out[g]) continue;
+      out[g] -= gone[g];
+      if (out[g] <= 0) delete out[g];
+    }
     return out;
+  }
+  /* take one copy off the stack: a drawn card first (refunding its point), else a grant */
+  function removeOneFromDeck(name) {
+    var inv = choices.inv.tech;
+    if (inv && inv[name] > 0) {
+      inv[name] -= 1;
+      if (inv[name] <= 0) delete inv[name];
+      return;
+    }
+    if (!choices.removed) choices.removed = {};
+    choices.removed[name] = (choices.removed[name] || 0) + 1;
   }
   function drawnCount() {
     var total = 0;
@@ -919,6 +951,10 @@
     if (key === 'mod' || key === 'draw') {
       if (addCount) html += '<span class="exp-count">×' + addCount + '</span>';
       html += '<button type="button" class="exp-add" data-add="' + key + '">+</button>';
+    }
+    if (key === 'tech') {
+      html += '<button type="button" class="exp-del" data-del="' + id.replace(/"/g, '&quot;') +
+        '" title="Remove one copy from your deck">✕</button>';
     }
     for (var i = 0; i < expand.length; i++) {
       var it = expand[i];
@@ -1171,25 +1207,47 @@
     }
     return total;
   }
+  /* what the deck demands of each capped skill */
+  function leadershipCost() {
+    var inv = deckCounts();
+    var total = 0;
+    for (var k in inv) {
+      if (inv[k] <= 0) continue;
+      var t = findTech(k);
+      var lc = t && t.leadership ? parseInt(t.leadership, 10) : 0;
+      if (isNaN(lc) || lc < 0) lc = 0;
+      total += lc * inv[k];
+    }
+    return total;
+  }
+  function skillCost(name) {
+    if (name === 'Logistics') return storageCost();
+    if (name === 'Leadership') return leadershipCost();
+    return 0;
+  }
   function recommendSkills() {
     var sk = {};
     var i, n;
     for (i = 0; i < SKILL_NAMES.length; i++) sk[SKILL_NAMES[i]] = 0;
 
     var sensCount = countTraits('Sensors');
+    var pilotCount = countTraits('Piloting');
+    var diploCount = countTraits('Diplomacy');
     var gravJet = (deckCounts()['Grav Jet'] || 0) > 0;
     var storage = storageCost();
 
-    sk['Sensors'] = sensCount >= 2 ? 4 : (sensCount === 1 ? 3 : 0);
+    sk['Sensors'] = sensCount * 2;
+    sk['Piloting'] = pilotCount * 2;
+    sk['Diplomacy'] = diploCount;
     sk['Navigation'] = gravJet ? 4 : 0;
     sk['Logistics'] = storage;
-    sk['Leadership'] = 0;
+    sk['Leadership'] = leadershipCost();
 
     var d;
     if (sensCount === 0) d = 'Sensors';
-    else if (countTraits('Piloting') === 0) d = 'Piloting';
-    else if (countTraits('Diplomacy') === 0) d = 'Diplomacy';
-    else if (storage === 0 && countTraits('Logistics') === 0) d = 'Logistics';
+    else if (pilotCount === 0) d = 'Piloting';
+    else if (diploCount === 0) d = 'Diplomacy';
+    else if (storage === 0) d = 'Logistics';
     else d = 'Cyber';
 
     for (i = 0; i < SKILL_NAMES.length; i++) {
@@ -1201,7 +1259,7 @@
     var used = 0;
     for (i = 0; i < SKILL_NAMES.length; i++) used += sk[SKILL_NAMES[i]];
     var remaining = 13 - used;
-    var order = ['Science', 'Cyber', 'Engineering'];
+    var order = ['Science', 'Cyber', 'Engineering']; /* Science first, then the other sinks */
     for (i = 0; i < order.length && remaining > 0; i++) {
       var add = Math.min(remaining, 4 - sk[order[i]]);
       if (add > 0) { sk[order[i]] += add; remaining -= add; }
@@ -1217,11 +1275,11 @@
 function skillsOptions() {
     var out = [];
     var remaining = 13 - skillsTotal();
-    out.push('<div class="sk-top"><button type="button" class="recbtn" data-skrec="1" title="Auto-distribute points based on your chosen Traits, Officers, Techs and Modules">Recommend skills</button></div>');
+    out.push('<div class="sk-top"><button type="button" class="recbtn" data-skrec="1" title="Auto-distribute points based on the traits and costs of your deck">Recommend skills</button></div>');
     out.push('<div class="sk-total">Total Points remaining: <b>' + remaining + '</b></div>');
     out.push('<div class="sk-grid">');
-    for (var i = 0; i < SKILL_NAMES.length; i++) {
-      var n = SKILL_NAMES[i];
+    for (var i = 0; i < SKILL_DISPLAY_ORDER.length; i++) {
+      var n = SKILL_DISPLAY_ORDER[i];
       var v = choices.skills[n] || { points: '0', penalty: '' };
       var base = parseInt(v.points, 10);
       if (isNaN(base)) base = 0;
@@ -1230,9 +1288,11 @@ function skillsOptions() {
       var canMinus = base > -1;
       var desc = SKILL_DESC[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
+      var cost = skillCost(n);
+      var short = cost > 0 && cost > eff;
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
-        '<div class="sk-head">' +
+        '<div class="sk-head' + (short ? ' sk-warn' : '') + '">' +
         '<span class="sk-name">' + esc(n) + '</span>' +
         '<span class="sk-num">' + esc(String(eff)) + '</span>' +
         '<span class="sk-btns">' +
@@ -1246,6 +1306,8 @@ function skillsOptions() {
         (desc ? '<button type="button" class="skinfo' + (infoOpen ? ' on' : '') + '" title="' + esc(desc) + '"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg></button>' : '') +
         '</div>' +
         (infoOpen ? '<span class="sk-desc">' + esc(desc) + '</span>' : '') +
+        (short ? '<span class="sk-warn-desc">⚠ Your tech deck costs ' + cost +
+          ' — more than this skill\'s cap of ' + eff + '. Raise ' + esc(n) + ' or drop cards.</span>' : '') +
         '</div>'
       );
     }
@@ -1510,6 +1572,13 @@ function skillsOptions() {
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
+    var del = e.target.closest('.exp-del');
+    if (del) {
+      removeOneFromDeck(del.getAttribute('data-del'));
+      saveChoices();
+      renderOptions();
+      return;
+    }
     var addBtn = e.target.closest('.exp-add');
     if (addBtn) {
       var kk = addBtn.getAttribute('data-add');
@@ -1636,7 +1705,13 @@ function skillsOptions() {
       var optEl = wrap ? wrap.querySelector('.opt') : null;
       var picked = optEl ? optEl.getAttribute('data-id') : null;
       if (picked && deckPointsLeft() > 0) {
-        choices.inv.tech[picked] = (choices.inv.tech[picked] || 0) + 1;
+        /* drawing a copy you deleted restores it, rather than stacking behind the removal */
+        if (choices.removed && choices.removed[picked] > 0) {
+          choices.removed[picked] -= 1;
+          if (choices.removed[picked] <= 0) delete choices.removed[picked];
+        } else {
+          choices.inv.tech[picked] = (choices.inv.tech[picked] || 0) + 1;
+        }
         drawOffer = null;
         expandedFor.draw = null;
         saveChoices();
