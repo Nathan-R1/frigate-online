@@ -12,7 +12,17 @@
   body { padding: 28px 18px 110px; }
   .builder { max-width: 1200px; margin: 0 auto; }
   .builder-panel { margin-top: 16px; padding: 22px 26px; position: relative; }
-  .builder-panel .eyebrow { margin-bottom: 14px; }
+  /* the step heading carries the instructions, so it reads as a heading, not an eyebrow */
+  .builder-panel .eyebrow {
+    font-family: var(--disp); font-size: 20px; letter-spacing: .05em;
+    line-height: 1.25; margin-bottom: 8px;
+  }
+  .builder-panel .eyebrow::before { font-size: 16px; }
+  /* frigate.css hides eyebrow text under 320px; the builder needs its title there */
+  @media (max-width: 320px) {
+    .builder-panel .eyebrow { font-size: 16px; }
+    .builder-panel .eyebrow .eb-text { display: inline; }
+  }
   .builder-hidden { display: none !important; }
 
   /* options grid */
@@ -155,6 +165,21 @@
   }
   .drawbtn:hover:not(:disabled) { background: var(--cyan); color: var(--ink-strong); }
   .drawbtn:disabled { opacity: .4; cursor: default; border-color: var(--line); color: var(--ink-mid); }
+  .lvl-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .lvl-label {
+    font-family: var(--disp); font-size: 26px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--ink);
+  }
+  .lvl-num {
+    font-family: var(--disp); font-size: 26px; color: var(--amber); min-width: 1.4em; text-align: center;
+  }
+  .lvlbtn {
+    width: 36px; height: 36px; border-radius: 6px; cursor: pointer;
+    background: var(--panel-alt); border: 1px solid var(--cyan); color: var(--cyan);
+    font-family: var(--mono); font-size: 20px; line-height: 1;
+  }
+  .lvlbtn:hover:not(:disabled) { background: var(--cyan); color: var(--ink-strong); }
+  .lvlbtn:disabled { opacity: .3; cursor: default; border-color: var(--line); color: var(--ink-mid); }
   .deck-points { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; color: var(--ink-mid); margin-top: 8px; }
   .deck-points b { color: var(--amber); }
   .draw-sec { margin-top: 14px; }
@@ -271,6 +296,8 @@
     font-family: var(--disp); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-mid);
   }
   .dl-row input { width: 16px; height: 16px; accent-color: var(--cyan); cursor: pointer; }
+  .land-opts { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+  .win-sub { color: var(--ink-mid); font-size: 15px; line-height: 1.6; margin: 0 0 18px; }
   .dl-row:hover { color: var(--cyan); }
   .sk .sk-head.sk-warn .sk-name,
   .sk .sk-head.sk-warn .sk-num { color: var(--red); }
@@ -363,6 +390,10 @@
       <button type="button" class="b-btn" onclick="loadExisting()">Load existing character</button>
       <button type="button" class="b-btn" id="resumeBtn" onclick="resumeRun()" style="display:none;">Continue run in progress</button>
     </div>
+    <div class="land-opts">
+      <label class="dl-row"><input type="checkbox" id="statBlocksBox"> Customise stat-blocks</label>
+      <label class="dl-row"><input type="checkbox" id="limitsBox"> Disable limits</label>
+    </div>
     <div class="hint-text" id="landingHint">No saved choices yet.</div>
   </section>
 
@@ -373,6 +404,7 @@
   <section class="panel builder-panel builder-hidden" id="win">
     <div class="bl"></div><div class="br"></div>
     <div class="eyebrow"><span class="eb-text" id="winTitle">…</span></div>
+    <div class="win-sub" id="winSub"></div>
     <div class="win-nav">
       <button type="button" class="b-btn" id="backBtn">← Back</button>
       <button type="button" class="b-btn primary" id="continueBtn">Continue →</button>
@@ -470,9 +502,9 @@
     }
   };
 
-  /* the budget, applied separately to each side: this many hull ticks AND this many drawn cards.
+  /* ship level sets both budgets: this many hull ticks AND this many drawn cards.
      core-option grants are free. */
-  var DECK_POINTS = 2;
+  var DEFAULT_LEVEL = 2, MIN_LEVEL = 1, MAX_LEVEL = 5;
 
   var SKILL_NAMES = ['Cyber', 'Diplomacy', 'Engineering', 'Leadership', 'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science'];
 
@@ -488,13 +520,27 @@
     'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
   };
 
-  var steps = [
-    { key: 'shipClass', label: 'Hull Class' },
-    { key: 'core', label: 'Core Options' },
-    { key: 'tech', label: 'Technology Deck' },
-    { key: 'mod', label: 'Modules/Deployables' },
-    { key: 'skills', label: 'Crew Skills' }
+  var ALL_STEPS = [
+    { key: 'shipClass', label: 'Hull Class', title: 'Choose a Hull',
+      sub: 'Spend your Hull Points to customise your hull.' },
+    { key: 'core', label: 'Core Options', title: 'Choose Core Technologies',
+      sub: 'Select your core weapons, engines and generator which makes up the base of your technology deck.' },
+    { key: 'tech', label: 'Technology Deck', title: 'Build Your Deck',
+      sub: 'Each level-up you get to choose from a set of Tech options. These options are determined by your class.' },
+    { key: 'mod', label: 'Stat-blocks', title: 'Add Stat-blocks for quick reference', sub: '' },
+    { key: 'skills', label: 'Crew Skills', title: 'Choose Your Skills',
+      sub: 'Put points into the abilities you want your crew to excel at.' }
   ];
+  /* the stat-block step only joins the run when the landing checkbox asks for it */
+  var steps = [];
+  function rebuildSteps() {
+    steps = [];
+    for (var i = 0; i < ALL_STEPS.length; i++) {
+      if (ALL_STEPS[i].key === 'mod' && !choices.statBlocks) continue;
+      steps.push(ALL_STEPS[i]);
+    }
+    if (step > steps.length) step = steps.length;
+  }
 
   function defaultSkills() {
     var out = {};
@@ -504,7 +550,7 @@
     return out;
   }
 
-  var choices = { hulls: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() };
+  var choices = { hulls: {}, level: DEFAULT_LEVEL, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() };
   var step = 0;
   var coreSection = 0; // which Core Options section is expanded; the rest show as headers
   var drawOffer = null; // the 3 tech names currently on offer, or null when no draw is open
@@ -521,7 +567,7 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) o[CORE_SECTIONS[i].key] = null;
     return o;
   }
-  function emptyChoices() { return { hulls: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, inv: emptyInv() }; }
+  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -549,6 +595,9 @@
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
         c.disableLimits = !!s.disableLimits;
+        c.statBlocks = !!s.statBlocks;
+        var lv = parseInt(s.level, 10);
+        c.level = isNaN(lv) ? DEFAULT_LEVEL : Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, lv));
         if (s.inv && typeof s.inv === 'object') {
           c.inv = emptyInv();
           ['tech', 'mod'].forEach(function (ik) {
@@ -676,11 +725,20 @@
     }
     return total;
   }
+  function shipLevel() {
+    var n = parseInt(choices.level, 10);
+    if (isNaN(n)) n = DEFAULT_LEVEL;
+    return Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, n));
+  }
+  /* dropping a level must not strand points already spent, so the minus stops at whatever is committed */
+  function minLevel() {
+    return Math.max(MIN_LEVEL, hullTicks(), drawnCount());
+  }
   function hullPointsLeft() {
-    return choices.disableLimits ? DECK_POINTS : DECK_POINTS - hullTicks();
+    return choices.disableLimits ? shipLevel() : shipLevel() - hullTicks();
   }
   function deckPointsLeft() {
-    return choices.disableLimits ? DECK_POINTS : DECK_POINTS - drawnCount();
+    return choices.disableLimits ? shipLevel() : shipLevel() - drawnCount();
   }
   /* each slot rolls its rarity: 1/2 common, 1/4 uncommon, 1/8 rare, 1/8 a free reroll */
   var RARITY_ORDER = ['common', 'uncommon', 'rare'];
@@ -832,6 +890,8 @@
   }
 
   function refreshLanding() {
+    document.getElementById('limitsBox').checked = !!choices.disableLimits;
+    document.getElementById('statBlocksBox').checked = !!choices.statBlocks;
     var hint = document.getElementById('landingHint');
     var resumeBtn = document.getElementById('resumeBtn');
     if (choicesHaveAny()) {
@@ -933,7 +993,6 @@
       out.push(optionHtml('shipClass', k, k, escapeHtml(p.desc || ''), null, null, null, '', tag,
         ticks > 0 ? '<button type="button" class="tick-x" data-untick="' + esc(k) + '" title="Remove one tick">✕</button>' : ''));
     }
-    out.push('<label class="dl-row"><input type="checkbox" id="limitsBox"' + (choices.disableLimits ? ' checked' : '') + '> Disable limits</label>');
     return out.join('');
   }
 
@@ -1088,7 +1147,7 @@
     var re = new RegExp('\\b' + trait + '\\b', 'i');
     var total = 0;
     ['tech', 'mod'].forEach(function (invKey) {
-      var inv = choices.inv && choices.inv[invKey];
+      var inv = (invKey === 'tech') ? deckCounts() : (choices.inv && choices.inv.mod);
       if (!inv) return;
       for (var k in inv) {
         if (inv[k] > 0) {
@@ -1101,8 +1160,7 @@
     return total;
   }
   function storageCost() {
-    var inv = choices.inv && choices.inv.tech;
-    if (!inv) return 0;
+    var inv = deckCounts();
     var total = 0;
     for (var k in inv) {
       if (inv[k] <= 0) continue;
@@ -1119,7 +1177,7 @@
     for (i = 0; i < SKILL_NAMES.length; i++) sk[SKILL_NAMES[i]] = 0;
 
     var sensCount = countTraits('Sensors');
-    var gravJet = !!(choices.inv && choices.inv.tech && (choices.inv.tech['Grav Jet'] || 0) > 0);
+    var gravJet = (deckCounts()['Grav Jet'] || 0) > 0;
     var storage = storageCost();
 
     sk['Sensors'] = sensCount >= 2 ? 4 : (sensCount === 1 ? 3 : 0);
@@ -1202,7 +1260,10 @@ function skillsOptions() {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function renderOptions() {
-    document.getElementById('winTitle').textContent = steps[step].label;
+    document.getElementById('winTitle').textContent = steps[step].title || steps[step].label;
+    var subEl = document.getElementById('winSub');
+    subEl.textContent = steps[step].sub || '';
+    subEl.classList.toggle('builder-hidden', !steps[step].sub);
     var k = steps[step].key;
     renderFilterBar(k);
     renderOptionsList();
@@ -1271,7 +1332,17 @@ function skillsOptions() {
     if (k === 'shipClass') {
       invEl.classList.remove('builder-hidden');
       invEl.classList.add('deck-bar');
-      invEl.innerHTML = '<div class="deck-points">Total Points remaining: <b>' + hullPointsLeft() + '</b></div>';
+      var lv = shipLevel();
+      invEl.innerHTML =
+        '<div class="lvl-row">' +
+        '<span class="lvl-label">Level</span>' +
+        '<button type="button" class="lvlbtn" data-lvl="-1" title="Lower ship level"' +
+        (lv > minLevel() ? '' : ' disabled') + '>−</button>' +
+        '<span class="lvl-num">' + lv + '</span>' +
+        '<button type="button" class="lvlbtn" data-lvl="1" title="Raise ship level"' +
+        (lv < MAX_LEVEL ? '' : ' disabled') + '>+</button>' +
+        '</div>' +
+        '<div class="deck-points">Total Points remaining: <b>' + hullPointsLeft() + '</b></div>';
       return;
     }
     var inv = choices.inv && choices.inv[k];
@@ -1385,6 +1456,7 @@ function skillsOptions() {
     el.innerHTML = html;
   }
   function enterExport() {
+    syncModsFromDeck();
     step = steps.length;
     show('exp');
     renderProgressDots();
@@ -1438,16 +1510,6 @@ function skillsOptions() {
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
-    var dl = e.target.closest('.dl-row');
-    if (dl) {
-      if (e.preventDefault) e.preventDefault();
-      choices.disableLimits = !choices.disableLimits;
-      var box = document.getElementById('limitsBox');
-      if (box) box.checked = choices.disableLimits;
-      saveChoices();
-      renderOptions();
-      return;
-    }
     var addBtn = e.target.closest('.exp-add');
     if (addBtn) {
       var kk = addBtn.getAttribute('data-add');
@@ -1542,6 +1604,17 @@ function skillsOptions() {
 
   document.getElementById('invBar').addEventListener('click', function (e) {
     if (screen !== 'win') return;
+    var lvl = e.target.closest('.lvlbtn');
+    if (lvl) {
+      var d = parseInt(lvl.getAttribute('data-lvl'), 10) || 0;
+      var next = Math.max(minLevel(), Math.min(MAX_LEVEL, shipLevel() + d));
+      if (next !== shipLevel()) {
+        choices.level = next;
+        saveChoices();
+        renderOptions();
+      }
+      return;
+    }
     if (e.target.closest('.drawbtn')) {
       if (deckPointsLeft() > 0) { drawOffer = rollDraw(); renderOptions(); }
       return;
@@ -1607,6 +1680,16 @@ function skillsOptions() {
     renderOptionsList();
   });
 
+  document.getElementById('limitsBox').addEventListener('change', function () {
+    choices.disableLimits = this.checked;
+    saveChoices();
+  });
+  document.getElementById('statBlocksBox').addEventListener('change', function () {
+    choices.statBlocks = this.checked;
+    rebuildSteps();
+    saveChoices();
+  });
+
   document.getElementById('shipName').addEventListener('input', function () {
     choices.shipName = this.value;
     saveChoices();
@@ -1614,7 +1697,12 @@ function skillsOptions() {
 
   /* ===== landing actions ===== */
   function startNew() {
+    var keepLimits = choices.disableLimits, keepBlocks = choices.statBlocks, keepLevel = shipLevel();
     choices = emptyChoices();
+    choices.disableLimits = keepLimits;
+    choices.statBlocks = keepBlocks;
+    choices.level = keepLevel;
+    rebuildSteps();
     saveChoices();
     step = 0;
     goToWin(0);
@@ -1654,6 +1742,8 @@ function skillsOptions() {
     var c = emptyChoices();
     var matched = false;
     c.shipName = (json && json.shipName) || '';
+    var jl = parseInt(json && json.level, 10);
+    if (!isNaN(jl)) c.level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, jl));
     if (json && json.hulls && typeof json.hulls === 'object') {
       Object.keys(json.hulls).forEach(function (hn) {
         var n = parseInt(json.hulls[hn], 10);
@@ -1701,7 +1791,10 @@ function skillsOptions() {
       }
     }
     choices.hulls = beforeHulls;
+    c.disableLimits = choices.disableLimits;
+    c.statBlocks = choices.statBlocks;
     choices = c;
+    rebuildSteps();
     saveChoices();
     return matched;
   }
@@ -1755,6 +1848,7 @@ function skillsOptions() {
   function buildSheet() {
     var s = JSON.parse(JSON.stringify(SHEET_DEFAULTS));
     s.shipName = choices.shipName || '';
+    s.level = shipLevel();
     s.shipClass = hullTicks() ? hullLabel() : 'Unclassified';
     s.hulls = {};
     for (var hk in choices.hulls) if (choices.hulls[hk] > 0) s.hulls[hk] = choices.hulls[hk];
@@ -1849,6 +1943,7 @@ function skillsOptions() {
 
   /* ===== init ===== */
   choices = loadChoices();
+  rebuildSteps();
   document.getElementById('shipName').value = choices.shipName;
   window.startNew = function () { startNew(); };
   window.loadExisting = function () { loadExisting(); };
