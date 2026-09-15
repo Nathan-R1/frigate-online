@@ -70,10 +70,12 @@
   .opt-count.copies .ticon { width: 12px; height: 12px; flex: none; }
   /* the card's border colour is its rarity, so the title names it outright */
   .rar-tag {
-    flex: none; padding: 2px 7px; border: 1px solid var(--line); border-radius: 4px;
-    font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; line-height: 1;
-    text-transform: uppercase; color: var(--ink-dim);
+    flex: none; display: inline-flex; align-items: center;
+    padding: 3px 7px; border: 1px solid var(--line); border-radius: 4px;
+    line-height: 1; color: var(--ink-dim);
   }
+  .rar-ico { width: 18px; height: 14px; display: block; flex: none; }
+  .rchip .rar-ico { width: 17px; height: 13px; }
   .rar-tag-uncommon { color: var(--icon-hull); border-color: var(--icon-hull); background: rgba(127,216,138,.1); }
   .rar-tag-rare { color: var(--amber); border-color: var(--amber); background: rgba(232,169,74,.1); }
   .opt-title-row .ticon { width: 15px; height: 15px; flex: none; }
@@ -123,7 +125,7 @@
   .opt.classopt:not(.sel):hover { border-color: var(--icon-charged); }
   .opt.classopt .opt-title { color: var(--icon-charged); }
   .opt.locked-opt { opacity: .55; cursor: default; }
-  .rchip { font-size: 11px; line-height: 1; }
+  .rchip { display: inline-flex; align-items: center; line-height: 1; }
   .rchip-common { color: var(--ink-mid); }
   .rchip-uncommon { color: var(--icon-hull); }
   .rchip-rare { color: var(--amber); }
@@ -141,8 +143,6 @@
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
   }
   .opt-body .ticon { width: 15px; height: 15px; vertical-align: -2px; margin-right: 6px; }
-  /* a tech card with no trait text keeps the empty trait row, so every card is one size */
-  .opt-trait-none::before { content: '\00a0'; }
 
   /* filter bar */
   .filter-bar { display: flex; align-items: center; gap: 12px; margin: 14px 0 2px; flex-wrap: wrap; }
@@ -883,7 +883,8 @@
     if (r < 6) return 'uncommon';
     return 'rare';
   }
-  /* a draw offers one classless card plus one card per hull tick, from that hull's own pool */
+  /* a draw offers one card per hull tick. Within a class the ticks are levels: odd levels
+     (1, 3, 5) draw from that class's own pool, even levels (2, 4, 6) from the classless pool. */
   function rollDraw() {
     var out = [];
     var used = {};
@@ -908,15 +909,30 @@
       if (!pool.length) return;
       var name = pool[Math.floor(Math.random() * pool.length)];
       used[name] = true;
-      out.push(name);
+      out.push({ name: name, cls: cls });
     }
-    take('none');
     var hulls = Object.keys(CLASS_PRESETS);
+    var ticks = 0;
     for (var h = 0; h < hulls.length; h++) {
       var n = choices.hulls[hulls[h]] || 0;
-      for (var j = 0; j < n; j++) take(hulls[h].toLowerCase());
+      ticks += n;
+      for (var lvl = 1; lvl <= n; lvl++) {
+        take(lvl % 2 === 1 ? hulls[h].toLowerCase() : 'none');
+      }
     }
-    return { names: out, reroll: reroll };
+    /* no hull ticked is not reachable from step 1, but an empty offer would be a dead end */
+    if (!ticks) take('none');
+    /* the offer reads classless first, then each class in hull order, alphabetical within a class */
+    var order = ['none'];
+    for (var o = 0; o < hulls.length; o++) order.push(hulls[o].toLowerCase());
+    out.sort(function (a, b) {
+      var d = order.indexOf(a.cls) - order.indexOf(b.cls);
+      if (d) return d;
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+    var names = [];
+    for (var k = 0; k < out.length; k++) names.push(out[k].name);
+    return { names: names, reroll: reroll };
   }
 
   /* techs handed out by the chosen core options, as name -> count */
@@ -1097,6 +1113,14 @@
   var STORAGE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg>';
   var HULL_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  /* rarity marks. The source art is drawn at 120x92 with a 2px stroke; at ~18px wide that
+     renders sub-pixel, so the stroke is scaled up to keep the shapes readable. */
+  var RARITY_ICONS = {
+    common: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><circle cx="60" cy="46" r="42"/><line x1="23" y1="26" x2="97" y2="26"/></g></svg>',
+    uncommon: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><polygon points="60,4 112,46 60,88 8,46"/><polygon points="60,20 96,46 60,72 24,46"/></g></svg>',
+    rare: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><polygon points="20,2 100,2 118,32 60,90 2,32"/><line x1="2" y1="32" x2="118" y2="32"/><line x1="20" y1="2" x2="35" y2="32"/><line x1="100" y1="2" x2="85" y2="32"/><line x1="35" y1="32" x2="60" y2="90"/><line x1="85" y1="32" x2="60" y2="90"/></g></svg>'
+  };
+  function rarityIcon(r) { return RARITY_ICONS[r] || RARITY_ICONS.common; }
   var DECK_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="7" y="6" width="12" height="15" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M5 17V5a2 2 0 0 1 2-2h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var LEADERSHIP_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg>';
   var INFO_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>';
@@ -1115,14 +1139,6 @@
     if (!isNaN(ld) && ld > 0) pips += costPip('cost-ld', LEADERSHIP_ICON, ld);
     return pips ? '<span class="opt-cost">' + pips + '</span>' : '';
   }
-  // renders tech traits: module/deployable become tags, leftover trait text (e.g. "active 1") stays.
-  // a card with no leftover text still gets the row, so it is not a shorter box than its neighbours
-  function traitHtml(traits) {
-    var rest = String(traits || '').replace('[Module]', '').replace('[Deployable]', '').trim();
-    if (!rest) return '<span class="opt-trait-none"></span>';
-    return '<span>' + esc(rest) + '</span>';
-  }
-
   /* "Create Module Cannon." / "Create deployable Fusion Mine" earn an info pip right after the
      name, which opens that module's own text. matched by longest preset name, as modsNamedIn does,
      so "Create Module P.D. Trash." finds P.D. The line is escaped around the pip, never through it. */
@@ -1275,13 +1291,14 @@
     var expand = [{ desc: techDesc(t) }];
     /* the card's border colour is its rarity, so the title says which; the copies badge
        keeps its own margin-left:auto and still lands top-right after it */
-    var titleTags = '<span class="rar-tag rar-tag-' + rarity + '">' + cap(rarity) + '</span>';
+    var titleTags = '<span class="rar-tag rar-tag-' + rarity + '" title="' + cap(rarity) + '">' +
+      rarityIcon(rarity) + '</span>';
     if (count > 1) {
       titleTags += '<span class="opt-count copies" title="You have ' + count + ' copies of ' +
         escapeHtml(t.name) + ' in your deck.">' + DECK_ICON + count + ' copies</span>';
     }
     var rarCls = rarity === 'common' ? '' : 'rar-' + rarity;
-    return optionHtml(key, t.name, t.name, traitHtml(t.traits), meta, expand, techCostHtml(t), rarCls, titleTags);
+    return optionHtml(key, t.name, t.name, '', meta, expand, techCostHtml(t), rarCls, titleTags);
   }
   function techPassesFilters(t) {
     var metaTraits = t.traits || '';
@@ -1667,13 +1684,13 @@ function skillsOptions() {
     if (f.vehs.deployable || dOn) veh += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', dOn);
     if (veh) row += '<span class="ff-div"></span>' + veh;
     if (k === 'tech') {
-      var RA = [['common', '●'], ['uncommon', '◆'], ['rare', '★']];
+      var RA = ['common', 'uncommon', 'rare'];
       var rars = '';
       for (var r = 0; r < RA.length; r++) {
-        var rOn = filters.rars.indexOf(RA[r][0]) !== -1;
-        if (f.rars[RA[r][0]] || rOn) {
-          rars += filterChip('<span class="rchip rchip-' + RA[r][0] + '">' + RA[r][1] + '</span>',
-            'r:' + RA[r][0], cap(RA[r][0]), rOn);
+        var rOn = filters.rars.indexOf(RA[r]) !== -1;
+        if (f.rars[RA[r]] || rOn) {
+          rars += filterChip('<span class="rchip rchip-' + RA[r] + '">' + rarityIcon(RA[r]) + '</span>',
+            'r:' + RA[r], cap(RA[r]), rOn);
         }
       }
       if (rars) row += '<span class="ff-div"></span>' + rars;
