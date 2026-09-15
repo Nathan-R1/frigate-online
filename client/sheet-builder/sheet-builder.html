@@ -2218,6 +2218,20 @@ function skillsOptions() {
     return 'normal';
   }
 
+  /* the builder is same-origin with the board, so handing a build over in-game is a localStorage
+     write plus a navigation. It goes on its own key rather than frigate.html's autosave key,
+     which any open board tab overwrites as it unloads. */
+  var SHEET_HANDOFF_KEY = 'frigatePendingSheet';
+  var BOARD_URL = '../board.html';
+  function loadInGame(data) {
+    try {
+      localStorage.setItem(SHEET_HANDOFF_KEY, JSON.stringify(data));
+    } catch (e) {
+      alert('Could not load the sheet in-game: this browser is not allowing local storage.');
+      return;
+    }
+    window.location.href = BOARD_URL;
+  }
   function exportSheet() {
     var data = buildSheet();
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2230,6 +2244,8 @@ function skillsOptions() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    /* the confirm blocks here while the download finishes in the background */
+    if (confirm('Load in-game?')) loadInGame(data);
   }
 
   /* expose export for the inline onclick */

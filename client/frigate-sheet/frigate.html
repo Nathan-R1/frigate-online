@@ -305,7 +305,12 @@
     showStartGate(false);
   }
   function openSheetBuilder(){
-    window.open('../sheet-builder/sheet-builder.html', '_blank');
+    /* this page usually runs inside the board's left iframe, so send the whole window to the
+       builder rather than loading it into the panel. Resolved against this document's own URL
+       so the same call works when the sheet is opened on its own. */
+    var url = new URL('../sheet-builder/sheet-builder.html', window.location.href).href;
+    try { window.top.location.href = url; }
+    catch(e){ window.location.href = url; }
   }
   function savePanelCollapse(){
     try {
@@ -1953,6 +1958,9 @@
     updateDerivedStats();
   }
   var SHEET_STORE_KEY = 'frigateSheet';
+  /* the builder hands a sheet over on its own key, not the autosave key, which this page
+     overwrites from its own unload handler whenever a board tab closes or reloads */
+  var SHEET_HANDOFF_KEY = 'frigatePendingSheet';
   var autosaveTimer = null;
   function saveSheetLocal(){
     try { localStorage.setItem(SHEET_STORE_KEY, JSON.stringify(collectSheet())); } catch(e){}
@@ -1962,6 +1970,19 @@
     autosaveTimer = setTimeout(saveSheetLocal, 500);
   }
   function restoreSheetLocal(){
+    /* a handed-over sheet wins over the autosave, and is consumed so it only lands once */
+    var pending = null;
+    try {
+      pending = localStorage.getItem(SHEET_HANDOFF_KEY);
+      if(pending) localStorage.removeItem(SHEET_HANDOFF_KEY);
+    }catch(e){}
+    if(pending){
+      try {
+        applySheet(JSON.parse(pending));
+        saveSheetLocal();
+        return;
+      }catch(e){}
+    }
     try {
       var raw = localStorage.getItem(SHEET_STORE_KEY);
       if(raw) applySheet(JSON.parse(raw));
