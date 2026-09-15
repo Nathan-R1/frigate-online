@@ -71,19 +71,21 @@
   /* the card's border colour is its rarity, so the title names it outright */
   .rar-tag {
     flex: none; display: inline-flex; align-items: center;
-    padding: 3px 7px; border: 1px solid var(--line); border-radius: 4px;
     line-height: 1; color: var(--ink-dim);
   }
   .rar-ico { width: 18px; height: 14px; display: block; flex: none; }
   .rchip .rar-ico { width: 17px; height: 13px; }
-  .rar-tag-uncommon { color: var(--icon-hull); border-color: var(--icon-hull); background: rgba(127,216,138,.1); }
-  .rar-tag-rare { color: var(--amber); border-color: var(--amber); background: rgba(232,169,74,.1); }
+  .rar-tag-uncommon { color: var(--icon-hull); }
+  .rar-tag-rare { color: var(--amber); }
   .opt-title-row .ticon { width: 15px; height: 15px; flex: none; }
   /* the hull silhouette leads its card, and takes the card's accent when ticked */
   .hull-ico { width: 48px; height: 61px; flex: none; display: block; color: var(--icon-cyan); }
   .opt.sel .hull-ico { color: var(--amber); }
-  /* storage / leadership cost, larger than the meta tags because it is read first */
-  .opt-cost { display: inline-flex; align-items: center; gap: 9px; flex: none; }
+  /* storage / leadership cost, parked in the card's bottom-left opposite the chevron */
+  .opt-cost {
+    position: absolute; left: 16px; bottom: 10px;
+    display: inline-flex; align-items: center; gap: 9px; flex: none;
+  }
   .opt-cost .cost {
     display: inline-flex; align-items: center; gap: 3px;
     font-family: var(--mono); font-size: 13px; font-weight: 700; line-height: 1;
@@ -91,6 +93,11 @@
   .opt-cost .cost-st { color: var(--icon-logistics); }
   .opt-cost .cost-ld { color: var(--icon-leader); }
   .opt-title-row .opt-cost .ticon { width: 19px; height: 19px; }
+  /* tech cards keep a footer strip clear: costs pinned bottom-left, chevron bottom-right */
+  .opt[data-okey="tech"], .opt[data-okey="draw"] { padding-bottom: 36px; }
+  .opt[data-okey="tech"] .opt-chev, .opt[data-okey="draw"] .opt-chev {
+    position: absolute; right: 14px; bottom: 11px; margin: 0;
+  }
   .opt-meta {
     display: flex; flex-wrap: wrap; gap: 6px;
     font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
@@ -313,6 +320,7 @@
   }
   .mp-desc { color: var(--ink-mid); font-size: 12.5px; line-height: 1.55; white-space: pre-line; }
 
+  .exp-item .opt-meta { margin-bottom: 8px; }
   .exp-item-name {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     font-family: var(--disp); font-size: 12px; letter-spacing: .04em; color: var(--ink); text-transform: uppercase;
@@ -531,6 +539,7 @@
 
 </main>
 
+<script src="../frigate-sheet/presets/skill-descriptions.js"></script>
 <script src="../frigate-sheet/presets/tech-presets.js"></script>
 <script src="../frigate-sheet/presets/mod-presets.js"></script>
 <script>
@@ -613,17 +622,6 @@
   /* the deck can outgrow Leadership and Logistics, so they lead the grid */
   var SKILL_DISPLAY_ORDER = ['Leadership', 'Logistics', 'Cyber', 'Diplomacy', 'Engineering', 'Navigation', 'Piloting', 'Sensors', 'Science'];
 
-  var SKILL_DESC = {
-    'Cyber': 'Cyber is added to Draw (min. 0)',
-    'Diplomacy': 'Used to reduce or cause conflict, through threats, persuasion and deception.',
-    'Engineering': 'Engineering is added to Hull HP (min. 0)',
-    'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
-    'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
-    'Navigation': 'Navigation is added to Speed (min. 0)',
-    'Piloting': 'Sometimes you might have to dodge!!!',
-    'Science': 'Starter Cards = 1/2 of (science + science penalty)',
-    'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
-  };
 
   var ALL_STEPS = [
     { key: 'shipClass', label: 'Hull Class', title: 'Choose a Hull',
@@ -661,8 +659,8 @@
   var drawOffer = null; // the 3 tech names currently on offer, or null when no draw is open
   var screen = 'landing'; // landing | win | exp
   var expandedFor = {};
-  var filters = { q: '', types: [], vehs: [], rars: [], st: false, ch: false };
-  function resetFilters() { filters = { q: '', types: [], vehs: [], rars: [], st: false, ch: false }; }
+  var filters = { q: '', types: [], vehs: [], rars: [], st: false, ld: false, ch: false };
+  function resetFilters() { filters = { q: '', types: [], vehs: [], rars: [], st: false, ld: false, ch: false }; }
   var skillInfoOpen = null;
 
   /* ===== persistence ===== */
@@ -1089,6 +1087,7 @@
           esc(it.name || '') + '</div>'
         : '';
       html += '<div class="exp-item">' + head +
+        (it.meta ? '<span class="opt-meta">' + it.meta + '</span>' : '') +
         '<div class="exp-item-desc">' + (it.desc || 'No text.') + '</div>' +
         '</div>';
     }
@@ -1300,19 +1299,24 @@
     }
     if (isMod) meta.push({ text: MODULE_ICON, cls: 't-cyan' });
     if (isDep) meta.push({ text: DEPLOYABLE_ICON, cls: 't-amber' });
-    if (hasCh) meta.push({ text: CHARGES_ICON + t.charges, cls: '' });
     var rarity = t.rarity || 'common';
-    var expand = [{ desc: techDesc(t) }];
+    var expand = [{
+      meta: hasCh ? metaTags([{ text: CHARGES_ICON + t.charges, cls: '' }]) : '',
+      desc: techDesc(t)
+    }];
     /* the card's border colour is its rarity, so the title says which; the copies badge
        keeps its own margin-left:auto and still lands top-right after it */
-    var titleTags = '<span class="rar-tag rar-tag-' + rarity + '" title="' + cap(rarity) + '">' +
+    var rarTag = '<span class="rar-tag rar-tag-' + rarity + '" title="' + cap(rarity) + '">' +
       rarityIcon(rarity) + '</span>';
+    /* the costs ride in the title row but are lifted out of its flow to the card's
+       bottom-left corner, so the copies badge still claims the top-right */
+    var titleTags = techCostHtml(t);
     if (count > 1) {
       titleTags += '<span class="opt-count copies" title="You have ' + count + ' copies of ' +
         escapeHtml(t.name) + ' in your deck.">' + DECK_ICON + count + ' copies</span>';
     }
     var rarCls = rarity === 'common' ? '' : 'rar-' + rarity;
-    return optionHtml(key, t.name, t.name, '', meta, expand, techCostHtml(t), rarCls, titleTags);
+    return optionHtml(key, t.name, t.name, '', meta, expand, rarTag, rarCls, titleTags);
   }
   function techPassesFilters(t) {
     var metaTraits = t.traits || '';
@@ -1323,6 +1327,7 @@
     var st = parseInt(t.storage, 10);
     var hasCh = t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0;
     if (filters.st && !(st > 0)) return false;
+    if (filters.ld && !(parseInt(t.leadership, 10) > 0)) return false;
     if (filters.ch && !hasCh) return false;
     if (!filterRarity(t.rarity)) return false;
     return true;
@@ -1495,7 +1500,7 @@ function skillsOptions() {
       var eff = skillEffective(n);
       var canPlus = remaining > 0 && (choices.disableLimits || base < 4);
       var canMinus = base > -1;
-      var desc = SKILL_DESC[n] || '';
+      var desc = SKILL_DESCRIPTIONS[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
       var cost = skillCost(n);
       var short = cost > 0 && cost > eff;
@@ -1647,7 +1652,7 @@ function skillsOptions() {
   /* which chips could ever match something on this step: a chip that can return
      nothing is hidden, unless it is currently switched on */
   function availableFacets(k) {
-    var f = { types: {}, vehs: {}, rars: {}, st: false, ch: false };
+    var f = { types: {}, vehs: {}, rars: {}, st: false, ld: false, ch: false };
     function noteTech(t) {
       f.types[t.tt] = true;
       f.rars[t.rarity || 'common'] = true;
@@ -1655,6 +1660,7 @@ function skillsOptions() {
       if (tr.indexOf('[Module]') !== -1) f.vehs.module = true;
       if (tr.indexOf('[Deployable]') !== -1) f.vehs.deployable = true;
       if (parseInt(t.storage, 10) > 0) f.st = true;
+      if (parseInt(t.leadership, 10) > 0) f.ld = true;
       if (t.charges !== undefined && t.charges !== null && t.charges !== '' && parseInt(t.charges, 10) >= 0) f.ch = true;
     }
     if (k === 'tech') {
@@ -1710,6 +1716,7 @@ function skillsOptions() {
       if (rars) row += '<span class="ff-div"></span>' + rars;
       var extras = '';
       if (f.st || filters.st) extras += filterChip(STORAGE_ICON, 'st', 'Has storage cost', filters.st);
+      if (f.ld || filters.ld) extras += filterChip(LEADERSHIP_ICON, 'ld', 'Has leadership cost', filters.ld);
       if (f.ch || filters.ch) extras += filterChip(CHARGES_ICON, 'ch', 'Has charges', filters.ch);
       if (extras) row += '<span class="ff-div"></span>' + extras;
     }
@@ -2043,6 +2050,7 @@ function skillsOptions() {
     else if (f.charAt(0) === 'v') toggleIn(filters.vehs, f.slice(2));
     else if (f.charAt(0) === 'r') toggleIn(filters.rars, f.slice(2));
     else if (f === 'st') filters.st = !filters.st;
+    else if (f === 'ld') filters.ld = !filters.ld;
     else if (f === 'ch') filters.ch = !filters.ch;
     renderOptions();
   });
