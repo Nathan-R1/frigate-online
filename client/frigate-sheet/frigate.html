@@ -16,7 +16,6 @@
     <button type="button" class="menu-toggle" onclick="exportSheet()" title="Export sheet as JSON"><span class="menu-ico" aria-hidden="true">⇩</span><span class="menu-label">Export</span></button>
     <button type="button" class="menu-toggle" onclick="importSheet()" title="Import sheet from JSON"><span class="menu-ico" aria-hidden="true">⇧</span><span class="menu-label">Import</span></button>
     <button type="button" class="menu-toggle" onclick="toggleAllPanels()" title="Collapse or expand all sections"><span class="menu-ico" aria-hidden="true">▾</span><span class="menu-label">Collapse</span></button>
-    <button type="button" id="themeToggle" class="menu-toggle" onclick="toggleTheme()" title="Switch to light mode"><span class="menu-ico" aria-hidden="true">☀</span><span class="menu-label">Light Mode</span></button>
   </div>
 </nav>
 
@@ -554,34 +553,11 @@
       });
     }
   }
-  function updateToggleLabel(theme){
-    var btn = document.getElementById('themeToggle');
-    var ico = btn.querySelector('.menu-ico');
-    var lbl = btn.querySelector('.menu-label');
-    if(theme === 'dark'){
-      ico.textContent = '☀';
-      lbl.textContent = 'Light Mode';
-      btn.title = 'Switch to light mode';
-    } else {
-      ico.textContent = '☾';
-      lbl.textContent = 'Dark Mode';
-      btn.title = 'Switch to dark mode';
-    }
-  }
-  function toggleTheme(){
-    var html = document.documentElement;
-    var current = html.getAttribute('data-theme') || 'dark';
-    var next = current === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', next);
-    updateToggleLabel(next);
-    try { localStorage.setItem('frigateTheme', next); } catch(e){}
-  }
+  /* no toggle on the page any more; a theme saved by an earlier build is still honoured */
   function applySavedTheme(){
     var saved;
     try { saved = localStorage.getItem('frigateTheme'); } catch(e){ saved = null; }
-    var theme = (saved === 'light') ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
-    updateToggleLabel(theme);
+    document.documentElement.setAttribute('data-theme', (saved === 'light') ? 'light' : 'dark');
   }
 
   function slotLabel(n){
