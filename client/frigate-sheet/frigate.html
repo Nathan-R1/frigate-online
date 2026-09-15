@@ -19,6 +19,20 @@
     <button type="button" id="themeToggle" class="menu-toggle" onclick="toggleTheme()" title="Switch to light mode"><span class="menu-ico" aria-hidden="true">☀</span><span class="menu-label">Light Mode</span></button>
   </div>
 </nav>
+
+<!-- START GATE: stands in for the sheet when the page loads with nothing on it -->
+<div class="start-gate sg-hidden" id="startGate">
+  <div class="panel">
+    <div class="bl"></div><div class="br"></div>
+    <div class="eyebrow"><span class="eb-text">No Sheet Yet</span></div>
+    <p class="sg-lead">This sheet has no technologies or modules on it. Build a ship in the Sheet Builder and import the result, or start from a blank sheet and fill it in yourself.</p>
+    <div class="sg-actions">
+      <button type="button" class="menu-toggle sg-btn primary" onclick="openSheetBuilder()" title="Create with Sheet Builder"><span class="sg-full">Create with Sheet Builder</span><span class="sg-short">Builder</span></button>
+      <button type="button" class="menu-toggle sg-btn" onclick="createManually()" title="Create Manually"><span class="sg-full">Create Manually</span><span class="sg-short">Manual</span></button>
+    </div>
+  </div>
+</div>
+
 <div class="sheet">
 
   <!-- ROW 1 -->
@@ -162,7 +176,7 @@
           </div>
           <div class="tfoot">
             <span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>
-            <span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span>
+            <span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span><span class="tleadership hid" title="Leadership cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg><input class="tleadership-input" maxlength="3"></span>
             <span class="thull hid" title="Hull"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="thull-input" maxlength="4"></span>
             <span class="tcharges hid" title="Charges"><svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="tcharges-input" maxlength="4"></span>
             <span class="tdepbtn" data-deploy="normal" title="Normal">⍙</span>
@@ -246,6 +260,52 @@
       syncGridCollapse(containers[k]);
     }
     savePanelCollapse();
+  }
+  /* an imported sheet often leaves whole sections empty; collapse those so the page
+     opens on what the sheet actually holds. a section with content is expanded to match. */
+  var EMPTY_CHECK_PANELS = [
+    { grid: 'crewGrid', name: '.cname' },
+    { grid: 'techGrid', name: '.tname' },
+    { grid: 'modGrid', name: '.mname' }
+  ];
+  function gridIsEmpty(gridId, nameSel){
+    var grid = document.getElementById(gridId);
+    if(!grid) return true;
+    var names = grid.querySelectorAll(nameSel);
+    for(var i=0;i<names.length;i++){
+      if(String(names[i].value || '').trim() !== '') return false;
+    }
+    return true;
+  }
+  function collapseEmptySections(){
+    for(var i=0;i<EMPTY_CHECK_PANELS.length;i++){
+      var spec = EMPTY_CHECK_PANELS[i];
+      var grid = document.getElementById(spec.grid);
+      var panel = grid ? grid.closest('.panel') : null;
+      if(!panel) continue;
+      panel.classList.toggle('collapsed', gridIsEmpty(spec.grid, spec.name));
+    }
+    var cs = document.querySelectorAll('.grid, .row2');
+    for(var k=0;k<cs.length;k++) syncGridCollapse(cs[k]);
+    savePanelCollapse();
+  }
+  /* a sheet with no tech and no modules has nothing worth editing yet, so on page load the
+     chooser stands in for it. Once dismissed it stays dismissed for the session — emptying
+     the sheet by hand should not throw the gate back up mid-edit. */
+  function sheetIsEmpty(){
+    return gridIsEmpty('techGrid', '.tname') && gridIsEmpty('modGrid', '.mname');
+  }
+  function showStartGate(show){
+    var gate = document.getElementById('startGate');
+    var sheet = document.querySelector('.sheet');
+    if(gate) gate.classList.toggle('sg-hidden', !show);
+    if(sheet) sheet.classList.toggle('sg-hidden', !!show);
+  }
+  function createManually(){
+    showStartGate(false);
+  }
+  function openSheetBuilder(){
+    window.open('../sheet-builder/sheet-builder.html', '_blank');
   }
   function savePanelCollapse(){
     try {
@@ -691,7 +751,7 @@
       '</div>' +
       '<div class="tfoot">' +
         '<span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>' +
-        '<span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span>' +
+        '<span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span><span class="tleadership hid" title="Leadership cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg><input class="tleadership-input" maxlength="3"></span>' +
         '<span class="thull hid" title="Hull"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="thull-input" maxlength="4"></span>' +
         '<span class="tcharges hid" title="Charges"><svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="tcharges-input" maxlength="4"></span>' +
         '<span class="tdepbtn" data-deploy="normal" title="Normal">⍙</span>' +
@@ -858,6 +918,7 @@
     card.querySelector('.tsec.passive textarea').value = t.passive || '';
     card.querySelector('.tsec.onactivate textarea').value = t.onactivate || '';
     card.querySelector('.tstorage-input').value = (t.storage !== undefined && t.storage !== null) ? t.storage : '';
+    card.querySelector('.tleadership-input').value = (t.leadership !== undefined && t.leadership !== null) ? t.leadership : '';
     card.querySelector('.thull-input').value = (t.hull !== undefined && t.hull !== null) ? t.hull : '';
     card.querySelector('.tcharges-input').value = (t.charges !== undefined && t.charges !== null) ? t.charges : '';
     setTechType(card.querySelector('.tticker'), t.tt);
@@ -989,7 +1050,7 @@
       setTechState(card, 'deck');
       var traits = card.querySelector('.ttraits');
       if(traits) traits.value = '';
-      var fields = card.querySelectorAll('.tsec textarea, .tstorage-input, .thull-input, .tcharges-input');
+      var fields = card.querySelectorAll('.tsec textarea, .tstorage-input, .tleadership-input, .thull-input, .tcharges-input');
       for(var i=0;i<fields.length;i++) fields[i].value = '';
       refreshTechSections(card);
     }
@@ -1191,6 +1252,14 @@
       var isZero = isNaN(sVal) || sVal === 0;
       storage.classList.toggle('hid', isZero && !editing);
       if(sInp) sInp.disabled = !editing;
+    }
+    var leadership = card.querySelector('.tleadership');
+    if(leadership){
+      var lInp = leadership.querySelector('.tleadership-input');
+      var lVal = lInp ? parseInt(lInp.value,10) : 0;
+      var lZero = isNaN(lVal) || lVal === 0;
+      leadership.classList.toggle('hid', lZero && !editing);
+      if(lInp) lInp.disabled = !editing;
     }
     var hull = card.querySelector('.thull');
     if(hull){
@@ -1790,6 +1859,7 @@
         onactivate: card.querySelector('.tsec.onactivate textarea').value,
         techType: card.querySelector('.tticker').getAttribute('data-tt'),
         storage: card.querySelector('.tstorage-input').value,
+        leadership: card.querySelector('.tleadership-input').value,
         hull: card.querySelector('.thull-input').value,
         charges: card.querySelector('.tcharges-input').value,
         deploy: card.querySelector('.tdepbtn').getAttribute('data-deploy'),
@@ -1813,6 +1883,7 @@
       card.querySelector('.tsec.passive textarea').value = item.passive || '';
       card.querySelector('.tsec.onactivate textarea').value = item.onactivate || '';
       card.querySelector('.tstorage-input').value = item.storage || '';
+      card.querySelector('.tleadership-input').value = item.leadership || '';
       card.querySelector('.thull-input').value = item.hull || '';
       card.querySelector('.tcharges-input').value = item.charges || '';
       setTechType(card.querySelector('.tticker'), item.techType);
@@ -1921,6 +1992,8 @@
         try{
           var json = JSON.parse(e.target.result);
           applySheet(json);
+          collapseEmptySections();
+          showStartGate(false);
           alert('Sheet imported successfully.');
         }catch(err){
           alert('Import failed: invalid JSON file.');
@@ -1982,6 +2055,7 @@
     }
     applySavedTheme();
     restorePanelCollapse();
+    showStartGate(sheetIsEmpty());
   })();
 </script>
 <div id="skillPopover"></div>
