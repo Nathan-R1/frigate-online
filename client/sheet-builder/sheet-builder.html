@@ -514,24 +514,25 @@
 
   /* core options: three sections, each a single pick. grants are [tech name, count] pairs. */
   var WEAPON_OPTIONS = [
-    { name: 'Standard', desc: 'Mid range modules that can perform destruction in a variety of ways.', grants: [['Cannon Unit', 5]] },
-    { name: 'Close Range', desc: 'Short range guns that pack a punch and provide added defense.', grants: [['P.D. Unit', 5]] }
+    { name: 'Standard', desc: 'Mid range modules that can perform destruction in a variety of ways.', grants: [['Cannon Unit', 4]] }
   ];
   var CLASS_WEAPONS = {
-    'Controller': { name: 'Tactician', desc: 'Standard weapons, supplemented with weapons that can mess with enemy ships.', grants: [['Cannon Unit', 4], ['Tract Beam', 1]] },
-    'Jump': { name: 'Lightweight', desc: 'Standard weapons, but not so many to slow you down.', grants: [['Cannon Unit', 4], ['Boost', 1]] },
-    'Tank': { name: 'Armored', desc: '3 armor units, 2 Point Defense units, 1 Cannon unit, well rounded and tanky.', grants: [['Armor Unit', 3], ['P.D. Unit', 2], ['Cannon Unit', 1]] },
-    'Striker': { name: 'Large', desc: 'Standard weapons and close range weapons to ensure you can respond to any situation.', grants: [['Cannon Unit', 4], ['P.D. Unit', 2]] }
+    'Controller': { name: 'Tactician', desc: 'Standard weapons, supplemented with weapons that can mess with enemy ships.', grants: [['Cannon Unit', 3], ['Tract Beam', 1]] },
+    'Jump': { name: 'Lightweight', desc: 'Standard weapons, but not so many to slow you down.', grants: [['Cannon Unit', 3], ['Boost', 1]] },
+    'Tank': { name: 'Armored', desc: '3 armor units, 1 Point Defense unit, 1 Cannon unit, well rounded and tanky.', grants: [['Armor Unit', 3], ['P.D. Unit', 1], ['Cannon Unit', 1]] },
+    'Striker': { name: 'Close Range', desc: 'Short range guns that pack a punch and provide added defense.', grants: [['P.D. Unit', 4]] }
   };
 
   var ENGINE_OPTIONS = [
-    { name: 'Standard', desc: 'Basic modules to fly your ship. Nothing fancy.', grants: [['Graviton Unit', 3]] },
-    { name: 'Lightweight', desc: 'Less reliable but move flexible.', grants: [['Grav Jet', 2]] }
+    { name: 'Standard', desc: 'Basic modules to fly your ship. Nothing fancy.', grants: [['Graviton Unit', 3]] }
   ];
-  /* only some hulls are offered a third engine box */
+  /* only some hulls are offered extra engine boxes, and a hull may unlock more than one */
+  var HEAVY_ENGINE = { name: 'Heavyweight', desc: 'Less speed individually these engines are ideal for large ships moving quick.', grants: [['Thrust Unit', 3]] };
+  var LIGHT_ENGINE = { name: 'Lightweight', desc: 'Less reliable but move flexible.', grants: [['Grav Jet', 2]] };
   var CLASS_ENGINES = {
-    'Jump': { name: 'Heavyweight', desc: 'Less speed individually these engines are ideal for large ships moving quick.', grants: [['Thrust Unit', 3]] },
-    'Tank': { name: 'Heavyweight', desc: 'Less speed individually these engines are ideal for large ships moving quick.', grants: [['Thrust Unit', 3]] }
+    'Jump': [HEAVY_ENGINE, LIGHT_ENGINE],
+    'Tank': HEAVY_ENGINE,
+    'Striker': LIGHT_ENGINE
   };
 
   var GENERATOR_OPTIONS = [
@@ -751,7 +752,13 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) if (CORE_SECTIONS[i].key === secKey) return CORE_SECTIONS[i];
     return null;
   }
-  /* options in a section are its own, plus one box per class option any ticked hull unlocks.
+  /* a hull's entry in classOptions is one box, or a list of them; always read it as a list */
+  function classBoxesFor(sec, hull) {
+    var co = sec.classOptions && sec.classOptions[hull];
+    if (!co) return [];
+    return (Object.prototype.toString.call(co) === '[object Array]') ? co : [co];
+  }
+  /* options in a section are its own, plus the class boxes any ticked hull unlocks.
      two hulls granting the same box (Jump and Tank both give Heavyweight) still show it once. */
   function sectionOptions(secKey) {
     var sec = findSection(secKey);
@@ -761,11 +768,13 @@
     var seen = {};
     var hulls = hullNames();
     for (var i = 0; i < hulls.length; i++) {
-      var co = sec.classOptions[hulls[i]];
-      if (!co) continue;
-      if (seen[co.name]) { seen[co.name].fromClass.push(hulls[i]); continue; }
-      seen[co.name] = { name: co.name, desc: co.desc, grants: co.grants, isClass: true, fromClass: [hulls[i]] };
-      out.push(seen[co.name]);
+      var boxes = classBoxesFor(sec, hulls[i]);
+      for (var b = 0; b < boxes.length; b++) {
+        var co = boxes[b];
+        if (seen[co.name]) { seen[co.name].fromClass.push(hulls[i]); continue; }
+        seen[co.name] = { name: co.name, desc: co.desc, grants: co.grants, isClass: true, fromClass: [hulls[i]] };
+        out.push(seen[co.name]);
+      }
     }
     return out;
   }
@@ -904,6 +913,16 @@
   function firstUnansweredSection() {
     for (var i = 0; i < CORE_SECTIONS.length; i++) if (!corePick(CORE_SECTIONS[i].key)) return i;
     return CORE_SECTIONS.length - 1;
+  }
+  /* the section Continue should open next: the first unanswered one after the current, wrapping
+     round so a section skipped earlier is still collected, or -1 once every section is answered */
+  function nextUnansweredSection(from) {
+    var n = CORE_SECTIONS.length;
+    for (var i = 1; i <= n; i++) {
+      var j = (from + i) % n;
+      if (!corePick(CORE_SECTIONS[j].key)) return j;
+    }
+    return -1;
   }
   function hasPick(k) {
     if (k === 'shipClass') return hullTicks() > 0;
@@ -1725,10 +1744,16 @@ function skillsOptions() {
     renderProgressDots();
   }
   function onContinue() {
-    if (steps[step] && steps[step].key === 'core' && coreSection < CORE_SECTIONS.length - 1) {
-      coreSection += 1;
-      renderOptions();
-      return;
+    /* the core step is three picks in one window. Continue walks to whatever is still
+       unanswered — including a section that was skipped past — and only leaves the step
+       once all three are in, so the Generator pick alone cannot carry you forward. */
+    if (steps[step] && steps[step].key === 'core') {
+      var nextSec = nextUnansweredSection(coreSection);
+      if (nextSec !== -1) {
+        coreSection = nextSec;
+        renderOptions();
+        return;
+      }
     }
     if (step < steps.length - 1) { goToWin(step + 1); }
     else { enterExport(); }
