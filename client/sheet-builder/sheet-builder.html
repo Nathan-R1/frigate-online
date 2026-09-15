@@ -81,7 +81,7 @@
   /* the hull silhouette leads its card, and takes the card's accent when ticked */
   .hull-ico { width: 48px; height: 61px; flex: none; display: block; color: var(--icon-cyan); }
   .opt.sel .hull-ico { color: var(--amber); }
-  /* storage / leadership cost, parked in the card's bottom-left opposite the chevron */
+  /* storage / capacity cost, parked in the card's bottom-left opposite the chevron */
   .opt-cost {
     position: absolute; left: 16px; bottom: 10px;
     display: inline-flex; align-items: center; gap: 9px; flex: none;
@@ -1130,17 +1130,17 @@
   var INFO_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>';
   var TECH_TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
   function typeIcon(key) { return TECH_TYPE_ICONS[key] || '⚔'; }
-  /* what a card costs you to hold, read before the title: storage against Logistics,
-     leadership against Leadership. a zero or missing cost shows nothing. */
-  function costPip(cls, icon, n) {
-    return '<span class="cost ' + cls + '">' + icon + n + '</span>';
+  /* what a card costs you to hold: storage against Logistics, Capacity against Leadership.
+     a zero or missing cost shows nothing. The data key stays `leadership` for compatibility. */
+  function costPip(cls, icon, n, label) {
+    return '<span class="cost ' + cls + '" title="' + label + '">' + icon + n + '</span>';
   }
   function techCostHtml(t) {
     var st = parseInt(t.storage, 10);
     var ld = parseInt(t.leadership, 10);
     var pips = '';
-    if (!isNaN(st) && st > 0) pips += costPip('cost-st', STORAGE_ICON, st);
-    if (!isNaN(ld) && ld > 0) pips += costPip('cost-ld', LEADERSHIP_ICON, ld);
+    if (!isNaN(st) && st > 0) pips += costPip('cost-st', STORAGE_ICON, st, 'Storage cost');
+    if (!isNaN(ld) && ld > 0) pips += costPip('cost-ld', LEADERSHIP_ICON, ld, 'Capacity cost');
     return pips ? '<span class="opt-cost">' + pips + '</span>' : '';
   }
   /* "Create Module Cannon." / "Create deployable Fusion Mine" earn an info pip right after the
@@ -1716,7 +1716,7 @@ function skillsOptions() {
       if (rars) row += '<span class="ff-div"></span>' + rars;
       var extras = '';
       if (f.st || filters.st) extras += filterChip(STORAGE_ICON, 'st', 'Has storage cost', filters.st);
-      if (f.ld || filters.ld) extras += filterChip(LEADERSHIP_ICON, 'ld', 'Has leadership cost', filters.ld);
+      if (f.ld || filters.ld) extras += filterChip(LEADERSHIP_ICON, 'ld', 'Has capacity cost', filters.ld);
       if (f.ch || filters.ch) extras += filterChip(CHARGES_ICON, 'ch', 'Has charges', filters.ch);
       if (extras) row += '<span class="ff-div"></span>' + extras;
     }
