@@ -15,6 +15,8 @@ var MOD_PRESETS = [
     {name:'Shuttle Craft I', traits:'', req:'', hull:'1', speed:'2', charges:'1', type:'deployable', tt:'science', onbuild:'This gains 1 charge. This charge acts as a shield.', passive:'', onactivate:'Exhaust to Move 2, and choose one of the following:\n- Target an Object: Range: 1, Attacks: 1, Dmg: 1; OR\n- Make a Sensor Check to Scan'},
     {name:'Tug Craft I', traits:'', req:'', hull:'1', speed:'2', charges:'1', type:'deployable', tt:'movement', onbuild:'This gains 1 charge. This charge acts as a shield.', passive:'', onactivate:'Exhaust to Move 2, choose one of the following:\n- Target an Object: Range: 1, Attacks: 1, Dmg: 1; OR\n- Target an Object: Range: 1, Save: Piloting (On hit Move the object 1 space)'},
     {name:'TAT Guided', traits:'', req:'', hull:'2', speed:'4', type:'deployable', tt:'offense', onbuild:'Exhaust', passive:'', onactivate:'You may move this deployable up to 4 spaces, then Target an Object:\nRange: 1, Check: Search, Dmg: 4 💥\nAfter hitting an Object remove this deployable.'},
-    {name:'Thrust Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust to gain 2 Move for each module.'}
+    {name:'Thrust Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust to gain 2 Move for each module.'},
+    {name:'Shield Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent modules to gain 2 shields.'},
+    {name:'SPEAR Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent weapons modules to:\nRange: Sensors, Attacks: 4, Dmg: 2 \u26a1 (Exhaust the module hit for 1 round).'}
   ];
 MOD_PRESETS.sort(function(a,b){return a.name.toLowerCase().localeCompare(b.name.toLowerCase());});
