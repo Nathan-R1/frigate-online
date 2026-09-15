@@ -79,6 +79,9 @@
   .rar-tag-uncommon { color: var(--icon-hull); border-color: var(--icon-hull); background: rgba(127,216,138,.1); }
   .rar-tag-rare { color: var(--amber); border-color: var(--amber); background: rgba(232,169,74,.1); }
   .opt-title-row .ticon { width: 15px; height: 15px; flex: none; }
+  /* the hull silhouette leads its card, and takes the card's accent when ticked */
+  .hull-ico { width: 48px; height: 61px; flex: none; display: block; color: var(--icon-cyan); }
+  .opt.sel .hull-ico { color: var(--amber); }
   /* storage / leadership cost, larger than the meta tags because it is read first */
   .opt-cost { display: inline-flex; align-items: center; gap: 9px; flex: none; }
   .opt-cost .cost {
@@ -537,11 +540,13 @@
   var BUILDER_KEY = 'frigateBuilderChoices';
 
   /* hull classes: name only, no stat/skill/tech/mod/trait grants */
+  /* key order is the hull order everywhere: the step 1 cards, the draw slots, and the
+     class grouping a draw offer is sorted into */
   var CLASS_PRESETS = {
-    'Controller': { desc: 'Placeholder description for the Controller hull.' },
-    'Jump': { desc: 'Placeholder description for the Jump hull.' },
-    'Tank': { desc: 'Placeholder description for the Tank hull.' },
-    'Striker': { desc: 'Placeholder description for the Striker hull.' }
+    'Striker': { desc: 'Guns and more guns, destroy everything with offensive decks.' },
+    'Tank': { desc: 'Strength and durability allow this defensive deck to dominate.' },
+    'Jump': { desc: 'Speed and rule-defying actions define this movement focused deck.' },
+    'Controller': { desc: 'Science focused decks to manipulate the map and your enemies.' }
   };
 
   /* core options: three sections, each a single pick. grants are [tech name, count] pairs. */
@@ -1209,6 +1214,15 @@
   }
   function closeModPopup() { modPop.classList.add('builder-hidden'); }
 
+  /* hull silhouettes, one per class. Drawn at 320x406 with 2.5/1.5 strokes; scaled up to
+     9/5 so the outline and the interior detail both survive at the ~48px the card shows. */
+  var HULL_ICONS = {
+    'Striker': '<svg class="hull-ico" viewBox="180 30 320 406" fill="none" stroke="currentColor" stroke-linejoin="miter" stroke-linecap="round" aria-hidden="true"><g stroke-width="9"><polygon points="340,60 368,152 398,176 386,232 438,272 428,340 452,394 396,396 390,426 290,426 284,396 228,394 252,340 242,272 294,232 282,176 312,152"/></g><g stroke-width="5"><path d="M340 78 L340 160"/><path d="M298 204 L340 170 L382 204"/><path d="M286 252 L340 214 L394 252"/><path d="M340 268 L340 396"/><path d="M276 300 L404 300"/><path d="M280 362 L400 362"/><rect x="299" y="400" width="16" height="18" rx="3"/><rect x="321" y="400" width="16" height="18" rx="3"/><rect x="343" y="400" width="16" height="18" rx="3"/><rect x="365" y="400" width="16" height="18" rx="3"/></g></svg>',
+    'Tank': '<svg class="hull-ico" viewBox="180 30 320 406" fill="none" stroke="currentColor" stroke-linejoin="miter" stroke-linecap="round" aria-hidden="true"><g stroke-width="9"><polygon points="310,110 370,110 412,132 448,180 468,200 468,268 490,300 476,356 430,380 420,404 260,404 250,380 204,356 190,300 212,268 212,200 232,180 268,132"/></g><g stroke-width="5"><path d="M262 158 L340 138 L418 158"/><path d="M250 196 L340 172 L430 196"/><path d="M244 234 L340 208 L436 234"/><rect x="272" y="252" width="136" height="110" rx="6"/><path d="M272 290 L408 290"/><path d="M272 326 L408 326"/><rect x="214" y="270" width="40" height="70" rx="6"/><rect x="426" y="270" width="40" height="70" rx="6"/><rect x="268" y="374" width="20" height="22" rx="3"/><rect x="299" y="374" width="20" height="22" rx="3"/><rect x="330" y="374" width="20" height="22" rx="3"/><rect x="361" y="374" width="20" height="22" rx="3"/><rect x="392" y="374" width="20" height="22" rx="3"/></g></svg>',
+    'Jump': '<svg class="hull-ico" viewBox="180 30 320 406" fill="none" stroke="currentColor" stroke-linejoin="miter" stroke-linecap="round" aria-hidden="true"><g stroke-width="9"><polygon points="340,40 352,140 358,220 378,300 420,392 396,398 368,372 364,412 316,412 312,372 284,398 260,392 302,300 322,220 328,140"/></g><g stroke-width="5"><polygon points="340,120 352,170 340,230 328,170"/><path d="M340 60 L340 112"/><path d="M340 238 L340 400"/><path d="M330 258 L330 340"/><path d="M350 258 L350 340"/><rect x="322" y="376" width="14" height="28" rx="3"/><rect x="344" y="376" width="14" height="28" rx="3"/></g></svg>',
+    'Controller': '<svg class="hull-ico" viewBox="180 30 320 406" fill="none" stroke="currentColor" stroke-linejoin="miter" stroke-linecap="round" aria-hidden="true"><g stroke-width="9"><polygon points="340,80 392,122 408,180 398,232 452,262 452,330 416,358 400,410 280,410 264,358 228,330 228,262 282,232 272,180 288,122"/></g><g stroke-width="5"><path d="M340 102 L340 200"/><path d="M326 130 L354 130"/><path d="M330 160 L350 160"/><polygon points="340,210 372,228 372,264 340,282 308,264 308,228"/><circle cx="340" cy="246" r="13"/><path d="M308 246 L266 246"/><path d="M372 246 L414 246"/><rect x="238" y="276" width="52" height="44" rx="4"/><rect x="390" y="276" width="52" height="44" rx="4"/><path d="M238 298 L290 298"/><path d="M390 298 L442 298"/><path d="M264 276 L264 320"/><path d="M416 276 L416 320"/><path d="M310 372 L310 394"/><path d="M340 372 L340 394"/><path d="M370 372 L370 394"/></g></svg>'
+  };
+  function hullIcon(name) { return HULL_ICONS[name] || ''; }
   function classOptions() {
     var out = [];
     var keys = Object.keys(CLASS_PRESETS);
@@ -1216,7 +1230,7 @@
       var k = keys[i], p = CLASS_PRESETS[k];
       var ticks = countFor('shipClass', k);
       var tag = ticks > 1 ? '<span class="opt-count">×' + ticks + '</span>' : '';
-      out.push(optionHtml('shipClass', k, k, escapeHtml(p.desc || ''), null, null, null, '', tag,
+      out.push(optionHtml('shipClass', k, k, escapeHtml(p.desc || ''), null, null, hullIcon(k), '', tag,
         ticks > 0 ? '<button type="button" class="tick-x" data-untick="' + esc(k) + '" title="Remove one tick">✕</button>' : ''));
     }
     return out.join('');
