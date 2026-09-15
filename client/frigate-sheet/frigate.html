@@ -45,19 +45,12 @@
         <div class="eyebrow" style="margin-bottom:0;" onclick="togglePanelCollapse(this)" title="Collapse section"><span class="eb-text">Hull Classification</span><svg class="kw-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2c2.5 2.5 3.5 6 3.5 10.5L18 15v3l-2.5-1c-.3 1.5-1 2.7-1.7 3.5l-1.8-1.8-1.8 1.8c-.7-.8-1.4-2-1.7-3.5L6 18v-3l2.5-2.5C8.5 8 9.5 4.5 12 2Z" stroke="var(--icon-rocket)" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
         <div style="display:flex;align-items:center;gap:10px;">
           <button type="button" class="edit-stats-btn" id="editStatsBtn" onclick="toggleStatsEdit()" title="Edit the base stat values">Edit</button>
-          <input class="dc-hex" id="dcHex" type="text" value="6" maxlength="2" readonly title="Difficulty Class Check">
+          <input class="dc-hex" id="dcHex" type="text" value="7" maxlength="2" readonly title="Difficulty Class Check">
         </div>
       </div>
       <div class="class-select">
         <span id="shipClassLabel" class="ship-class-label">Unclassified</span>
-        <select id="shipClass" class="base-edit" onchange="onShipClassChange()">
-          <option selected>Unclassified</option>
-          <option>Support Class</option>
-          <option>Jump Class</option>
-          <option>Striker Class</option>
-          <option>Discovery Class</option>
-          <option>Bulwark Class</option>
-        </select>
+        <input id="shipClass" class="ship-class-input" type="text" maxlength="60" value="Unclassified" placeholder="Unclassified" title="Hull classification" oninput="syncShipClassLabel(this.value)">
       </div>
 
       <div class="class-body">
@@ -72,27 +65,35 @@
           <div class="val"><input id="shieldCur" value="6" maxlength="2"><span class="sep">/</span><input id="shieldBase" class="base-edit" value="6" maxlength="2"><output id="shieldMax" class="derived">6</output></div>
           <div class="lbl">Base Shield</div>
         </div>
-        <div class="stat speed">
-          <svg class="icon dec" onclick="tapStat(event,'speedCur')" oncontextmenu="decrementStat(event,'speedCur')" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div class="val"><input id="speedCur" value="2" maxlength="2"><span class="sep">/</span><input id="speedBase" class="base-edit" value="2" maxlength="2"><output id="speedMax" class="derived">2</output></div>
-          <div class="lbl">Speed</div>
-        </div>
-        <div class="stat">
-          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.6" stroke-linejoin="round"/></svg>
-          <div class="val"><output id="storageCur">2</output><span class="sep">/</span><input id="storageBase" class="base-edit" value="0" maxlength="2"><output id="storageMax" class="derived">2</output></div>
-          <div class="lbl">Storage</div>
-        </div>
         <div class="stat">
           <svg class="icon" viewBox="0 0 36 36" fill="var(--icon-sensor)"><path d="M32,18c0,7.7-6.3,14-14,14c-7.7,0-14-6.3-14-14C4,10.6,9.7,4.5,17.1,4v3.7c-5.7,0.5-9.9,5.5-9.4,11.2s5.5,9.9,11.2,9.4c5.3-0.5,9.4-4.9,9.4-10.3h-2c0,4.6-3.7,8.3-8.3,8.3s-8.3-3.7-8.3-8.3c0-4.2,3.1-7.8,7.3-8.3v4.4c-1.8,0.4-3.1,2-3.1,3.9c0,2.2,1.8,4,4,4s4-1.8,4-4c0-1.8-1.3-3.4-3-3.8V2.1C18.6,2,18.3,2,18,2C9.2,2,2,9.2,2,18s7.2,16,16,16s16-7.2,16-16H32z M20,18c0,1.1-0.9,2-2,2s-2-0.9-2-2s0.9-2,2-2S20,16.9,20,18z"/></svg>
           <div class="val"><input id="sensorRangeBase" class="base-edit" value="0" maxlength="2"><output id="sensorRange" class="derived">4</output></div>
           <div class="lbl">Sensor Range</div>
         </div>
-        <div class="stat">
+        <div class="stat stat-optional">
           <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 6h9v14H4V6Z" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 8l5-1.5 3 13-9 2.5" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/></svg>
           <div class="val"><input id="drawPlayBase" class="base-edit" value="1" maxlength="2"><span class="sep of base-of">of</span><input id="drawDrawBase" class="base-edit" value="4" maxlength="2"><output id="drawPlayEff" class="derived">1</output><span class="sep of derived-of">of</span><output id="drawDrawEff" class="derived">5</output></div>
           <div class="lbl">Play/Draw</div>
         </div>
+        <div class="stat speed stat-optional">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="val"><output id="speedMax">2</output></div>
+          <div class="lbl">Max Speed</div>
+        </div>
+        <div class="stat stat-optional">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <div class="val"><output id="storageCur">2</output><span class="sep">/</span><input id="storageBase" class="base-edit" value="0" maxlength="2"><output id="storageMax" class="derived">2</output></div>
+          <div class="lbl">Storage</div>
+        </div>
+        <div class="stat stat-optional">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <div class="val"><output id="leadCur">0</output><span class="sep">/</span><output id="leadMax">0</output></div>
+          <div class="lbl">Leadership</div>
+        </div>
       </div>
+      <label class="stat-showall" title="Keep Play/Draw, Max Speed, Storage and Leadership visible outside edit mode">
+        <input type="checkbox" id="showAllStats" onchange="setShowAllStats(this.checked)"> Show all stats
+      </label>
       </div>
     </div>
 
@@ -395,7 +396,7 @@
     'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
     'Navigation': 'Navigation is added to Speed (min. 0)',
     'Piloting': 'Sometimes you might have to dodge!!!',
-    'Science': '1/2 of (science + science penalty)',
+    'Science': 'Starter Cards = 1/2 of (science + science penalty)',
     'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
   };
   function skillValue(skillName){
@@ -427,17 +428,22 @@
   function updateDerivedStats(){
     setOut('hullMax',     baseNum('hullBase') + skillBonus('Engineering'));
     setOut('shieldMax',   baseNum('shieldBase'));
-    setOut('speedMax',    baseNum('speedBase') + skillBonus('Navigation'));
+    setOut('speedMax',    Math.max(1, skillBonus('Navigation')));
     setOut('storageMax',  baseNum('storageBase') + skillBonus('Logistics'));
     var storageTotal = outVal('storageMax') - techStorageSum();
     setOut('storageCur', storageTotal);
     var scEl = document.getElementById('storageCur');
     if(scEl) scEl.classList.toggle('neg', storageTotal < 0);
+    setOut('leadMax', skillBonus('Leadership'));
+    var leadTotal = outVal('leadMax') - techLeadershipSum();
+    setOut('leadCur', leadTotal);
+    var lcEl = document.getElementById('leadCur');
+    if(lcEl) lcEl.classList.toggle('neg', leadTotal < 0);
     setOut('sensorRange', baseNum('sensorRangeBase') + 2 * skillBonus('Sensors'));
     setOut('drawPlayEff', baseNum('drawPlayBase'));
     setOut('drawDrawEff', baseNum('drawDrawBase') + skillBonus('Cyber'));
   }
-  var DERIVED_BASE_IDS = ['hullBase','shieldBase','speedBase','storageBase','sensorRangeBase','drawPlayBase','drawDrawBase'];
+  var DERIVED_BASE_IDS = ['hullBase','shieldBase','storageBase','sensorRangeBase','drawPlayBase','drawDrawBase'];
   function toggleStatsEdit(){
     var btn = document.getElementById('editStatsBtn');
     var panel = btn.closest('.panel');
@@ -449,6 +455,21 @@
     if(dc) dc.readOnly = !editing;
     if(editing) updateDerivedStats();
   }
+  /* whether the optional stat boxes stay visible outside edit mode; a view preference,
+     kept next to the panel collapse state rather than in the sheet itself */
+  var SHOW_ALL_KEY = 'frigateShowAllStats';
+  function setShowAllStats(on){
+    var strip = document.querySelector('.stat-strip');
+    if(strip) strip.classList.toggle('show-all', !!on);
+    var box = document.getElementById('showAllStats');
+    if(box) box.checked = !!on;
+    try { localStorage.setItem(SHOW_ALL_KEY, on ? '1' : '0'); }catch(e){}
+  }
+  function restoreShowAllStats(){
+    var on = false;
+    try { on = localStorage.getItem(SHOW_ALL_KEY) === '1'; }catch(e){}
+    setShowAllStats(on);
+  }
   function syncShipClassLabel(cls){
     var lbl = document.getElementById('shipClassLabel');
     if(lbl) lbl.textContent = cls || '';
@@ -459,7 +480,14 @@
     return isNaN(v) ? 0 : v;
   }
   function techStorageSum(){
-    var inputs = document.querySelectorAll('#techGrid .tstorage-input');
+    return techCostSum('.tstorage-input');
+  }
+  /* leadership works like storage: the skill is the cap, the deck spends against it */
+  function techLeadershipSum(){
+    return techCostSum('.tleadership-input');
+  }
+  function techCostSum(sel){
+    var inputs = document.querySelectorAll('#techGrid ' + sel);
     var sum = 0;
     for(var i = 0; i < inputs.length; i++){
       var v = parseInt(inputs[i].value, 10);
@@ -1175,7 +1203,7 @@
     setInterval(broadcastHullStats, 750);
   }
   function adjustHullCur(key, delta){
-    if(['hull','shield','speed'].indexOf(key) === -1) return;
+    if(['hull','shield'].indexOf(key) === -1) return;
     var el = document.getElementById(key + 'Cur');
     if(!el) return;
     var v = parseInt(el.value, 10);
@@ -1202,7 +1230,7 @@
     HULL_CHANNEL.postMessage({ t:'stats', name: statStr('shipName'), dc: statStr('dcHex'), stats:{
       hull:   { cur: statVal('hullCur'),   max: outVal('hullMax') },
       shield: { cur: statVal('shieldCur'), max: outVal('shieldMax') },
-      speed:  { cur: statVal('speedCur'),  max: outVal('speedMax') },
+      speed:  { max: outVal('speedMax') },
       storage:{ cur: outVal('storageCur'), max: outVal('storageMax') },
       sensorRange: outVal('sensorRange'),
       play:   outVal('drawPlayEff'),
@@ -1317,96 +1345,6 @@
     setTechDeploy(el, (cur + 1) % DEPLOY_STATES.length);
   }
 
-  var CLASS_PRESETS = {
-    'Support Class': {
-      stats: {hull:2, shield:2, storage:2},
-      techName: 'Repulsor Unit',
-      modName: 'Repulsor Unit'
-    },
-    'Jump Class': {
-      stats: {speed:2},
-      skills: {Sensors:1},
-      techName: 'Phantom'
-    },
-    'Discovery Class': {
-      stats: {storage:2},
-      skills: {Logistics:2, Science:1},
-      techName: 'Experimental Reconnaissance'
-    },
-    'Striker Class': {
-      stats: {storage:2},
-      skills: {Leadership:2},
-      techName: 'Decomp Strikes'
-    },
-    'Bulwark Class': {
-      stats: {hull:4},
-      crewTraits: ['Citadel']
-    }
-  };
-  function findTechByName(name){
-    for(var i=0;i<TECH_PRESETS.length;i++){
-      if(TECH_PRESETS[i].name === name) return TECH_PRESETS[i];
-    }
-    return null;
-  }
-  function findModByName(name){
-    for(var i=0;i<MOD_PRESETS.length;i++){
-      if(MOD_PRESETS[i].name === name) return MOD_PRESETS[i];
-    }
-    return null;
-  }
-  function bumpStat(id, delta){
-    var el = document.getElementById(id);
-    if(!el || delta === 0) return el ? el.value : '';
-    var num = parseInt(el.value, 10);
-    if(isNaN(num)) num = 0;
-    el.value = String(num + delta);
-    return el.value;
-  }
-  function onShipClassChange(){
-    var sel = document.getElementById('shipClass');
-    var cls = sel.options[sel.selectedIndex].text;
-    syncShipClassLabel(cls);
-    var preset = CLASS_PRESETS[cls];
-    if(!preset) return;
-    if(!confirm('Add stats and technology of this ' + cls.toLowerCase() + '?')) return;
-    var s = preset.stats || {};
-    if(s.hull){
-      bumpStat('hullCur', s.hull);
-      bumpStat('hullBase', s.hull);
-    }
-    if(s.shield){
-      bumpStat('shieldCur', s.shield);
-      bumpStat('shieldBase', s.shield);
-    }
-    if(s.storage){
-      bumpStat('storageBase', s.storage);
-    }
-    if(s.speed){
-      bumpStat('speedCur', s.speed);
-      bumpStat('speedBase', s.speed);
-    }
-    var skills = preset.skills || {};
-    Object.keys(skills).forEach(function(name){
-      bumpStat('skill-' + name + '-pts', skills[name]);
-    });
-    if(preset.techName){
-      var t = findTechByName(preset.techName);
-      if(t) addTechFromData(t);
-    }
-    if(preset.modName){
-      var m = findModByName(preset.modName);
-      if(m) pickModPreset(m);
-    }
-    (preset.crewTraits || []).forEach(function(traitName){
-      var found = null;
-      for(var k = 0; k < CREW_PRESETS.length; k++){
-        if(CREW_PRESETS[k].name === traitName){ found = CREW_PRESETS[k]; break; }
-      }
-      if(found) pickPreset(found);
-    });
-    updateDerivedStats();
-  }
   document.addEventListener('click', function(e){
     var menu = document.getElementById('techPresetMenu');
     if(menu.classList.contains('open') && !menu.contains(e.target)){
@@ -1918,7 +1856,6 @@
       stats: {
         hullCur: v('hullCur'), hullBase: v('hullBase'),
         shieldCur: v('shieldCur'), shieldBase: v('shieldBase'),
-        speedCur: v('speedCur'), speedBase: v('speedBase'),
         storageBase: v('storageBase'),
         sensorRangeBase: v('sensorRangeBase'),
         drawPlayBase: v('drawPlayBase'), drawDrawBase: v('drawDrawBase')
@@ -1936,7 +1873,7 @@
     }
     set('shipName', json.shipName);
     set('shipClass', json.shipClass);
-    syncShipClassLabel(document.getElementById('shipClass').value);
+    syncShipClassLabel(statStr('shipClass'));
     set('dcHex', json.dcHex);
     var s = json.stats || {};
     var pick = function(o, a, b){ return o[a] !== undefined ? o[a] : o[b]; };
@@ -1944,8 +1881,6 @@
     set('hullBase', pick(s, 'hullBase', 'hullMax'));
     set('shieldCur', s.shieldCur);
     set('shieldBase', pick(s, 'shieldBase', 'shieldMax'));
-    set('speedCur', s.speedCur);
-    set('speedBase', pick(s, 'speedBase', 'speedMax'));
     set('storageBase', pick(s, 'storageBase', 'storageMax'));
     set('sensorRangeBase', pick(s, 'sensorRangeBase', 'sensorRange'));
     set('drawPlayBase', pick(s, 'drawPlayBase', 'drawPlay'));
@@ -2076,6 +2011,7 @@
     }
     applySavedTheme();
     restorePanelCollapse();
+    restoreShowAllStats();
     showStartGate(sheetIsEmpty());
   })();
 </script>

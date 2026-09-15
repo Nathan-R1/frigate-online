@@ -31,11 +31,9 @@
   .sb-item.shield .sb-num { color: var(--icon-shield); }
   .sb-item.speed .sb-num { color: var(--icon-cyan); }
   .sb-item.dc { cursor: default; }
-  .sb-item.storage .sb-num { color: var(--icon-logistics); }
   .sb-item.sensor .sb-num { color: var(--icon-sensor); }
   .sb-item.playdraw .sb-num { color: var(--icon-card); }
   .sb-item.playdraw .sb-sep { color: var(--ink-dim); }
-  .sb-item.storage .sb-num.neg { color: var(--red); }
   .sb-item.dc .sb-dc-label {
     font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .18em;
     color: var(--ink-dim);
@@ -144,9 +142,9 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" stroke-width="1.6" stroke-linejoin="round"/></svg>
         <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
       </div>
-      <div class="sb-item speed">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="sb-num sb-cur">–</span><span class="sb-sep">/</span><span class="sb-num sb-max">–</span>
+      <div class="sb-item sensor">
+        <svg viewBox="0 0 36 36" fill="var(--icon-sensor)"><path d="M32,18c0,7.7-6.3,14-14,14c-7.7,0-14-6.3-14-14C4,10.6,9.7,4.5,17.1,4v3.7c-5.7,0.5-9.9,5.5-9.4,11.2s5.5,9.9,11.2,9.4c5.3-0.5,9.4-4.9,9.4-10.3h-2c0,4.6-3.7,8.3-8.3,8.3s-8.3-3.7-8.3-8.3c0-4.2,3.1-7.8,7.3-8.3v4.4c-1.8,0.4-3.1,2-3.1,3.9c0,2.2,1.8,4,4,4s4-1.8,4-4c0-1.8-1.3-3.4-3-3.8V2.1C18.6,2,18.3,2,18,2C9.2,2,2,9.2,2,18s7.2,16,16,16s16-7.2,16-16H32z M20,18c0,1.1-0.9,2-2,2s-2-0.9-2-2s0.9-2,2-2S20,16.9,20,18z"/></svg>
+        <span class="sb-num sb-range">–</span>
       </div>
       <div class="sb-item dc">
         <span class="sb-dc-label">DC</span><span class="sb-dc-val" id="sbDc">–</span>
@@ -177,25 +175,26 @@
   var sbWrap = document.getElementById('sbWrap');
   var skillsEl = document.getElementById('sbSkills');
   var skillsListEl = document.getElementById('sbSkillsList');
-  var storageItem, storageCurEl, sensorEl, playEl, drawEl;
-  var sensorItem, pdItem, skillDivider;
+  var sensorEl, playEl, drawEl;
+  var pdItem, skillDivider;
+  /* play/draw, speed and DC only appear once the bar is in detailed mode */
+  var speedItem, speedMaxEl;
+  var dcItem = document.querySelector('.sb-item.dc');
 
   function updateSkillsVisibility(){
     skillsEl.classList.toggle('hidden', !detailOn);
     reparentDetail();
   }
+  /* the vertical layout stacks the detail stats into the main column instead of the
+     skills row; either way they read play/draw, speed, DC */
   function reparentDetail(){
-    if(!storageItem || !skillDivider) return;
+    if(!pdItem || !skillDivider) return;
     var centerEl = document.querySelector('.sb-center');
-    var dc = centerEl && centerEl.querySelector('.sb-item.dc');
-    if(verticalOn && detailOn && dc){
-      centerEl.insertBefore(pdItem, dc);
-      centerEl.insertBefore(sensorItem, dc);
-      centerEl.insertBefore(storageItem, dc);
-    } else {
-      skillsListEl.insertBefore(storageItem, skillDivider);
-      skillsListEl.insertBefore(sensorItem, skillDivider);
-      skillsListEl.insertBefore(pdItem, skillDivider);
+    var items = [pdItem, speedItem, dcItem];
+    for(var i = 0; i < items.length; i++){
+      if(!items[i]) continue;
+      if(verticalOn && detailOn && centerEl) centerEl.appendChild(items[i]);
+      else skillsListEl.insertBefore(items[i], skillDivider);
     }
   }
   function numStr(v){
@@ -213,10 +212,8 @@
       skillsListEl.appendChild(item);
       return item;
     }
-    storageItem = statWrap('storage', '<svg viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.6" stroke-linejoin="round"/></svg>', '<span class="sb-num sb-cur">–</span>');
-    storageCurEl = storageItem.querySelector('.sb-cur');
-    sensorItem = statWrap('sensor', '<svg viewBox="0 0 36 36" fill="var(--icon-sensor)"><path d="M32,18c0,7.7-6.3,14-14,14c-7.7,0-14-6.3-14-14C4,10.6,9.7,4.5,17.1,4v3.7c-5.7,0.5-9.9,5.5-9.4,11.2s5.5,9.9,11.2,9.4c5.3-0.5,9.4-4.9,9.4-10.3h-2c0,4.6-3.7,8.3-8.3,8.3s-8.3-3.7-8.3-8.3c0-4.2,3.1-7.8,7.3-8.3v4.4c-1.8,0.4-3.1,2-3.1,3.9c0,2.2,1.8,4,4,4s4-1.8,4-4c0-1.8-1.3-3.4-3-3.8V2.1C18.6,2,18.3,2,18,2C9.2,2,2,9.2,2,18s7.2,16,16,16s16-7.2,16-16H32z M20,18c0,1.1-0.9,2-2,2s-2-0.9-2-2s0.9-2,2-2S20,16.9,20,18z"/></svg>', '<span class="sb-num sb-range">–</span>');
-    sensorEl = sensorItem.querySelector('.sb-range');
+    speedItem = statWrap('speed', '<svg viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="var(--icon-cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>', '<span class="sb-num sb-max">–</span>');
+    speedMaxEl = speedItem.querySelector('.sb-max');
     pdItem = statWrap('playdraw', '<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h9v14H4V6Z" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 8l5-1.5 3 13-9 2.5" stroke="var(--icon-card)" stroke-width="1.8" stroke-linejoin="round"/></svg>', '<span class="sb-num sb-play">–</span><span class="sb-sep">of</span><span class="sb-num sb-draw">–</span>');
     playEl = pdItem.querySelector('.sb-play');
     drawEl = pdItem.querySelector('.sb-draw');
@@ -267,16 +264,11 @@
   }
   function applyStats(m){
     var s = m.stats || {};
+    if(!sensorEl) sensorEl = document.querySelector('.sb-item.sensor .sb-range');
     set(s.hull,   document.querySelector('.sb-item.hull'));
     set(s.shield, document.querySelector('.sb-item.shield'));
-    set(s.speed,  document.querySelector('.sb-item.speed'));
-    if(s.storage){
-      var cur = s.storage.cur;
-      if(typeof cur !== 'number' || isNaN(cur)) cur = '–';
-      storageCurEl.textContent = numStr(cur);
-      storageCurEl.classList.toggle('neg', typeof cur === 'number' && cur < 0);
-    }
-    sensorEl.textContent = numStr(s.sensorRange);
+    if(speedMaxEl) speedMaxEl.textContent = numStr(s.speed && s.speed.max);
+    if(sensorEl) sensorEl.textContent = numStr(s.sensorRange);
     playEl.textContent = numStr(s.play);
     drawEl.textContent = numStr(s.draw);
     if (m.skills) { skillValues = m.skills; renderSkills(); }
@@ -291,7 +283,7 @@
     var dcEl = document.getElementById('sbDc');
     if(m.dc !== undefined && String(m.dc) !== '') dcEl.textContent = m.dc;
   }
-  var KEYS = ['hull', 'shield', 'speed'];
+  var KEYS = ['hull', 'shield'];
   function isSmallScreen(){ return window.matchMedia('(max-width: 640px)').matches; }
   function adjust(key, delta){
     if(ch) ch.postMessage({ t: 'adjust', key: key, delta: delta });
