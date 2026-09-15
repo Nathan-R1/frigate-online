@@ -229,6 +229,7 @@
     </div>
   </div>
 
+<script src="presets/skill-descriptions.js"></script>
 <script src="presets/tech-presets.js"></script>
 <script src="presets/crew-presets.js"></script>
 <script src="presets/mod-presets.js"></script>
@@ -388,16 +389,6 @@
       }
     });
   }
-  var SKILL_DESCRIPTIONS = {
-    'Cyber': 'Cyber is added to Draw (min. 0)',
-    'Engineering': 'Engineering is added to Hull HP (min. 0)',
-    'Leadership': 'Leadership is the maximum number of Traits & Officers slots (min. 0)',
-    'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
-    'Navigation': 'Navigation is added to Speed (min. 0)',
-    'Piloting': 'Sometimes you might have to dodge!!!',
-    'Science': 'Starter Cards = 1/2 of (science + science penalty)',
-    'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
-  };
   function skillValue(skillName){
     var pts = document.getElementById('skill-' + skillName + '-pts');
     var pen = document.getElementById('skill-' + skillName + '-pen');
