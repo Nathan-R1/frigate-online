@@ -1,5 +1,5 @@
 var TECH_PRESETS = [
-    {name:'Citadel', traits:'[Module] Starter Card', onbuild:'Create Module Citadel. Trash.', passive:'', onactivate:'', tt:'defense', storage:'0', deploy:'module', hullClass:'tank', rarity:'uncommon'},
+    {name:'Citadel', traits:'[Module] Starter Card', onbuild:'Gain 5 Hull HP (may exceed max). Create Module Citadel. Trash.', passive:'', onactivate:'', tt:'defense', storage:'0', deploy:'module', hullClass:'tank', rarity:'uncommon'},
     {name:'Armor Unit', traits:'[Module]', onbuild:'Create Module Armor. Trash.', passive:'', onactivate:'', tt:'defense', storage:'0', deploy:'module', hullClass:'tank', rarity:'common'},
     {name:'Flame Cannon', traits:'active 1', onbuild:'', passive:'', onactivate:'Exhaust a Movement Module to: gain +1 Dmg and +2 Range to all Cannons and P.D. modules until the start of your next turn.', tt:'offense', storage:'0', deploy:false, hullClass:'striker', rarity:'common'},
     {name:'Cannon Unit', traits:'[Module]', onbuild:'Create Module Cannon. Trash.', passive:'', onactivate:'', tt:'offense', storage:'0', deploy:'module', hullClass:'none', rarity:'common'},
