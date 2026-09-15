@@ -175,7 +175,7 @@ min-width:0;
 .stat-strip{
 
     display:grid;
-    grid-template-columns:repeat(7,1fr);
+    grid-template-columns:repeat(auto-fit,minmax(96px,1fr));
     gap:10px;
     margin-bottom:18px;
     min-width:0;
@@ -201,7 +201,7 @@ min-width:0;
     .subline{gap:12px;}
     table.skills th{padding-left:0;}
     .class-select{flex-wrap:wrap;width:100%;}
-    .class-select select{flex:1 1 auto;width:100%;}
+    .class-select .ship-class-input{flex:1 1 auto;width:100%;}
     .class-select .info-btn{flex:none;}
     table.skills td:first-child{overflow-wrap:anywhere;padding-right:4px;}
     table.skills th.pt, table.skills td.pt{width:auto;min-width:34px;padding-left:6px;}
@@ -252,7 +252,7 @@ min-width:0;
     max-width:100%;
   
   }
-.class-select select{
+.class-select .ship-class-input{
 
     display:none;
     background:var(--stat-bg);
@@ -267,7 +267,7 @@ min-width:0;
     min-width:0;max-width:100%;
   
   }
-.panel.editing .class-select select{
+.panel.editing .class-select .ship-class-input{
 
     display:inline-block;
   
@@ -295,6 +295,28 @@ min-width:0;
   }
 .stat .icon{
 width:26px;height:26px;margin:0 auto 6px;display:block;
+  }
+/* Max Speed, Storage and Leadership are detail: shown while the panel is being
+   edited, or permanently once the Show all stats box is ticked */
+.stat.stat-optional{
+display:none;
+  }
+.panel.editing .stat.stat-optional,.stat-strip.show-all .stat.stat-optional{
+display:block;
+  }
+.stat-showall{
+display:none;
+  }
+.panel.editing .stat-showall{
+
+    display:flex;align-items:center;gap:8px;
+    margin:-8px 0 16px;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-dim);cursor:pointer;
+  
+  }
+.stat-showall input{
+accent-color:var(--cyan);cursor:pointer;margin:0;
   }
 .stat .icon.dec{
 cursor:pointer;
