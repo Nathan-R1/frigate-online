@@ -40,5 +40,7 @@ var TECH_PRESETS = [
     {name:'Quantum Disrupter Unit', traits:'[Module] Sensors', onbuild:'Create Module Quantum Disrupter', passive:'', onactivate:'', tt:'offense', storage:'0', deploy:'module', hullClass:'none', rarity:'rare'},
     {name:'Debris Field', traits:'Sensors', onbuild:'Select an empty space within Sensor range. Place an asteroid in it and every empty adjacent or diagonal space. Trash.', passive:'', onactivate:'', tt:'science', storage:'0', deploy:false, hullClass:'controller', rarity:'rare'},
     {name:'Revitaliser', traits:'', onbuild:'Place 2 charges on this', passive:'When you would trash a card, you may remove a charge here to Discard it instead.', onactivate:'', tt:'science', leadership:'1', storage:'0', charges:'2', deploy:false, hullClass:'striker', rarity:'rare'},
-    {name:'Divert Power', traits:'', onbuild:'Select a Module add a Power token.', passive:'Modules with Power tokens gain +1 to Hull, Move, Range and Dmg.', onactivate:'', tt:'science', leadership:'1', storage:'0', deploy:false, hullClass:'none', rarity:'uncommon'}
+    {name:'Divert Power', traits:'', onbuild:'Select a Module add a Power token.', passive:'Modules with Power tokens gain +1 to Hull, Move, Range and Dmg.', onactivate:'', tt:'science', leadership:'1', storage:'0', deploy:false, hullClass:'none', rarity:'uncommon'},
+    {name:'Shield Unit', traits:'[Module]', onbuild:'Create Module Shield Connector. Trash.', passive:'', onactivate:'', tt:'defense', storage:'0', deploy:'module', hullClass:'none', rarity:'uncommon'},
+    {name:'SPEAR Unit', traits:'[Module]', onbuild:'Create Module SPEAR Connector. Trash.', passive:'', onactivate:'', tt:'offense', storage:'0', deploy:'module', hullClass:'tank', rarity:'uncommon'}
   ];
