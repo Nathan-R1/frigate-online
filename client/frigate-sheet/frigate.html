@@ -84,13 +84,13 @@
           <div class="val"><output id="storageCur">2</output><span class="sep">/</span><input id="storageBase" class="base-edit" value="0" maxlength="2"><output id="storageMax" class="derived">2</output></div>
           <div class="lbl">Storage</div>
         </div>
-        <div class="stat stat-optional">
+        <div class="stat stat-optional" title="Capacity: your Leadership skill, less the Capacity cost of your tech deck">
           <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg>
           <div class="val"><output id="leadCur">0</output><span class="sep">/</span><output id="leadMax">0</output></div>
-          <div class="lbl">Leadership</div>
+          <div class="lbl">Capacity</div>
         </div>
       </div>
-      <label class="stat-showall" title="Keep Play/Draw, Max Speed, Storage and Leadership visible outside edit mode">
+      <label class="stat-showall" title="Keep Play/Draw, Max Speed, Storage and Capacity visible outside edit mode">
         <input type="checkbox" id="showAllStats" onchange="setShowAllStats(this.checked)"> Show all stats
       </label>
       </div>
@@ -176,7 +176,7 @@
           </div>
           <div class="tfoot">
             <span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>
-            <span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span><span class="tleadership hid" title="Leadership cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg><input class="tleadership-input" maxlength="3"></span>
+            <span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span><span class="tleadership hid" title="Capacity cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg><input class="tleadership-input" maxlength="3"></span>
             <span class="thull hid" title="Hull"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="thull-input" maxlength="4"></span>
             <span class="tcharges hid" title="Charges"><svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="tcharges-input" maxlength="4"></span>
             <span class="tdepbtn" data-deploy="normal" title="Normal">⍙</span>
@@ -472,7 +472,8 @@
   function techStorageSum(){
     return techCostSum('.tstorage-input');
   }
-  /* leadership works like storage: the skill is the cap, the deck spends against it */
+  /* Capacity works like storage: the Leadership skill is the cap, and each tech's
+     Capacity cost spends against it. The data key stays `leadership` for compatibility. */
   function techLeadershipSum(){
     return techCostSum('.tleadership-input');
   }
@@ -751,7 +752,7 @@
       '</div>' +
       '<div class="tfoot">' +
         '<span class="tticker" data-tt="offense" title="Tech type: Offense">⚔</span>' +
-        '<span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span><span class="tleadership hid" title="Leadership cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg><input class="tleadership-input" maxlength="3"></span>' +
+        '<span class="tstorage" title="Storage cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="tstorage-input" maxlength="3"></span><span class="tleadership hid" title="Capacity cost"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="var(--icon-leader)" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="var(--icon-leader)" stroke-width="1.6" stroke-linecap="round"/></svg><input class="tleadership-input" maxlength="3"></span>' +
         '<span class="thull hid" title="Hull"><svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg><input class="thull-input" maxlength="4"></span>' +
         '<span class="tcharges hid" title="Charges"><svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg><input class="tcharges-input" maxlength="4"></span>' +
         '<span class="tdepbtn" data-deploy="normal" title="Normal">⍙</span>' +
