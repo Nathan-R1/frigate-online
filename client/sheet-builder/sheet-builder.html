@@ -116,6 +116,8 @@
     display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
   }
   .opt-body .ticon { width: 15px; height: 15px; vertical-align: -2px; margin-right: 6px; }
+  /* a tech card with no trait text keeps the empty trait row, so every card is one size */
+  .opt-trait-none::before { content: '\00a0'; }
 
   /* filter bar */
   .filter-bar { display: flex; align-items: center; gap: 12px; margin: 14px 0 2px; flex-wrap: wrap; }
@@ -234,6 +236,39 @@
     position: absolute; top: 8px; right: 42px;
     font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--amber);
   }
+  /* the inline info pip that opens a module's own text from a tech card */
+  .mod-info {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: -3px;
+    width: 16px; height: 16px; margin-left: 5px; padding: 0; border: 0; border-radius: 50%;
+    background: none; color: var(--cyan); cursor: pointer; line-height: 1;
+  }
+  .mod-info .ticon { width: 15px; height: 15px; display: block; }
+  .mod-info:hover { color: var(--amber); }
+
+  /* module / deployable detail popup */
+  .mp-back {
+    position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+    padding: 20px; background: rgba(0,0,0,.6);
+  }
+  .mp-box {
+    position: relative; width: min(460px, 100%); max-height: 80vh; overflow-y: auto;
+    background: var(--panel-alt); border: 1px solid var(--line); border-left: 3px solid var(--cyan-dim);
+    border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .mp-close {
+    position: absolute; top: 10px; right: 12px;
+    width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+    background: none; border: 1px solid var(--line-bright); color: var(--ink-mid);
+    font-family: var(--mono); font-size: 12px; line-height: 1;
+  }
+  .mp-close:hover { border-color: var(--amber); color: var(--amber); }
+  .mp-head { display: flex; align-items: center; gap: 8px; padding-right: 34px; }
+  .mp-lead .ticon { width: 18px; height: 18px; display: block; }
+  .mp-name {
+    font-family: var(--disp); font-size: 14px; letter-spacing: .04em; color: var(--ink); text-transform: uppercase;
+  }
+  .mp-desc { color: var(--ink-mid); font-size: 12.5px; line-height: 1.55; white-space: pre-line; }
+
   .exp-item-name {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     font-family: var(--disp); font-size: 12px; letter-spacing: .04em; color: var(--ink); text-transform: uppercase;
@@ -255,6 +290,10 @@
   .pstep:hover { border-color: var(--cyan); color: var(--cyan); }
   .pstep.done { color: var(--cyan); border-color: var(--cyan-dim); }
   .pstep.cur { color: var(--ink); border-color: var(--cyan); background: rgba(79,216,201,.08); }
+  /* a locked step is one the run is not allowed to jump to yet */
+  .pstep.locked { opacity: .38; cursor: not-allowed; }
+  .pstep.locked:hover { border-color: var(--line); color: var(--ink-dim); }
+  .pstep.locked.done:hover { color: var(--cyan); border-color: var(--cyan-dim); }
 
   /* window nav */
   .win-nav { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 18px; gap: 12px; }
@@ -435,6 +474,16 @@
       <input type="text" id="shipName" maxlength="40" placeholder="e.g. The Inevitable">
     </div>
   </section>
+
+  <!-- MODULE / DEPLOYABLE DETAIL POPUP -->
+  <div class="mp-back builder-hidden" id="modPop">
+    <div class="mp-box" role="dialog" aria-modal="true" aria-labelledby="modPopName">
+      <button type="button" class="mp-close" id="modPopClose" title="Close">&#10005;</button>
+      <div class="mp-head"><span class="mp-lead" id="modPopLead"></span><span class="mp-name" id="modPopName"></span></div>
+      <div class="opt-meta" id="modPopMeta"></div>
+      <div class="mp-desc" id="modPopDesc"></div>
+    </div>
+  </div>
 
 </main>
 
@@ -772,14 +821,17 @@
   function deckPointsLeft() {
     return choices.disableLimits ? shipLevel() : shipLevel() - drawnCount();
   }
-  /* each slot rolls its rarity: 1/2 common, 1/4 uncommon, 1/8 rare, 1/8 a free reroll */
+  /* each slot first rolls for a free reroll, then splits the rest 4:2:1 across the rarities.
+     REROLL_CHANCE of 0.125 restores the old 1/2 common, 1/4 uncommon, 1/8 rare, 1/8 reroll;
+     it is 0 for now, so every slot always deals a card. */
+  var REROLL_CHANCE = 0;
   var RARITY_ORDER = ['common', 'uncommon', 'rare'];
   function rollRarity() {
-    var r = Math.random();
-    if (r < 0.5) return 'common';
-    if (r < 0.75) return 'uncommon';
-    if (r < 0.875) return 'rare';
-    return 'reroll';
+    if (REROLL_CHANCE > 0 && Math.random() < REROLL_CHANCE) return 'reroll';
+    var r = Math.random() * 7;
+    if (r < 4) return 'common';
+    if (r < 6) return 'uncommon';
+    return 'rare';
   }
   /* a draw offers one classless card plus one card per hull tick, from that hull's own pool */
   function rollDraw() {
@@ -854,13 +906,6 @@
     if (inv) for (var n in inv) if (inv[n] > 0) return true;
     return false;
   }
-  function firstUnanswered() {
-    for (var i = 0; i < steps.length; i++) {
-      if (!hasPick(steps[i].key)) return i;
-    }
-    return steps.length; // all answered -> export
-  }
-
   /* ===== find helpers ===== */
   /* hullClass is one class or a list of them; always read it as a list */
   function techClasses(t) {
@@ -989,13 +1034,41 @@
   var STORAGE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg>';
   var HULL_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  var INFO_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>';
   var TECH_TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
   function typeIcon(key) { return TECH_TYPE_ICONS[key] || '⚔'; }
-  // renders tech traits: module/deployable become tags, leftover trait text (e.g. "active 1") stays
+  // renders tech traits: module/deployable become tags, leftover trait text (e.g. "active 1") stays.
+  // a card with no leftover text still gets the row, so it is not a shorter box than its neighbours
   function traitHtml(traits) {
     var rest = String(traits || '').replace('[Module]', '').replace('[Deployable]', '').trim();
-    if (!rest) return '';
+    if (!rest) return '<span class="opt-trait-none"></span>';
     return '<span>' + esc(rest) + '</span>';
+  }
+
+  /* "Create Module Cannon." / "Create deployable Fusion Mine" earn an info pip right after the
+     name, which opens that module's own text. matched by longest preset name, as modsNamedIn does,
+     so "Create Module P.D. Trash." finds P.D. The line is escaped around the pip, never through it. */
+  function modInfoPip(name) {
+    return '<button type="button" class="mod-info" data-mod="' + escapeHtml(name) +
+      '" title="' + escapeHtml(name) + ' details" aria-label="' + escapeHtml(name) + ' details">' + INFO_ICON + '</button>';
+  }
+  function descLineHtml(line) {
+    var re = /create\s+(?:module|deployable)\s+/gi;
+    var out = '', last = 0, m;
+    while ((m = re.exec(line)) !== null) {
+      var rest = line.slice(re.lastIndex).toLowerCase();
+      var best = null;
+      for (var i = 0; i < MOD_PRESETS.length; i++) {
+        var nm = MOD_PRESETS[i].name;
+        if (rest.indexOf(nm.toLowerCase()) === 0 && (!best || nm.length > best.length)) best = nm;
+      }
+      if (!best) continue;
+      var end = re.lastIndex + best.length;
+      out += escapeHtml(line.slice(last, end)) + modInfoPip(best);
+      last = end;
+      re.lastIndex = end;
+    }
+    return out + escapeHtml(line.slice(last));
   }
 
   function techDesc(t) {
@@ -1006,7 +1079,7 @@
     if (t.passive) lines.push('Passive: ' + t.passive);
     if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
     if (!lines.length) return 'No text.';
-    return lines.map(escapeHtml).join('<br>');
+    return lines.map(descLineHtml).join('<br>');
   }
   function modDesc(m) {
     if (!m) return '';
@@ -1018,6 +1091,29 @@
     if (!lines.length) return 'No text.';
     return lines.map(escapeHtml).join('<br>');
   }
+
+  /* the popup sits outside #winOptions, so re-rendering the step does not close it */
+  var modPop = document.getElementById('modPop');
+  function openModPopup(name) {
+    var m = findMod(name);
+    if (!m) return;
+    var isDep = m.type === 'deployable';
+    document.getElementById('modPopLead').innerHTML = isDep ? DEPLOYABLE_ICON : MODULE_ICON;
+    document.getElementById('modPopName').textContent = m.name;
+    var meta = [
+      { text: typeIcon(m.tt) + ' ' + cap(m.tt), cls: 't-cyan' },
+      { text: isDep ? 'Deployable' : 'Module', cls: isDep ? 't-amber' : 't-cyan' }
+    ];
+    if (m.hull) meta.push({ text: HULL_ICON + m.hull, cls: 't-hull' });
+    if (m.speed !== undefined && m.speed !== '') meta.push({ text: 'Speed ' + escapeHtml(m.speed), cls: '' });
+    if (m.duration) meta.push({ text: 'Duration ' + escapeHtml(m.duration), cls: '' });
+    if (m.traits) meta.push({ text: escapeHtml(m.traits), cls: '' });
+    document.getElementById('modPopMeta').innerHTML = metaTags(meta);
+    document.getElementById('modPopDesc').innerHTML = modDesc(m);
+    modPop.classList.remove('builder-hidden');
+    document.getElementById('modPopClose').focus();
+  }
+  function closeModPopup() { modPop.classList.add('builder-hidden'); }
 
   function classOptions() {
     var out = [];
@@ -1340,10 +1436,14 @@ function skillsOptions() {
     else if (k === 'mod') html = modOptions();
     else html = skillsOptions();
     document.getElementById('winOptions').innerHTML = html;
-    /* on the core step Continue closes the open section, so it only needs that section answered */
-    var canGo = (k === 'core') ? !!corePick(CORE_SECTIONS[coreSection].key) : (k === 'skills' || hasPick(k));
+    /* on the core step Continue closes the open section, so it only needs that section answered;
+       the hull and tech steps will not let go until every point is spent */
+    var canGo = (k === 'core') ? !!corePick(CORE_SECTIONS[coreSection].key)
+      : (k === 'shipClass' || k === 'tech') ? stepReady(k)
+      : (k === 'skills' || hasPick(k));
     var cb = document.getElementById('continueBtn');
     cb.disabled = !canGo;
+    cb.title = canGo ? '' : blockedReason(k);
     cb.classList.toggle('ready', canGo && stepReady(k));
     updateProgress();
   }
@@ -1499,22 +1599,73 @@ function skillsOptions() {
   }
   /* gold Continue: the step is not merely passable but finished */
   function stepReady(k) {
-    if (k === 'shipClass') return hullPointsLeft() <= 0;
-    if (k === 'tech') return deckPointsLeft() <= 0;
+    if (k === 'shipClass') return choices.disableLimits ? hullTicks() > 0 : hullPointsLeft() <= 0;
+    if (k === 'tech') return choices.disableLimits ? hasPick('tech') : deckPointsLeft() <= 0;
     if (k === 'core') return coreComplete();
     if (k === 'mod') return hasPick('mod');
     if (k === 'skills') return skillsTotal() >= 13;
     return hasPick(k);
   }
+  /* why Continue is greyed out, said in the step's own terms */
+  function blockedReason(k) {
+    if (k === 'shipClass') {
+      var left = hullPointsLeft();
+      return left > 0
+        ? 'Spend all ' + left + ' remaining hull point' + (left === 1 ? '' : 's') + ' first.'
+        : 'Tick a hull first.';
+    }
+    if (k === 'core') return 'Pick an option in this section first.';
+    if (k === 'tech') {
+      var dl = deckPointsLeft();
+      return dl > 0
+        ? 'Draw ' + dl + ' more card' + (dl === 1 ? '' : 's') + ' to spend your remaining points.'
+        : 'Draw at least one card first.';
+    }
+    if (k === 'mod') return 'Pick at least one stat-block first.';
+    return 'Finish this step first.';
+  }
+  function firstUnfinished() {
+    for (var i = 0; i < steps.length; i++) if (!stepReady(steps[i].key)) return i;
+    return steps.length;
+  }
+  /* the step the run is sitting on, or null on the export screen */
+  function curStepKey() {
+    return (screen === 'win' && steps[step]) ? steps[step].key : null;
+  }
+  function curStepDone() {
+    var k = curStepKey();
+    return k === null ? true : stepReady(k);
+  }
+  /* a step is only reachable once every step before it is finished */
+  function stepReachable(i) {
+    for (var j = 0; j < i && j < steps.length; j++) if (!stepReady(steps[j].key)) return false;
+    return true;
+  }
+  /* the top menu only ever blocks going forward: stepping back to revisit or fix an
+     earlier section is always allowed, jumping ahead needs everything before it finished */
+  function stepLocked(i) {
+    if (i <= step) return false;
+    return !stepReachable(i);
+  }
+  function lockReason(i) {
+    if (!curStepDone()) return 'Finish "' + (steps[step] ? steps[step].label : '') + '" before moving on.';
+    return 'Finish the earlier steps first.';
+  }
   function renderProgressDots() {
     var el = document.getElementById('psteps');
     var html = '';
-    for (var i = 0; i < steps.length; i++) {
-      var answered = hasPick(steps[i].key);
-      var cls = i === step ? 'cur' : (answered ? 'done' : '');
-      html += '<button type="button" class="pstep ' + cls + '" onclick="goStep(' + i + ')">' + (i + 1) + '. ' + esc(steps[i].label) + '</button>';
+    for (var i = 0; i <= steps.length; i++) {
+      var isExport = i === steps.length;
+      var done = isExport ? stepReachable(steps.length) : stepReady(steps[i].key);
+      var cur = isExport ? (screen === 'exp') : (screen === 'win' && i === step);
+      var locked = stepLocked(i);
+      var cls = cur ? 'cur' : (done ? 'done' : '');
+      if (locked) cls += ' locked';
+      html += '<button type="button" class="pstep ' + cls + '"' +
+        (locked ? ' disabled title="' + escapeHtml(lockReason(i)) + '"' : '') +
+        ' onclick="goStep(' + i + ')">' + (i + 1) + '. ' +
+        esc(isExport ? 'Export' : steps[i].label) + '</button>';
     }
-    html += '<button type="button" class="pstep ' + (screen === 'exp' ? 'cur' : (firstUnanswered() === steps.length ? 'done' : '')) + '" onclick="goStep(' + steps.length + ')">' + (steps.length + 1) + '. Export</button>';
     el.innerHTML = html;
   }
   function enterExport() {
@@ -1528,6 +1679,7 @@ function skillsOptions() {
     if (fb) { fb.classList.add('builder-hidden'); fb.innerHTML = ''; }
   }
   function goStep(i) {
+    if (stepLocked(i)) return;
     if (i === steps.length) { enterExport(); return; }
     goToWin(i);
   }
@@ -1590,6 +1742,12 @@ function skillsOptions() {
       choices.inv[kk][id] = (choices.inv[kk][id] || 0) + 1;
       saveChoices();
       renderOptions();
+      return;
+    }
+    var modInfo = e.target.closest('.mod-info');
+    if (modInfo) {
+      e.stopPropagation();
+      openModPopup(modInfo.getAttribute('data-mod'));
       return;
     }
     var info = e.target.closest('.skinfo');
@@ -1667,12 +1825,26 @@ function skillsOptions() {
     saveChoices();
   });
 
+  modPop.addEventListener('click', function (e) {
+    if (e.target === modPop || e.target.closest('.mp-close')) closeModPopup();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modPop.classList.contains('builder-hidden')) closeModPopup();
+  });
+
   document.getElementById('continueBtn').addEventListener('click', onContinue);
   document.getElementById('backBtn').addEventListener('click', onBack);
   document.getElementById('expBackBtn').addEventListener('click', onBack);
 
   document.getElementById('invBar').addEventListener('click', function (e) {
     if (screen !== 'win') return;
+    /* the draw offer renders into the inv bar, so the info pip needs its own hook here too */
+    var drawModInfo = e.target.closest('.mod-info');
+    if (drawModInfo) {
+      e.stopPropagation();
+      openModPopup(drawModInfo.getAttribute('data-mod'));
+      return;
+    }
     var lvl = e.target.closest('.lvlbtn');
     if (lvl) {
       var d = parseInt(lvl.getAttribute('data-lvl'), 10) || 0;
@@ -1783,7 +1955,8 @@ function skillsOptions() {
     goToWin(0);
   }
   function resumeRun() {
-    var next = firstUnanswered();
+    /* resume at the first step that is not finished, so a half-spent step is not skipped past */
+    var next = firstUnfinished();
     if (next >= steps.length) { enterExport(); return; }
     step = next;
     goToWin(step);
