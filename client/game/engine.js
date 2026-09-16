@@ -602,6 +602,7 @@ var Engine = (function () {
     });
     if (!targets.length) { log(s.name + ' has no target in range with line of sight.'); return; }
     prompt({ kind: 'target', label: 'Choose a target', targets: targets.map(function (m) { return m.id; }),
+      envelope: firingEnvelope(origins, reach),
       onResolve: function (targetId) {
         var t = objectById(targetId);
         if (!t) return;
@@ -629,6 +630,24 @@ var Engine = (function () {
         }
       } });
   };
+
+  /* Every square this shot can see: in range of some origin, with a clear line to it. Worked
+     out once when the prompt opens so the board can shade it without re-tracing lines on each
+     repaint, and skipped entirely when nothing is watching. */
+  function firingEnvelope(origins, reach) {
+    if (!telegraph() || !origins.length) return null;
+    var out = {}, n = RULES.boardSize;
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
+      for (var i = 0; i < origins.length; i++) {
+        var o = origins[i];
+        if (Math.abs(o.x - x) + Math.abs(o.y - y) > reach) continue;
+        if (!hasLos(o, { x: x, y: y })) continue;
+        out[x + ',' + y] = true;
+        break;
+      }
+    }
+    return out;
+  }
 
   function at(o) { return o ? '(' + o.x + ',' + o.y + ')' : ''; }
   function labelOf(t) {

@@ -801,7 +801,9 @@
   function paintCells(G) {
     var p = G.pending;
     var legal = (p && p.kind === 'space' && p.filter) ? p.filter : null;
-    var reach = reachSet(G);
+    /* the same tint carries two meanings, both "where this can reach": squares the selected
+       piece can move to, and squares the shot being aimed can see */
+    var reach = (p && p.kind === 'target') ? p.envelope : reachSet(G);
     var kids = cellsEl.children;
     for (var i = 0; i < kids.length; i++) {
       var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
@@ -1227,7 +1229,8 @@
            '<div style="margin-top:6px">' +
            '<button class="g-btn ghost" data-done="1">Skip</button>' + cancelBtn() + '</div>';
     else if (p.kind === 'target')
-      h += '<div style="font-size:11px;color:var(--ink-dim)">Click an outlined enemy module.</div>' +
+      h += '<div style="font-size:11px;color:var(--ink-dim)">Shaded squares are in this ' +
+           'weapon\'s line of fire. Click an outlined target.</div>' +
            '<div style="margin-top:6px">' +
            (Engine.canUndo() ? cancelBtn('Cancel — take it back')
                              : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
