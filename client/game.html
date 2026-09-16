@@ -266,6 +266,8 @@
   .mp-close:hover { border-color:var(--amber); color:var(--amber); }
   .mp-head { display:flex; align-items:center; gap:8px; padding-right:34px; }
   .mp-head .ci { width:20px; height:20px; flex:none; display:block; }
+  /* a tech has no silhouette, so the empty slot is removed rather than left as a gap */
+  .mp-head .ci:empty { display:none; }
   .mp-head .ci svg { width:100%; height:100%; display:block; overflow:visible;
     filter:drop-shadow(0 0 3px var(--pc)); }
   .mp-name { font-family:var(--disp); font-size:14px; letter-spacing:.04em; color:var(--ink);
@@ -609,8 +611,9 @@
       beaconEl = null, fxEl = null;
   /* the route another player has announced but not yet walked */
   var telegraphed = null;
-  /* shapes of yours that currently hold more than one kind of module */
-  var ambiguous = {};
+  /* shapes of yours that hold more than one kind of piece, counted separately for hull and
+     for deployables */
+  var ambiguous = { mod: {}, dep: {} };
 
   function ensureLayers(n) {
     if (cellsEl) return;
@@ -909,7 +912,8 @@
             : rec.kind === 'anom' ? 'Anomaly'
             : rec.side.name + ' — ' + o.name + ' — hull ' + o.hull + '/' + (o.hullMax || o.hull);
     var tg = d.querySelector('.pc-tag');
-    var tag = (rec.si === meIdx() && ambiguous[rec.shape]) ? shortName(o.name) : '';
+    var bucket = rec.kind === 'dep' ? ambiguous.dep : rec.kind === 'mod' ? ambiguous.mod : null;
+    var tag = (rec.si === meIdx() && bucket && bucket[rec.shape]) ? shortName(o.name) : '';
     tg.textContent = tag;
     tg.style.display = tag ? '' : 'none';
     var ch = d.querySelector('.pc-charge'), mv = d.querySelector('.pc-move');
@@ -931,20 +935,22 @@
   }
 
   /* On your own turn, name your pieces only where the silhouette is not enough: two Cannons
-     need no labels, but a Cannon beside a P.D. does. Keyed by shape, so the tags appear
-     exactly on the groups you cannot tell apart at a glance. */
+     need no labels, but a Cannon beside a P.D. does. Hull and deployables are counted apart,
+     because a deployable is already drawn small inside a dashed berth — a lone Ion Torpedo
+     beside a Cannon is in no danger of being mistaken for it. */
   function ambiguousShapes(G) {
-    if (G.active !== meIdx()) return {};
-    var byShape = {}, out = {};
+    var out = { mod: {}, dep: {} };
+    if (G.active !== meIdx()) return out;
     var s = G.players[meIdx()];
-    ['modules', 'deployables'].forEach(function (bag) {
-      Object.keys(s[bag]).forEach(function (id) {
-        var o = s[bag][id], sh = GamePieces.shapeOf(o.name, id === s.coreId);
+    [['modules', 'mod'], ['deployables', 'dep']].forEach(function (pair) {
+      var byShape = {};
+      Object.keys(s[pair[0]]).forEach(function (id) {
+        var o = s[pair[0]][id], sh = GamePieces.shapeOf(o.name, id === s.coreId);
         (byShape[sh] = byShape[sh] || {})[o.name] = true;
       });
-    });
-    Object.keys(byShape).forEach(function (sh) {
-      if (Object.keys(byShape[sh]).length > 1) out[sh] = true;
+      Object.keys(byShape).forEach(function (sh) {
+        if (Object.keys(byShape[sh]).length > 1) out[pair[1]][sh] = true;
+      });
     });
     return out;
   }
@@ -1045,9 +1051,6 @@
   var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M21 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   var SPEED_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var DURATION_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5.5l3.5 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  var STORAGE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-  var CAPACITY_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-  var STARTER_ICON = '<svg class="ticon" viewBox="0 0 64 64" fill="none"><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M43.66 13.34 A22 22 0 1 1 20.34 13.34"/><path d="M32 6 V30"/></g></svg>';
   var TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
 
   var INFO_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
@@ -1119,18 +1122,15 @@
                           tip: cap(t.tt) + ' technology' });
     if (t.rarity && t.rarity !== 'common')
       meta.push({ text: cap(t.rarity), cls: 't-amber', tip: 'Rarity' });
-    if (num(t.storage) > 0) meta.push({ text: STORAGE_ICON + esc(t.storage), cls: '',
-                                        tip: 'Storage cost, against Logistics' });
-    if (num(t.leadership) > 0) meta.push({ text: CAPACITY_ICON + esc(t.leadership), cls: '',
-                                           tip: 'Capacity cost, against Leadership' });
+    /* Storage, Capacity and the Starter Card mark are deck-building constraints, settled
+       before the game starts. They tell you nothing once the card is on the table. */
     if (num(t.charges) > 0 || card && card.charges)
       meta.push({ text: CHARGES_ICON + ((card && card.charges) || t.charges), cls: 't-charge',
                   tip: card ? 'Charges on this card now' : 'Charges it starts with' });
     if (card && card.heat) meta.push({ text: '🔥' + card.heat, cls: 't-amber', tip: 'Heat' });
-    if (Engine.cardIsStarter(card || { name: name }))
-      meta.push({ text: STARTER_ICON + 'Starter', cls: 't-amber',
-                  tip: 'Deploys before combat begins' });
-    if (t.traits) meta.push({ text: esc(t.traits), cls: '', tip: 'Traits' });
+    var traits = String(t.traits || '').replace(/\s*start(?:er|ing)\s*card/ig, '')
+                   .replace(/\s{2,}/g, ' ').trim();
+    if (traits) meta.push({ text: esc(traits), cls: '', tip: 'Traits' });
     document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
     var lines = [];
     if (t.onbuild) lines.push('On Play: ' + t.onbuild);
