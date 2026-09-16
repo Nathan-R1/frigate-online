@@ -238,6 +238,31 @@
   .g-over .box { background:var(--panel-alt); border:1px solid var(--cyan); border-radius:12px;
                  padding:28px 34px; text-align:center; }
   .g-over h2 { font-family:var(--disp); color:var(--cyan); margin:0 0 14px; letter-spacing:.06em; }
+  /* the inline info pip that opens a module's own text from a card, and its popup —
+     the same affordance the sheet builder gives "Create Module X" */
+  .mod-info { display:inline-flex; align-items:center; justify-content:center; vertical-align:-2px;
+    width:14px; height:14px; margin-left:4px; padding:0; border:0; border-radius:50%;
+    background:none; color:var(--cyan); cursor:pointer; line-height:1; }
+  .mod-info svg { width:13px; height:13px; display:block; }
+  .mod-info:hover { color:var(--amber); }
+  .mp-back { position:fixed; inset:0; z-index:60; display:flex; align-items:center;
+    justify-content:center; padding:20px; background:rgba(0,0,0,.6); }
+  .mp-box { position:relative; width:min(460px,100%); max-height:80vh; overflow-y:auto;
+    background:var(--panel-alt); border:1px solid var(--line); border-left:3px solid var(--cyan-dim);
+    border-radius:10px; padding:16px 18px; display:flex; flex-direction:column; gap:10px; }
+  .mp-close { position:absolute; top:10px; right:12px; width:26px; height:26px; border-radius:6px;
+    cursor:pointer; background:none; border:1px solid var(--line-bright); color:var(--ink-mid);
+    font-family:var(--mono); font-size:12px; line-height:1; }
+  .mp-close:hover { border-color:var(--amber); color:var(--amber); }
+  .mp-head { display:flex; align-items:center; gap:8px; padding-right:34px; }
+  .mp-head .ci { width:20px; height:20px; flex:none; display:block; }
+  .mp-head .ci svg { width:100%; height:100%; display:block; overflow:visible;
+    filter:drop-shadow(0 0 3px var(--pc)); }
+  .mp-name { font-family:var(--disp); font-size:14px; letter-spacing:.04em; color:var(--ink);
+    text-transform:uppercase; }
+  .mp-meta { font-family:var(--mono); font-size:10.5px; color:var(--amber);
+    display:flex; gap:10px; flex-wrap:wrap; }
+  .mp-desc { color:var(--ink-mid); font-size:12.5px; line-height:1.55; white-space:pre-line; }
   .hidden { display:none !important; }
   /* new-game roster */
   #modePick .box { min-width:min(92vw, 480px); text-align:left; }
@@ -293,6 +318,13 @@
     <div class="g-hand" id="hand"></div>
   </div>
 </div>
+<div class="mp-back hidden" id="modPop"><div class="mp-box" role="dialog" aria-modal="true"
+     aria-labelledby="modPopName">
+  <button type="button" class="mp-close" id="modPopClose" title="Close">&#10005;</button>
+  <div class="mp-head"><span class="ci" id="modPopIcon"></span><span class="mp-name" id="modPopName"></span></div>
+  <div class="mp-meta" id="modPopMeta"></div>
+  <div class="mp-desc" id="modPopDesc"></div>
+</div></div>
 <div class="dist-readout hidden" id="distReadout"></div>
 <div class="g-over hidden" id="modePick"><div class="box">
   <h2>New Game</h2>
@@ -907,7 +939,7 @@
     s.hand.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       html += '<div class="hcard"><div class="hn">' + esc(c.name) + '</div>' +
-        '<div class="ht">' + esc(cardText(t)) + '</div>' +
+        '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-play="' + id + '"' +
         (canPlay && s.playsLeft > 0 ? '' : ' disabled') + '>Play</button></div></div>';
     });
@@ -918,7 +950,7 @@
       html += '<div class="hcard inplay"><div class="hn">' + esc(c.name) + '</div>' +
         '<div class="hmeta">' + (c.charges ? '⚡' + c.charges + ' ' : '') +
         (c.heat ? '🔥' + c.heat + ' ' : '') + (c.exhausted ? 'exhausted' : 'ready') + '</div>' +
-        '<div class="ht">' + esc(cardText(t)) + '</div>' +
+        '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-act="' + id + '"' +
         (myTurn && !c.exhausted && Engine.affordable(s, c, 'tech') ? '' : ' disabled') +
         '>Activate</button></div></div>';
@@ -955,10 +987,77 @@
     return '<span class="ci" style="--pc:' + col + '">' + ICON_CACHE[k] + '</span>';
   }
 
+  /* ---------- "Create Module X" gets an info pip ----------
+     Ported from the sheet builder: wherever a card's text says it creates a module or a
+     deployable, the name is followed by a pip that opens that piece's own rules, so you do
+     not have to remember what a Cannon Unit actually builds. */
+  var INFO_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>' +
+    '<path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '<circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>';
+
+  function modInfoPip(name) {
+    return '<button type="button" class="mod-info" data-mod="' + esc(name) +
+      '" title="' + esc(name) + ' details" aria-label="' + esc(name) + ' details">' +
+      INFO_ICON + '</button>';
+  }
+
+  /* the longest preset name that follows "Create Module" / "Create Deployable" */
+  function namedAfter(rest) {
+    var best = null, low = rest.toLowerCase();
+    (typeof MOD_PRESETS !== 'undefined' ? MOD_PRESETS : []).forEach(function (m) {
+      if (low.indexOf(m.name.toLowerCase()) === 0 && (!best || m.name.length > best.length))
+        best = m.name;
+    });
+    return best;
+  }
+  function withModPips(line) {
+    var re = /create\s+(?:module|deployable)\s+/gi;
+    var out = '', last = 0, m;
+    while ((m = re.exec(line)) !== null) {
+      var best = namedAfter(line.slice(re.lastIndex));
+      if (!best) continue;
+      var end = re.lastIndex + best.length;
+      out += esc(line.slice(last, end)) + modInfoPip(best);
+      last = end;
+      re.lastIndex = end;
+    }
+    return out + esc(line.slice(last));
+  }
+
   function cardText(t) {
     return [t.onbuild && 'On Play: ' + t.onbuild, t.passive && 'Passive: ' + t.passive,
-            t.onactivate && 'On Activate: ' + t.onactivate].filter(Boolean).join('  ');
+            t.onactivate && 'On Activate: ' + t.onactivate]
+      .filter(Boolean).map(withModPips).join('  ');
   }
+
+  /* ---------- module / deployable popup ---------- */
+  function openModPopup(name) {
+    var m = Engine.findMod(name);
+    if (!m) return;
+    var isDep = m.type === 'deployable';
+    var col = SEAT_HEX[meIdx() % 4];
+    var icon = document.getElementById('modPopIcon');
+    icon.style.setProperty('--pc', col);
+    icon.innerHTML = GamePieces.markup(GamePieces.shapeOf(m.name, false), col);
+    document.getElementById('modPopName').textContent = m.name;
+    var meta = [isDep ? 'Deployable' : 'Module', cap(m.tt || '')];
+    if (m.hull) meta.push('Hull ' + m.hull);
+    if (m.speed !== undefined && m.speed !== '') meta.push('Speed ' + m.speed);
+    if (m.duration) meta.push('Duration ' + m.duration);
+    if (m.charges !== undefined && m.charges !== '') meta.push('Charges ' + m.charges);
+    document.getElementById('modPopMeta').innerHTML =
+      meta.filter(Boolean).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('');
+    var lines = [];
+    if (m.req) lines.push('Requires: ' + m.req);
+    if (m.onbuild) lines.push('On Play: ' + m.onbuild);
+    if (m.passive) lines.push('Passive: ' + m.passive);
+    if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
+    document.getElementById('modPopDesc').textContent = lines.join('\n') || 'No text.';
+    document.getElementById('modPop').classList.remove('hidden');
+  }
+  function closeModPopup() { document.getElementById('modPop').classList.add('hidden'); }
+  function cap(x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : ''; }
 
   function renderLog(G) {
     logEl.innerHTML = G.log.slice(-200).map(function (l) {
@@ -1119,6 +1218,8 @@
     else if (s.deployables[id]) Engine.activateDeployable(id);
   });
   handEl.addEventListener('click', function (e) {
+    var pip = e.target.closest('.mod-info');
+    if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); return; }
     var b = e.target.closest('button'); if (!b) return;
     if (b.dataset.play)  Engine.playCard(b.dataset.play);
     if (b.dataset.act)   Engine.activateCard(b.dataset.act);
@@ -1131,6 +1232,10 @@
     if (b.dataset.mv) { var v = b.dataset.mv.split(','); nudge(+v[0], +v[1]); return; }
     if (b.dataset.cancel) { selMod = null; hoverCell = null; clearRoute(); Engine.undo(); return; }
     if (b.dataset.done) Engine.resolve(null);
+  });
+  document.getElementById('modPopClose').addEventListener('click', closeModPopup);
+  document.getElementById('modPop').addEventListener('click', function (e) {
+    if (e.target.id === 'modPop') closeModPopup();      /* click the backdrop to dismiss */
   });
   document.getElementById('endBtn').addEventListener('click', function () { Engine.endTurn(); });
   document.getElementById('playPhaseBtn').addEventListener('click', function () { Engine.endPlayPhase(); });
@@ -1231,6 +1336,9 @@
   var DIRS = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0],
                w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] };
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !document.getElementById('modPop').classList.contains('hidden')) {
+      e.preventDefault(); closeModPopup(); return;
+    }
     var G = Engine.get();
     if (!G || G.active !== meIdx()) return;
     var d = DIRS[e.key];
