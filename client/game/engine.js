@@ -297,6 +297,7 @@ var Engine = (function () {
 
   function endTurn() {
     if (G.over) return;
+    clearUndo();
     G.pending = null; G.queue = [];
     var s = side();
     failingModules(s).forEach(function (m) {
@@ -439,9 +440,49 @@ var Engine = (function () {
     G.pending = null;
     if (p.onResolve) p.onResolve(answer);
     step();
+    /* the activation is over once nothing more is waiting on the player: commit it */
+    if (!G.pending && !G.queue.length) clearUndo();
   }
 
   function cancel() { G.pending = null; G.queue = []; emit(); }
+
+  /* ================= undo point =================
+     An activation the player may still back out of. It covers everything moving can touch:
+     where the pieces stand, what was exhausted or spent to get them moving, and any
+     deployable overrun along the way. A computer seat never backs out, so it never pays for
+     the copy. */
+  var undoPoint = null;
+  function copy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
+
+  function beginUndo(label) {
+    var s = side();
+    if (s.ai) { undoPoint = null; return; }
+    undoPoint = {
+      label: label, active: G.active, turn: G.turn,
+      cells: copy(G.cells), moveLeft: s.moveLeft, playsLeft: s.playsLeft, shield: s.shield,
+      modules: copy(s.modules), cards: copy(s.cards),
+      deployables: G.players.map(function (pl) { return copy(pl.deployables); })
+    };
+  }
+  function clearUndo() { undoPoint = null; }
+  function canUndo() {
+    return !!undoPoint && undoPoint.active === G.active && undoPoint.turn === G.turn;
+  }
+
+  /* Put everything back as it stood before the activation and throw away what was queued. */
+  function undo() {
+    if (!canUndo()) return false;
+    var u = undoPoint, s = G.players[u.active];
+    G.cells = u.cells;
+    s.moveLeft = u.moveLeft; s.playsLeft = u.playsLeft; s.shield = u.shield;
+    s.modules = u.modules; s.cards = u.cards;
+    G.players.forEach(function (pl, i) { pl.deployables = u.deployables[i]; });
+    G.pending = null; G.queue = [];
+    undoPoint = null;
+    log(s.name + ' cancels ' + u.label + '.');
+    emit();
+    return true;
+  }
 
   /* ---- op implementations ---- */
   var OPS = {};
@@ -704,6 +745,7 @@ var Engine = (function () {
     var e = fx(card.name, 'tech');
     if (!e.activate) return false;
     var a = e.activate;
+    beginUndo(card.name);
     if (a.mode === 'choice') {
       prompt({ kind: 'choice', label: card.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
@@ -726,6 +768,7 @@ var Engine = (function () {
     var e = fx(m.name, 'mod');
     if (!e.activate) return false;
     var a = e.activate;
+    beginUndo(m.name);
     if (a.mode === 'choice') {
       prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
@@ -748,6 +791,7 @@ var Engine = (function () {
     var e = fx(d.name, 'mod');
     if (!e.activate) return false;
     var a = e.activate;
+    beginUndo(d.name);
     var ctx = { side: s, module: d, deployable: d };
     if (a.mode === 'choice') {
       prompt({ kind: 'choice', label: d.name, options: a.options.map(function (x) { return x.label; }),
@@ -856,6 +900,7 @@ var Engine = (function () {
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
+    undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph,
     hostileObjects: hostileObjects, objectById: objectById,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
