@@ -179,6 +179,19 @@
   .g-prompt { padding:10px 12px; border-bottom:1px solid var(--line); min-height:52px; }
   .g-prompt .p-label { font-family:var(--disp); font-size:12px; text-transform:uppercase;
                        letter-spacing:.06em; color:var(--amber); margin-bottom:6px; }
+  /* the log is collapsible: hidden, the right column is just the prompt panel */
+  .log-head { display:flex; align-items:center; gap:8px; padding:6px 12px;
+              border-bottom:1px solid var(--line); flex:none; }
+  .log-head .lh-title { font-family:var(--disp); font-size:11px; text-transform:uppercase;
+              letter-spacing:.08em; color:var(--ink-dim); flex:1; }
+  .log-head button { font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+              text-transform:uppercase; padding:3px 8px; cursor:pointer; border-radius:4px;
+              background:none; border:1px solid var(--line-bright); color:var(--ink-mid); }
+  .log-head button:hover { border-color:var(--cyan); color:var(--cyan); }
+  /* with the log gone the column only has to fit the prompt, so the board takes the rest */
+  .g-mid.nolog { grid-template-columns:1fr 220px; }
+  .g-mid.nolog .g-log { display:none; }
+  .g-mid.nolog .g-right { flex:none; }
   .g-log { flex:1; overflow-y:auto; padding:8px 12px; font-family:var(--mono); font-size:10.5px;
            line-height:1.6; color:var(--ink-mid); }
   .g-log div { padding:1px 0; white-space:pre-wrap; }   /* keeps the roll lines indented under their attack */
@@ -268,6 +281,10 @@
     </div>
     <div class="g-right">
       <div class="g-prompt" id="promptPanel"></div>
+      <div class="log-head">
+        <span class="lh-title">Log</span>
+        <button type="button" id="logToggle">Hide</button>
+      </div>
       <div class="g-log" id="logPanel"></div>
     </div>
   </div>
@@ -355,7 +372,7 @@
 
   /* how much hull this sheet brings to the table before the first turn */
   function starterCount(sh) {
-    return (sh && sh.tech || []).filter(function (t) { return Engine.isStarterCard(t.name); }).length;
+    return (sh && sh.tech || []).filter(function (t) { return Engine.cardIsStarter(t); }).length;
   }
 
   /* Hand the seat's build over to the builder and go there. The choices travel, not the
@@ -426,8 +443,10 @@
                  deck: starterDeck(), modules: LOADOUTS[i % LOADOUTS.length] };
     var sh = sheetOf(i);
     if (!sh) return base;
-    var deck = (sh.tech || []).map(function (t) { return t.name; })
-      .filter(function (n) { return !!Engine.findTech(n); });
+    /* carry each copy's own traits through, so a promoted Cannon Unit deploys before combat
+       while its unpromoted siblings stay in the deck */
+    var deck = (sh.tech || []).filter(function (t) { return !!Engine.findTech(t.name); })
+      .map(function (t) { return { name: t.name, traits: t.traits }; });
     var skills = {};
     Object.keys(sh.skills || {}).forEach(function (k) {
       skills[k] = parseInt((sh.skills[k] || {}).points, 10) || 0;
@@ -1244,6 +1263,22 @@
     if (telegraphed) { telegraphed = null; pathEl.style.removeProperty('--route'); clearRoute(); }
     if (isAI(G.active)) AICommander.tick(G.active);
   }, AI_TICK_MS);
+
+  /* ---------- the log pane shows or hides ---------- */
+  (function () {
+    var mid = document.querySelector('.g-mid');
+    var btn = document.getElementById('logToggle');
+    function apply(hidden) {
+      mid.classList.toggle('nolog', hidden);
+      btn.textContent = hidden ? 'Show' : 'Hide';
+      btn.title = hidden ? 'Show the game log' : 'Hide the game log';
+      try { localStorage.setItem('frigateLogHidden', hidden ? '1' : '0'); } catch (e) {}
+    }
+    var start = false;
+    try { start = localStorage.getItem('frigateLogHidden') === '1'; } catch (e) {}
+    apply(start);
+    btn.addEventListener('click', function () { apply(!mid.classList.contains('nolog')); });
+  })();
 
   /* ---------- resizable hand ---------- */
   (function () {

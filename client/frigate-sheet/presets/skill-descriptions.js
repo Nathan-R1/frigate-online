@@ -8,6 +8,6 @@ var SKILL_DESCRIPTIONS = {
     'Logistics': 'Logistics is added to Storage (min. 0). Also used for Initiative rolls to determine round order',
     'Navigation': 'Navigation is added to Speed (min. 0)',
     'Piloting': 'Sometimes you might have to dodge!!!',
-    'Science': 'Starter Cards = 1/2 of (science + science penalty)',
+    'Science': 'Starter Cards = 3 + 1/2 Science (rounded down)',
     'Sensors': 'Twice Sensors is added to Sensor Range (min. 0)'
   };
