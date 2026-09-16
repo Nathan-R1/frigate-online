@@ -897,15 +897,32 @@ var Engine = (function () {
     }
   }
 
+  /* the shape a placement fills, as offsets from the square you pick */
+  function patternSpots(name) {
+    if (name === 'selfAndAllAdjacent')
+      return [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    return [[0,0]];
+  }
+
   OPS.createAsteroid = function (o, ctx) {
-    prompt({ kind: 'space', label: 'Place an Asteroid', filter: function (x, y) { return !cellAt(x, y); },
+    var s = ctx.side;
+    var spots = patternSpots(o.pattern);
+    /* "within Sensor range" is part of the card, so the legal squares are limited to it */
+    var reach = o.within ? resolveRange(s, o.within) : null;
+    var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    prompt({ kind: 'space', label: 'Place ' + (spots.length > 1 ? 'a debris field' : 'an Asteroid'),
+      pattern: spots,
+      filter: function (x, y) {
+        if (cellAt(x, y)) return false;
+        if (reach === null) return true;
+        return mods.some(function (m) { return dist(m, { x: x, y: y }) <= reach; });
+      },
       onResolve: function (cell) {
         if (!cell) return;
-        var spots = [[0,0]];
-        if (o.pattern === 'selfAndAllAdjacent')
-          spots = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-        spots.forEach(function (d) { addAsteroid(cell.x + d[0], cell.y + d[1]); });
-        log('Asteroids placed.');
+        var n = 0;
+        spots.forEach(function (d) { if (addAsteroid(cell.x + d[0], cell.y + d[1])) n++; });
+        log(s.name + ' scatters ' + n + ' asteroid' + (n === 1 ? '' : 's') +
+            ' around (' + cell.x + ',' + cell.y + ').');
       } });
   };
 
