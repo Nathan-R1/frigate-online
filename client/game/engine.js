@@ -501,11 +501,15 @@ var Engine = (function () {
   function beginUndo(label) {
     var s = side();
     if (s.ai) { undoPoint = null; return; }
+    /* Every side's pieces, not just yours: a tractor beam shoves an enemy module or a rock,
+       and taking the activation back has to put those where they stood too. */
     undoPoint = {
       label: label, active: G.active, turn: G.turn,
       cells: copy(G.cells), moveLeft: s.moveLeft, playsLeft: s.playsLeft, shield: s.shield,
-      modules: copy(s.modules), cards: copy(s.cards),
-      deployables: G.players.map(function (pl) { return copy(pl.deployables); })
+      cards: copy(s.cards), asteroids: copy(G.asteroids),
+      modules: G.players.map(function (pl) { return copy(pl.modules); }),
+      deployables: G.players.map(function (pl) { return copy(pl.deployables); }),
+      shields: G.players.map(function (pl) { return pl.shield; })
     };
   }
   function clearUndo() { undoPoint = null; }
@@ -518,9 +522,14 @@ var Engine = (function () {
     if (!canUndo()) return false;
     var u = undoPoint, s = G.players[u.active];
     G.cells = u.cells;
-    s.moveLeft = u.moveLeft; s.playsLeft = u.playsLeft; s.shield = u.shield;
-    s.modules = u.modules; s.cards = u.cards;
-    G.players.forEach(function (pl, i) { pl.deployables = u.deployables[i]; });
+    G.asteroids = u.asteroids;
+    s.moveLeft = u.moveLeft; s.playsLeft = u.playsLeft;
+    s.cards = u.cards;
+    G.players.forEach(function (pl, i) {
+      pl.modules = u.modules[i];
+      pl.deployables = u.deployables[i];
+      pl.shield = u.shields[i];
+    });
     G.pending = null; G.queue = [];
     undoPoint = null;
     log(s.name + ' cancels ' + u.label + '.');
@@ -629,6 +638,13 @@ var Engine = (function () {
         var n = resolveCount(s, o.attacks, ctx);
         var dmg = resolveCount(s, o.dmg, ctx);
         var hit = false;
+        /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
+           nobody is trying to slip the beam, so it simply lands. */
+        var friendly = !!t.owner && t.owner.team === s.team;
+        /* The dice are about to be cast, so the activation can no longer be taken back. A
+           rider's prompt may still be cancelled, but that cancels only the rider — the cost
+           stays paid and the card stays exhausted. */
+        clearUndo();
         /* a zero-damage beam is not an attack, and reads oddly as one when it grabs your own hull */
         log(s.name + (dmg > 0 ? ' attacks with ' : ' locks on with ') +
             (from ? from.name + ' ' + at(from) : 'its hull') +
@@ -637,7 +653,8 @@ var Engine = (function () {
                      : '.'));
         for (var i = 0; i < n; i++) {
           /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
-          var c = o.check ? check(s, o.check, RULES.dc) : attackRoll();
+          var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
+                : o.check ? check(s, o.check, RULES.dc) : attackRoll();
           if (c.hit) {
             log('  ' + c.text + ' — hit.');
             if (dmg > 0) {
