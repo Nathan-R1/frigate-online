@@ -930,9 +930,11 @@
     }
     var hulls = Object.keys(CLASS_PRESETS);
     var ticks = 0;
+    var anyEven = false;
     for (var h = 0; h < hulls.length; h++) {
       var n = choices.hulls[hulls[h]] || 0;
       ticks += n;
+      if (n >= 2) anyEven = true;
       if (choices.showAllDraw) {
         if (n > 0) takeAll(hulls[h].toLowerCase());
         continue;
@@ -941,7 +943,9 @@
         take(lvl % 2 === 1 ? hulls[h].toLowerCase() : 'none');
       }
     }
-    if (choices.showAllDraw) takeAll('none');
+    /* show-all widens each level's pool, it does not invent levels: the classless pool is
+       what an even level draws from, so it only appears once some class has reached one */
+    if (choices.showAllDraw) { if (anyEven) takeAll('none'); }
     /* no hull ticked is not reachable from step 1, but an empty offer would be a dead end */
     else if (!ticks) take('none');
     /* the offer reads classless first, then each class in hull order. A normal draw is a
