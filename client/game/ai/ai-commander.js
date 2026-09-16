@@ -105,6 +105,18 @@ var AICommander = (function () {
      legitimate answer when nothing closer improves anything — we take what Move we have
      toward it now and pick the route up again next turn. */
   var PLAN_HORIZON = 14;
+
+  /* The planned route as board squares, traced from the Core and clipped to the Move we can
+     actually spend this turn — the rest of the plan is next turn's problem, and drawing it
+     would promise more than the fleet is about to do. */
+  function routeCells(s, node) {
+    var core = s.modules[s.coreId];
+    if (!core) return null;
+    var steps = P.pathOf(node).slice(0, P.budget(s));
+    var out = [{ x: core.x, y: core.y }], x = core.x, y = core.y;
+    steps.forEach(function (st2) { x += st2[0]; y += st2[1]; out.push({ x: x, y: y }); });
+    return out.length > 1 ? out : null;
+  }
   function manoeuvre(s, st) {
     var foe = foeOf(s);
     var reach = P.budget(s);
@@ -141,6 +153,18 @@ var AICommander = (function () {
       if (loose && (loose.dx || loose.dy)) best = loose;
     }
     if (best && (best.dx || best.dy)) {
+      /* Telegraph. When someone is watching, the first visit publishes the route and stops;
+         the board draws it, and the commit happens on the next tick. That is what makes an
+         opponent's move readable instead of teleportation. */
+      if (Engine.telegraph() && !st.planShown) {
+        var shown = routeCells(s, best);
+        if (shown) {
+          st.planShown = true;
+          Engine.announce({ kind: 'move', side: s.idx, route: shown });
+          return;
+        }
+      }
+      st.planShown = false;
       var taken = P.advance(s, best);
       /* remember what is left of the route, in offsets from where we now stand */
       var steps = P.pathOf(best);
@@ -149,7 +173,7 @@ var AICommander = (function () {
         for (var i = taken; i < steps.length; i++) { rx += steps[i][0]; ry += steps[i][1]; }
         st.goal = { x: rx, y: ry };
       } else st.goal = null;
-    } else st.goal = null;
+    } else { st.goal = null; st.planShown = false; }
     /* Whatever Move survives the approach is spent here, in priority order. Clearing a firing
        line comes before tidying berths: a gun that can shoot this turn is worth more than a
        gun in the right place next turn. Both must happen before the Move is committed away. */

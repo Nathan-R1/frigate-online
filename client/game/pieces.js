@@ -179,5 +179,12 @@ var GamePieces = (function () {
     return svg;
   }
 
-  return { build: build, shapeOf: shapeOf, hash: hashStr, shade: shade };
+  /* the same silhouette as HTML, for the module's card in the hand */
+  function markup(shape, color) {
+    var svg = build(shape, color);
+    svg.setAttribute('class', 'module-svg');
+    return svg.outerHTML;
+  }
+
+  return { build: build, markup: markup, shapeOf: shapeOf, hash: hashStr, shade: shade };
 })();
