@@ -260,8 +260,18 @@
     filter:drop-shadow(0 0 3px var(--pc)); }
   .mp-name { font-family:var(--disp); font-size:14px; letter-spacing:.04em; color:var(--ink);
     text-transform:uppercase; }
-  .mp-meta { font-family:var(--mono); font-size:10.5px; color:var(--amber);
-    display:flex; gap:10px; flex-wrap:wrap; }
+  /* boxed tags, as the sheet builder draws them: an icon and a word per box */
+  .mp-meta { display:flex; flex-wrap:wrap; gap:6px;
+    font-family:var(--mono); font-size:10px; letter-spacing:.08em; }
+  .mp-meta span { display:inline-flex; align-items:center; gap:4px; padding:2px 7px;
+    border:1px solid var(--line); color:var(--ink-mid); border-radius:4px;
+    line-height:1; vertical-align:middle; }
+  .mp-meta span.t-cyan { color:var(--cyan); border-color:var(--cyan-dim); }
+  .mp-meta span.t-amber { color:var(--amber); border-color:var(--amber); }
+  .mp-meta span.t-hull { background:rgba(232,169,74,.12); color:var(--amber); border-color:var(--amber); }
+  .mp-meta span.t-charge { color:var(--icon-charged); border-color:var(--icon-charged);
+    background:rgba(156,63,102,.12); }
+  .mp-meta .ticon { width:11px; height:11px; flex:none; display:block; }
   .mp-desc { color:var(--ink-mid); font-size:12.5px; line-height:1.55; white-space:pre-line; }
   .hidden { display:none !important; }
   /* new-game roster */
@@ -1011,6 +1021,15 @@
      Ported from the sheet builder: wherever a card's text says it creates a module or a
      deployable, the name is followed by a pip that opens that piece's own rules, so you do
      not have to remember what a Cannon Unit actually builds. */
+  /* the same marks the sheet uses, so a tag reads identically in both places */
+  var MODULE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 2.5 21 8v8l-9 5.5L3 16V8l9-5.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>';
+  var DEPLOYABLE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/></svg>';
+  var HULL_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M21 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var SPEED_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var DURATION_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5.5l3.5 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
+
   var INFO_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
     '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>' +
     '<path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
@@ -1061,13 +1080,24 @@
     icon.style.setProperty('--pc', col);
     icon.innerHTML = GamePieces.markup(GamePieces.shapeOf(m.name, false), col);
     document.getElementById('modPopName').textContent = m.name;
-    var meta = [isDep ? 'Deployable' : 'Module', cap(m.tt || '')];
-    if (m.hull) meta.push('Hull ' + m.hull);
-    if (m.speed !== undefined && m.speed !== '') meta.push('Speed ' + m.speed);
-    if (m.duration) meta.push('Duration ' + m.duration);
-    if (m.charges !== undefined && m.charges !== '') meta.push('Charges ' + m.charges);
-    document.getElementById('modPopMeta').innerHTML =
-      meta.filter(Boolean).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('');
+    /* an icon and its value per box, the way the sheet draws them; the title says which
+       number you are looking at, since a bare 12 beside an arrow is not self-evident */
+    var meta = [
+      { text: (isDep ? DEPLOYABLE_ICON : MODULE_ICON) + (isDep ? 'Deployable' : 'Module'),
+        cls: isDep ? 't-amber' : 't-cyan', tip: isDep ? 'Deployable' : 'Module' }
+    ];
+    if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
+                          tip: cap(m.tt) + ' technology' });
+    if (num(m.hull) > 0) meta.push({ text: HULL_ICON + esc(m.hull), cls: 't-hull', tip: 'Hull HP' });
+    if (num(m.speed) > 0) meta.push({ text: SPEED_ICON + esc(m.speed), cls: '', tip: 'Speed' });
+    if (num(m.duration) > 0) meta.push({ text: DURATION_ICON + esc(m.duration), cls: '', tip: 'Duration' });
+    if (num(m.charges) > 0) meta.push({ text: CHARGES_ICON + esc(m.charges), cls: 't-charge',
+                                        tip: 'Charges it starts with' });
+    if (m.traits) meta.push({ text: esc(m.traits), cls: '', tip: 'Traits' });
+    document.getElementById('modPopMeta').innerHTML = meta.map(function (x) {
+      return '<span' + (x.cls ? ' class="' + x.cls + '"' : '') +
+             (x.tip ? ' title="' + esc(x.tip) + '"' : '') + '>' + x.text + '</span>';
+    }).join('');
     var lines = [];
     if (m.req) lines.push('Requires: ' + m.req);
     if (m.onbuild) lines.push('On Play: ' + m.onbuild);
@@ -1078,6 +1108,7 @@
   }
   function closeModPopup() { document.getElementById('modPop').classList.add('hidden'); }
   function cap(x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : ''; }
+  function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
 
   function renderLog(G) {
     logEl.innerHTML = G.log.slice(-200).map(function (l) {
