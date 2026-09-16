@@ -159,10 +159,22 @@ var GamePieces = (function () {
   var BUILDERS = { hex: buildHex, triangle: buildTriangle, square: buildSquare,
                    diamond: buildDiamond, circle: buildCircle };
 
+  /* Does this module stand in for the Core? The Citadel says so in its own rules text — it
+     shares the Core's hull and counts as a Core Module — so it wears the Core's silhouette
+     rather than the square its 'defense' type would otherwise give it. */
+  function countsAsCore(name) {
+    if (typeof Engine === 'undefined' || !Engine.fx) return false;
+    var e = Engine.fx(name, 'mod');
+    if (e.core) return true;
+    return (e.passive || []).some(function (p) {
+      return (p.effect || []).some(function (o) { return o.op === 'countsAsCore'; });
+    });
+  }
+
   /* the module's own type decides its silhouette; the Core is special-cased because its
      preset type is 'movement' and it must not read as an engine */
   function shapeOf(name, isCore) {
-    if (isCore) return 'hex';
+    if (isCore || countsAsCore(name)) return 'hex';
     var m = (typeof Engine !== 'undefined' && Engine.findMod) ? Engine.findMod(name) : null;
     var tt = m && m.tt;
     if (tt === 'offense') return 'triangle';
