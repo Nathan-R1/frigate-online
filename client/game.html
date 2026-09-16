@@ -38,38 +38,85 @@
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
   .g-board { position:relative; overflow:auto; background:var(--void); }
   .grid { position:relative; }
+  .cells, .pieces { position:absolute; inset:0; }
   .cell { position:absolute; box-sizing:border-box; border:1px solid rgba(255,255,255,.04); }
   .cell.legal { background:rgba(79,216,201,.16); border-color:var(--cyan); cursor:pointer; }
   .cell.legal:hover { background:rgba(79,216,201,.34); }
-  .obj { position:absolute; box-sizing:border-box; display:flex; flex-direction:column;
-         align-items:center; justify-content:center; border-radius:5px; font-family:var(--mono);
-         font-size:8.5px; line-height:1.1; text-align:center; overflow:hidden; padding:1px; }
-  .obj.mod   { border:1.5px solid var(--sc, var(--cyan)); color:var(--ink);
-               background:color-mix(in srgb, var(--sc, var(--cyan)) 16%, transparent); }
-  .obj.mod.core { border-width:2.5px; }
-  /* your own pieces carry a faint inner ring so allies never read as yours */
-  .obj.mine::after { content:''; position:absolute; inset:2px; border-radius:3px;
-                     border:1px solid color-mix(in srgb, var(--sc, var(--cyan)) 55%, transparent); }
-  .obj.mod.exh { opacity:.45; }
-  .obj.dep   { border:1.5px dashed var(--sc, var(--amber)); color:var(--sc, var(--amber));
-               background:color-mix(in srgb, var(--sc, var(--amber)) 12%, transparent); }
-  .obj.ast   { border:1px solid var(--ink-dim); background:rgba(150,150,150,.18); color:var(--ink-dim);
-               border-radius:50%; }
-  .obj.ast .hp { color:var(--ink-mid); }
-  .obj.targetable { outline:2px solid var(--amber); cursor:pointer; }
-  .obj.ready { cursor:pointer; box-shadow:0 0 0 1px var(--cyan) inset; }
-  .obj.ready:hover { background:rgba(79,216,201,.34); }
-  .obj.moving { outline:2px dashed var(--amber); }
-  .obj.sel { outline:2px solid var(--cyan); }
-  .obj.badreq { border-style:dashed !important; border-color:var(--red) !important;
-                background:rgba(176,58,58,.2) !important; }
-  .obj .mv { font-size:7.5px; color:var(--icon-cyan); }
+  /* ===== pieces =====
+     Silhouettes and animations come from the tabletop board; see client/game/pieces.js.
+     Nothing on a piece is written out — the shape is the label, and hull lives on the
+     module's card in the hand below. */
+  .pieces { position:absolute; inset:0; }
+  .piece { position:absolute; box-sizing:border-box; }
+  .piece .module-svg { width:100%; height:100%; display:block; overflow:visible;
+    user-select:none; -webkit-user-select:none; transform-origin:50% 50%;
+    filter:drop-shadow(0 0 4px var(--pc)) drop-shadow(0 0 9px var(--pc)); }
+  /* deployables are small craft, not hull: three-quarter size inside a dashed berth */
+  .piece.dep .module-svg { transform:scale(.68); opacity:.95;
+    filter:drop-shadow(0 0 3px var(--pc)); }
+  .piece.dep::before { content:''; position:absolute; inset:3px; border-radius:50%;
+    border:1px dashed color-mix(in srgb, var(--pc) 55%, transparent); }
+  .piece.ast .module-svg { filter:drop-shadow(0 0 4px rgba(0,0,0,.8)) saturate(.45);
+    animation:astro-spin var(--astro-speed, 40s) linear infinite; }
+  .piece.ast { opacity:.94; }
+  .piece.clickable { cursor:pointer; }
+
+  /* selected — the piece the pad and the arrow keys drive */
+  .piece.sel { outline:2px solid var(--cyan); outline-offset:-2px;
+               box-shadow:0 0 12px rgba(79,216,201,.6); border-radius:6px; }
+  /* exhausted — spent for the turn */
+  .piece.exh .module-svg { filter:brightness(.55) saturate(.55); }
+  .piece.exh { opacity:.75; }
+  /* disconnected — requirements unmet, destroyed at end of turn unless fixed */
+  .piece.badreq { border:2px dotted var(--red); border-radius:6px;
+                  background:rgba(176,58,58,.14); }
+  /* moving — still has Move to spend this phase */
+  .piece.moving { border:2px solid rgba(91,148,240,.75); border-radius:6px;
+                  box-shadow:0 0 8px rgba(91,148,240,.35); }
+  .piece .move-corner { position:absolute; width:9px; height:9px; opacity:0;
+    border:0 solid rgba(91,148,240,.8); pointer-events:none; }
+  .piece .move-corner.mc-tl { top:-1px; left:-1px; border-top-width:2px; border-left-width:2px; }
+  .piece .move-corner.mc-tr { top:-1px; right:-1px; border-top-width:2px; border-right-width:2px; }
+  .piece .move-corner.mc-bl { bottom:-1px; left:-1px; border-bottom-width:2px; border-left-width:2px; }
+  .piece .move-corner.mc-br { bottom:-1px; right:-1px; border-bottom-width:2px; border-right-width:2px; }
+  .piece.moving .move-corner { opacity:1; animation:move-corner-pulse 1.6s ease-in-out infinite; }
+  .piece.moving .move-corner.mc-tr, .piece.moving .move-corner.mc-bl { animation-delay:.8s; }
+  /* a legal target for the shot being resolved */
+  .piece.targetable { outline:2px solid var(--amber); outline-offset:-2px;
+    box-shadow:0 0 10px rgba(232,169,74,.5); border-radius:6px; cursor:pointer; }
+  /* ready to activate */
+  .piece.ready .module-svg { filter:drop-shadow(0 0 5px var(--pc)) drop-shadow(0 0 13px var(--pc)); }
+
+  /* floating badges: charges top-right, Move remaining bottom-centre */
+  .pc-badge { position:absolute; font-family:var(--mono); font-weight:700; font-size:9px;
+    line-height:1; padding:1.5px 3px; border-radius:3px; pointer-events:none;
+    background:rgba(10,16,24,.88); border:1px solid #26374a; }
+  .pc-charge { top:-3px; right:-3px; color:var(--icon-cyan); border-color:rgba(79,216,201,.5);
+    text-shadow:0 0 6px rgba(79,216,201,.5); }
+  .pc-move { bottom:-4px; left:50%; transform:translateX(-50%); color:#9cc0ff;
+    border-color:rgba(91,148,240,.55); text-shadow:0 0 6px rgba(91,148,240,.5); }
+
+  .module-svg .core-pulse { animation:core-pulse 2.6s ease-in-out infinite; }
+  .module-svg .blink { animation:blink-led 2.4s steps(1, end) infinite; }
+  .module-svg .scan { animation:scan-sweep 3.2s ease-in-out infinite; }
+  .module-svg .scan.scan-in { animation-name:scan-sweep-in; }
+  .module-svg .mod-shimmer { animation:shimmer 2.2s ease-in-out infinite; }
+  @keyframes core-pulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
+  @keyframes blink-led { 0%,22% { opacity:1; } 30%,88% { opacity:.22; } 96%,100% { opacity:1; } }
+  @keyframes scan-sweep { 0%,100% { transform:translateX(8px); } 50% { transform:translateX(36px); } }
+  @keyframes scan-sweep-in { 0%,100% { transform:translateX(8px); } 50% { transform:translateX(18px); } }
+  @keyframes move-corner-pulse { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+  @keyframes shimmer { 0%,100% { opacity:.3; } 50% { opacity:1; } }
+  @keyframes astro-spin { from { transform:rotate(var(--astro-start,0deg)); }
+                          to { transform:rotate(calc(var(--astro-start,0deg) + 360deg)); } }
+  @media (prefers-reduced-motion: reduce) {
+    .piece *, .piece { animation:none !important; }
+  }
   .movepad { display:grid; grid-template-columns:repeat(3,30px); gap:3px; margin:6px 0; }
   .movepad button { font-family:var(--mono); font-size:12px; padding:5px 0; cursor:pointer;
                     background:var(--panel-alt); border:1px solid var(--cyan-dim); color:var(--cyan); border-radius:4px; }
   .movepad button:disabled { opacity:.25; cursor:default; }
   .movepad .sp { visibility:hidden; }
-  .obj .hp { font-weight:700; color:var(--icon-hull); }
   .g-right { display:flex; flex-direction:column; border-left:1px solid var(--line-bright);
              background:var(--panel); min-height:0; }
   .g-prompt { padding:10px 12px; border-bottom:1px solid var(--line); min-height:52px; }
@@ -77,7 +124,7 @@
                        letter-spacing:.06em; color:var(--amber); margin-bottom:6px; }
   .g-log { flex:1; overflow-y:auto; padding:8px 12px; font-family:var(--mono); font-size:10.5px;
            line-height:1.6; color:var(--ink-mid); }
-  .g-log div { padding:1px 0; }
+  .g-log div { padding:1px 0; white-space:pre-wrap; }   /* keeps the roll lines indented under their attack */
   .g-log .t0 { color:var(--p0); } .g-log .t1 { color:var(--p1); }
   .g-log .t2 { color:var(--p2); } .g-log .t3 { color:var(--p3); }
   /* the hand is a user-resizable row; --hand-h is written by the drag grip */
@@ -174,6 +221,7 @@
 <script src="frigate-sheet/presets/mod-presets.js"></script>
 <script src="frigate-sheet/presets/card-effects.js"></script>
 <script src="game/engine.js"></script>
+<script src="game/pieces.js"></script>
 <script src="game/ai/ai-knowledge.js"></script>
 <script src="game/ai/ai-path.js"></script>
 <script src="game/ai/ai-placement.js"></script>
@@ -184,7 +232,9 @@
   'use strict';
   var CELL = 30;
   var selMod = null;   /* which of my modules the move controls drive */
-  var COLORS = ['var(--p0)', 'var(--p1)', 'var(--p2)', 'var(--p3)'];
+  /* one colour per seat. The SVG shapes need real hex to derive their fills and detail
+     lines, so these are the source of truth and --p0..--p3 in the stylesheet mirror them. */
+  var SEAT_HEX = ['#4fd8c9', '#d2544e', '#e0a93f', '#9a7ce0'];
   var TEAM_LETTER = ['A', 'B', 'C', 'D'];
 
   /* The roster: one entry per seat, in turn order. `ai` hands that seat to the commander,
@@ -281,10 +331,10 @@
   function renderTop(G) {
     document.getElementById('turnLabel').textContent =
       'Turn ' + G.turn + ' — ' + G.players[G.active].name;
-    document.getElementById('turnLabel').style.color = COLORS[G.active % 4];
+    document.getElementById('turnLabel').style.color = SEAT_HEX[G.active % 4];
     document.getElementById('barRow').innerHTML = G.players.map(function (s, i) {
       return '<span class="side-bar' + (G.active === i ? ' turn' : '') + (s.dead ? ' out' : '') +
-             '" style="--sc:' + COLORS[i % 4] + '">' + bar(s, G) + '</span>';
+             '" style="--sc:' + SEAT_HEX[i % 4] + '">' + bar(s, G) + '</span>';
     }).join('');
     var mine = G.active === meIdx() && !G.pending && !G.over;
     document.getElementById('endBtn').disabled = !mine || G.phase === 'play';
@@ -295,69 +345,157 @@
       G.phase === 'play' ? 'PLAY PHASE' : (G.phase === 'action' ? 'ACTION PHASE' : '');
   }
 
-  function renderBoard(G) {
-    var n = Engine.RULES.boardSize, html = '';
+  /* ---------- board ----------
+     Two layers: a static grid of cells that only ever has its highlight class toggled, and a
+     pieces layer that is diffed by object id. Rebuilding the pieces every frame would restart
+     every rotation and pulse, so nodes are reused and only their classes and badges change. */
+  var cellsEl = null, piecesEl = null;
+
+  function ensureLayers(n) {
+    if (cellsEl) return;
     gridEl.style.width = gridEl.style.height = (n * CELL) + 'px';
+    cellsEl = document.createElement('div');
+    cellsEl.className = 'cells';
+    var html = '';
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++)
+      html += '<div class="cell" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
+              'px;width:' + CELL + 'px;height:' + CELL + 'px" data-x="' + x + '" data-y="' + y + '"></div>';
+    cellsEl.innerHTML = html;
+    piecesEl = document.createElement('div');
+    piecesEl.className = 'pieces';
+    gridEl.appendChild(cellsEl);
+    gridEl.appendChild(piecesEl);
+  }
+
+  function renderBoard(G) {
+    ensureLayers(Engine.RULES.boardSize);
+    paintCells(G);
+    paintPieces(G);
+  }
+
+  function paintCells(G) {
     var p = G.pending;
     var legal = (p && p.kind === 'space' && p.filter) ? p.filter : null;
-    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
-      var cls = 'cell' + (legal && legal(x, y) ? ' legal' : '');
-      html += '<div class="' + cls + '" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
-              'px;width:' + CELL + 'px;height:' + CELL + 'px" data-x="' + x + '" data-y="' + y + '"></div>';
+    var kids = cellsEl.children;
+    for (var i = 0; i < kids.length; i++) {
+      var c = kids[i];
+      var ok = !!legal && legal(+c.getAttribute('data-x'), +c.getAttribute('data-y'));
+      if (ok !== c.classList.contains('legal')) c.classList.toggle('legal', ok);
     }
-    var targetIds = (p && p.kind === 'target') ? p.targets : [];
-    /* asteroids are objects now: they carry hull and can be shot away */
+  }
+
+  /* everything on the board this frame, in draw order: rocks first, then hulls on top */
+  function boardObjects(G) {
+    var out = [];
     Object.keys(G.asteroids || {}).forEach(function (id) {
       var a = G.asteroids[id];
-      html += obj('ast' + (targetIds.indexOf(id) >= 0 ? ' targetable' : ''),
-                  a.x, a.y, '◦', a.hull, id);
+      out.push({ id: id, o: a, kind: 'ast', shape: 'asteroid', color: '#6a7077' });
     });
     Object.keys(G.cells).forEach(function (k) {
-      var c = G.cells[k]; if (c.kind !== 'anomaly') return;
+      var c = G.cells[k];
+      if (c.kind !== 'anomaly') return;
       var xy = k.split(',');
-      html += obj('ast', xy[0], xy[1], '✳', '');
+      out.push({ id: 'anom:' + k, o: { x: +xy[0], y: +xy[1] }, kind: 'anom',
+                 shape: 'circle', color: '#b060e0' });
     });
-    if (selMod && !G.players[meIdx()].modules[selMod]) selMod = null;
-    if (p && p.kind === 'move' && !selMod) {
-      var mine = G.players[meIdx()].modules;
-      selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || null;
-    }
     G.players.forEach(function (s, si) {
       Object.keys(s.modules).forEach(function (id) {
         var m = s.modules[id];
-        var canAct = si === meIdx() && G.phase === 'action' && !G.pending &&
-                     !m.exhausted && !!Engine.fx(m.name, 'mod').activate;
-        var bad = !Engine.meetsReq(s, m);
-        var pickable = si === meIdx() && p && p.kind === 'move';
-        var cls = 'mod' + (si === meIdx() ? ' mine' : '') + (id === s.coreId ? ' core' : '') +
-                  (m.exhausted ? ' exh' : '') + (canAct || pickable ? ' ready' : '') + (bad ? ' badreq' : '') +
-                  (si === meIdx() && id === selMod ? ' sel' : '') +
-                  (targetIds.indexOf(id) >= 0 ? ' targetable' : '');
-        html += obj(cls, m.x, m.y, shortName(m.name), m.hull, id,
-                    si === meIdx() && m.moveLeft > 0 ? m.moveLeft : 0, COLORS[si % 4]);
+        out.push({ id: id, o: m, kind: 'mod', side: s, si: si,
+                   shape: GamePieces.shapeOf(m.name, id === s.coreId), color: SEAT_HEX[si % 4] });
       });
       Object.keys(s.deployables).forEach(function (id) {
         var d = s.deployables[id];
-        var canAct = si === meIdx() && G.phase === 'action' && !G.pending &&
-                     !d.exhausted && !!Engine.fx(d.name, 'mod').activate;
-        var moving = p && p.kind === 'moveObject' && p.objId === id;
-        html += obj('dep' + (canAct ? ' ready' : '') + (moving ? ' moving' : '') +
-                    (targetIds.indexOf(id) >= 0 ? ' targetable' : ''),
-                    d.x, d.y, shortName(d.name), d.hull, id, 0, COLORS[si % 4]);
+        out.push({ id: id, o: d, kind: 'dep', side: s, si: si,
+                   shape: GamePieces.shapeOf(d.name, false), color: SEAT_HEX[si % 4] });
       });
     });
-    gridEl.innerHTML = html;
+    return out;
   }
-  function obj(cls, x, y, label, hp, id, mv, sc) {
-    return '<div class="obj ' + cls + '" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
-      'px;width:' + CELL + 'px;height:' + CELL + 'px' + (sc ? ';--sc:' + sc : '') + '"' +
-      (id ? ' data-obj="' + id + '"' : '') + '>' +
-      '<span>' + esc(label) + '</span>' + (hp !== '' ? '<span class="hp">' + hp + '</span>' : '') +
-      (mv ? '<span class="mv">↔' + mv + '</span>' : '') + '</div>';
+
+  function buildPiece(rec) {
+    var d = document.createElement('div');
+    d.setAttribute('data-obj', rec.id);
+    d.style.width = d.style.height = CELL + 'px';
+    d.style.setProperty('--pc', rec.color);
+    if (rec.shape === 'asteroid') {
+      var seed = GamePieces.hash(rec.id);
+      d.style.setProperty('--astro-start', Math.floor(seed * 360) + 'deg');
+      d.style.setProperty('--astro-speed', (28 + seed * 42).toFixed(0) + 's');
+      d.appendChild(GamePieces.build('asteroid', rec.color, seed));
+    } else {
+      d.appendChild(GamePieces.build(rec.shape, rec.color));
+    }
+    ['mc-tl','mc-tr','mc-bl','mc-br'].forEach(function (k) {
+      var sp = document.createElement('span');
+      sp.className = 'move-corner ' + k;
+      d.appendChild(sp);
+    });
+    var ch = document.createElement('span'); ch.className = 'pc-badge pc-charge'; d.appendChild(ch);
+    var mv = document.createElement('span'); mv.className = 'pc-badge pc-move'; d.appendChild(mv);
+    return d;
   }
-  function shortName(n) {
-    var w = n.split(' ');
-    return w.length > 1 ? w.map(function (x) { return x[0]; }).join('') : n.slice(0, 4);
+
+  function paintPiece(d, rec, G) {
+    var o = rec.o, p = G.pending;
+    d.style.left = (o.x * CELL) + 'px';
+    d.style.top  = (o.y * CELL) + 'px';
+    var cls = 'piece ' + rec.kind;
+    var targetIds = (p && p.kind === 'target') ? p.targets : [];
+    if (targetIds.indexOf(rec.id) >= 0) cls += ' targetable';
+    if (rec.kind === 'mod' || rec.kind === 'dep') {
+      var mine = rec.si === meIdx();
+      var fx = Engine.fx(o.name, 'mod');
+      if (o.exhausted) cls += ' exh';
+      if (rec.kind === 'mod' && !Engine.meetsReq(rec.side, o)) cls += ' badreq';
+      /* movement state only means anything while a move prompt is open */
+      if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
+      if (mine && rec.id === selMod) cls += ' sel';
+      if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving';
+      var canAct = mine && G.phase === 'action' && !p && !o.exhausted && !!fx.activate;
+      if (canAct) cls += ' ready clickable';
+      if (mine && p && p.kind === 'move') cls += ' clickable';
+    }
+    d.className = cls;
+    /* the board carries no text, so the name and hull live in the hover title */
+    d.title = rec.kind === 'ast' ? 'Asteroid — hull ' + o.hull
+            : rec.kind === 'anom' ? 'Anomaly'
+            : rec.side.name + ' — ' + o.name + ' — hull ' + o.hull + '/' + (o.hullMax || o.hull);
+    var ch = d.querySelector('.pc-charge'), mv = d.querySelector('.pc-move');
+    var charges = o.charges || 0;
+    ch.textContent = charges ? '⚡' + charges : '';
+    ch.style.display = charges ? '' : 'none';
+    /* Move remaining is only shown while you are actually moving pieces */
+    var showMv = p && (p.kind === 'move' || p.kind === 'moveObject') &&
+                 rec.si === meIdx() && o.moveLeft > 0;
+    mv.textContent = showMv ? o.moveLeft : '';
+    mv.style.display = showMv ? '' : 'none';
+  }
+
+  function paintPieces(G) {
+    var recs = boardObjects(G);
+    if (selMod && !G.players[meIdx()].modules[selMod]) selMod = null;
+    if (G.pending && G.pending.kind === 'move' && !selMod) {
+      var mine = G.players[meIdx()].modules;
+      selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || null;
+    }
+    /* drop nodes whose object is gone, then place the rest in order, reusing what is there */
+    var want = {};
+    recs.forEach(function (r) { want[r.id] = r; });
+    var kids = piecesEl.children;
+    for (var k = kids.length - 1; k >= 0; k--) {
+      var id = kids[k].getAttribute('data-obj');
+      if (!want[id]) piecesEl.removeChild(kids[k]);
+    }
+    var byId = {};
+    for (var i = 0; i < piecesEl.children.length; i++)
+      byId[piecesEl.children[i].getAttribute('data-obj')] = piecesEl.children[i];
+    recs.forEach(function (rec, idx) {
+      var node = byId[rec.id] || buildPiece(rec);
+      var ref = piecesEl.children[idx];
+      if (ref !== node) piecesEl.insertBefore(node, ref || null);
+      paintPiece(node, rec, G);
+    });
   }
 
   function renderHand(G) {
@@ -409,7 +547,7 @@
   }
 
   function renderLog(G) {
-    logEl.innerHTML = G.log.slice(-120).map(function (l) {
+    logEl.innerHTML = G.log.slice(-200).map(function (l) {
       return '<div class="t' + l.side + '">' + esc(l.msg) + '</div>';
     }).join('');
     logEl.scrollTop = logEl.scrollHeight;
@@ -466,7 +604,7 @@
   /* ---------- input ---------- */
   gridEl.addEventListener('click', function (e) {
     var G = Engine.get(), p = G.pending;
-    var o = e.target.closest('.obj');
+    var o = e.target.closest('.piece');
     if (p) {
       if (p.kind === 'target' && o && p.targets.indexOf(o.getAttribute('data-obj')) >= 0)
         return Engine.resolve(o.getAttribute('data-obj'));
@@ -523,7 +661,7 @@
       for (var t = 0; t < n; t++)
         teams += '<option value="' + t + '"' + (seat.team === t ? ' selected' : '') + '>Team ' +
                  TEAM_LETTER[t] + '</option>';
-      return '<div class="rost-row" style="--sc:' + COLORS[i % 4] + '">' +
+      return '<div class="rost-row" style="--sc:' + SEAT_HEX[i % 4] + '">' +
         '<span class="rn">Player ' + (i + 1) + '</span>' +
         '<select data-team="' + i + '">' + teams + '</select>' +
         '<select data-ai="' + i + '">' +
