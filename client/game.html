@@ -36,8 +36,10 @@
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .sb-mv b { color:var(--icon-cyan); } .sb-cards b { color:var(--icon-card); }
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
-  .g-board { position:relative; overflow:auto; background:var(--void); }
-  .grid { position:relative; }
+  /* the board pans and zooms under a fixed window, as the tabletop board does */
+  .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab; }
+  .g-board.dragging { cursor:grabbing; }
+  .grid { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
   .cells, .pieces { position:absolute; inset:0; }
   /* the pieces layer spans the whole board, so it must not eat clicks on open ground —
      only the pieces themselves take them, and everything else falls through to the cells */
@@ -615,6 +617,44 @@
      for deployables */
   var ambiguous = { mod: {}, dep: {} };
 
+  /* ---------- view: pan and zoom ----------
+     Ported from client/board.html. The grid is one transformed layer, so panning and zooming
+     move everything on it together and nothing has to be re-laid-out. */
+  var VIEW_KEY = 'frigateGameView';
+  var MIN_ZOOM = 0.35, MAX_ZOOM = 3;
+  var view = { x: 0, y: 0, zoom: 1 };
+  var boardEl = document.getElementById('boardWrap');
+
+  function applyView() {
+    gridEl.style.transform =
+      'translate(' + view.x + 'px,' + view.y + 'px) scale(' + view.zoom + ')';
+  }
+  function saveView() {
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch (e) {}
+  }
+  /* centre the whole board in the pane, at whatever zoom fits */
+  function fitView(n) {
+    var r = boardEl.getBoundingClientRect();
+    var px = n * CELL;
+    /* the pane has no size yet — leave the view alone and try again on the next paint */
+    if (!r.width || !r.height) { view.needsFit = true; applyView(); return; }
+    view.needsFit = false;
+    var z = Math.min(r.width / px, r.height / px) * 0.96;
+    view.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+    view.x = (r.width - px * view.zoom) / 2;
+    view.y = (r.height - px * view.zoom) / 2;
+    applyView();
+  }
+  function restoreView(n) {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); } catch (e) {}
+    if (saved && typeof saved.zoom === 'number' && saved.zoom > 0) {
+      view.x = saved.x; view.y = saved.y;
+      view.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, saved.zoom));
+      applyView();
+    } else fitView(n);
+  }
+
   function ensureLayers(n) {
     if (cellsEl) return;
     var px = n * CELL;
@@ -641,6 +681,7 @@
     gridEl.appendChild(piecesEl);
     gridEl.appendChild(pathEl);
     gridEl.appendChild(fxEl);
+    restoreView(n);
     pathBase = pathEl.querySelector('.path-base');
     pathPulse = pathEl.querySelector('.path-pulse');
     beaconEl = pathEl.querySelector('.move-beacon');
@@ -760,6 +801,7 @@
 
   function renderBoard(G) {
     ensureLayers(Engine.RULES.boardSize);
+    if (view.needsFit) fitView(Engine.RULES.boardSize);
     syncSelection(G);
     paintCells(G);
     paintPieces(G);
@@ -1262,11 +1304,56 @@
   /* the cell under the pointer, worked out from the grid rather than the element beneath the
      cursor, because pieces and the path layer cover the cells */
   function cellFromEvent(e) {
-    var r = gridEl.getBoundingClientRect(), n = Engine.RULES.boardSize;
-    var x = Math.floor((e.clientX - r.left) / CELL), y = Math.floor((e.clientY - r.top) / CELL);
+    var r = boardEl.getBoundingClientRect(), n = Engine.RULES.boardSize;
+    var bx = (e.clientX - r.left - view.x) / view.zoom;
+    var by = (e.clientY - r.top - view.y) / view.zoom;
+    var x = Math.floor(bx / CELL), y = Math.floor(by / CELL);
     if (x < 0 || y < 0 || x >= n || y >= n) return null;
     return { x: x, y: y };
   }
+  /* wheel zooms about the pointer, so the square under the cursor stays put */
+  boardEl.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var r = boardEl.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    var f = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    var z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom * f));
+    view.x = mx - (mx - view.x) * (z / view.zoom);
+    view.y = my - (my - view.y) * (z / view.zoom);
+    view.zoom = z;
+    applyView();
+    saveView();
+  }, { passive: false });
+
+  /* dragging pans the board. A press that never moves far is a click, so the two do not
+     fight each other: the click is only swallowed once the drag actually starts. */
+  var pan = null, swallowClick = false;
+  boardEl.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return;
+    pan = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!pan) return;
+    var dx = e.clientX - pan.sx, dy = e.clientY - pan.sy;
+    if (!pan.moved && Math.abs(dx) + Math.abs(dy) > 5) {
+      pan.moved = true;
+      boardEl.classList.add('dragging');
+    }
+    if (pan.moved) { view.x = pan.ox + dx; view.y = pan.oy + dy; applyView(); }
+  });
+  window.addEventListener('mouseup', function () {
+    if (!pan) return;
+    if (pan.moved) { swallowClick = true; saveView(); }
+    pan = null;
+    boardEl.classList.remove('dragging');
+  });
+  /* double-click the empty board to put the whole thing back in view */
+  boardEl.addEventListener('dblclick', function (e) {
+    if (e.target.closest('.piece')) return;
+    fitView(Engine.RULES.boardSize);
+    saveView();
+  });
+
   gridEl.addEventListener('mousemove', function (e) {
     lastPointer.x = e.clientX; lastPointer.y = e.clientY;
     var G = Engine.get();
@@ -1318,6 +1405,7 @@
   }
 
   gridEl.addEventListener('click', function (e) {
+    if (swallowClick) { swallowClick = false; return; }   /* that was a pan, not a pick */
     var G = Engine.get(), p = G.pending;
     var cell = cellFromEvent(e);
     var id = cell ? objIdAt(G, cell.x, cell.y) : null;
