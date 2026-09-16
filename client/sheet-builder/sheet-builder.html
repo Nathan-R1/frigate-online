@@ -491,6 +491,7 @@
     <div class="land-opts">
       <label class="dl-row"><input type="checkbox" id="statBlocksBox"> Customise stat-blocks</label>
       <label class="dl-row"><input type="checkbox" id="limitsBox"> Disable limits</label>
+      <label class="dl-row"><input type="checkbox" id="showAllDrawBox"> Show all on card draw</label>
     </div>
     <div class="hint-text" id="landingHint">No saved choices yet.</div>
   </section>
@@ -653,7 +654,7 @@
     return out;
   }
 
-  var choices = { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() };
+  var choices = { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, showAllDraw: false, inv: emptyInv() };
   var step = 0;
   var coreSection = 0; // which Core Options section is expanded; the rest show as headers
   var drawOffer = null; // the 3 tech names currently on offer, or null when no draw is open
@@ -670,7 +671,7 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) o[CORE_SECTIONS[i].key] = null;
     return o;
   }
-  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, inv: emptyInv() }; }
+  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, showAllDraw: false, inv: emptyInv() }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -699,6 +700,7 @@
         c.shipName = s.shipName || '';
         c.disableLimits = !!s.disableLimits;
         c.statBlocks = !!s.statBlocks;
+        c.showAllDraw = !!s.showAllDraw;
         if (s.removed && typeof s.removed === 'object') {
           Object.keys(s.removed).forEach(function (rn) {
             var rv = parseInt(s.removed[rn], 10);
@@ -914,23 +916,49 @@
       used[name] = true;
       out.push({ name: name, cls: cls });
     }
+    /* the landing's "Show all on card draw" turns the offer into the whole pool the ship
+       can reach: every classless card plus every card of each ticked class, no rarity roll.
+       `used` still applies, so a card in two classes is offered once. */
+    function takeAll(cls) {
+      for (var i = 0; i < TECH_PRESETS.length; i++) {
+        var t = TECH_PRESETS[i];
+        if (used[t.name]) continue;
+        if (techClasses(t).indexOf(cls) === -1) continue;
+        used[t.name] = true;
+        out.push({ name: t.name, cls: cls });
+      }
+    }
     var hulls = Object.keys(CLASS_PRESETS);
     var ticks = 0;
     for (var h = 0; h < hulls.length; h++) {
       var n = choices.hulls[hulls[h]] || 0;
       ticks += n;
+      if (choices.showAllDraw) {
+        if (n > 0) takeAll(hulls[h].toLowerCase());
+        continue;
+      }
       for (var lvl = 1; lvl <= n; lvl++) {
         take(lvl % 2 === 1 ? hulls[h].toLowerCase() : 'none');
       }
     }
+    if (choices.showAllDraw) takeAll('none');
     /* no hull ticked is not reachable from step 1, but an empty offer would be a dead end */
-    if (!ticks) take('none');
-    /* the offer reads classless first, then each class in hull order, alphabetical within a class */
+    else if (!ticks) take('none');
+    /* the offer reads classless first, then each class in hull order. A normal draw is a
+       handful of cards, so name alone orders them; a show-all offer is the whole pool, so
+       it groups by rarity (common to rare, as RARITY_ORDER lists them) before name. */
     var order = ['none'];
     for (var o = 0; o < hulls.length; o++) order.push(hulls[o].toLowerCase());
+    var byRarity = !!choices.showAllDraw;
     out.sort(function (a, b) {
       var d = order.indexOf(a.cls) - order.indexOf(b.cls);
       if (d) return d;
+      if (byRarity) {
+        var ta = findTech(a.name), tb = findTech(b.name);
+        d = RARITY_ORDER.indexOf((ta && ta.rarity) || 'common') -
+            RARITY_ORDER.indexOf((tb && tb.rarity) || 'common');
+        if (d) return d;
+      }
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
     var names = [];
@@ -1048,6 +1076,7 @@
   function refreshLanding() {
     document.getElementById('limitsBox').checked = !!choices.disableLimits;
     document.getElementById('statBlocksBox').checked = !!choices.statBlocks;
+    document.getElementById('showAllDrawBox').checked = !!choices.showAllDraw;
     var hint = document.getElementById('landingHint');
     var resumeBtn = document.getElementById('resumeBtn');
     if (choicesHaveAny()) {
@@ -2070,6 +2099,10 @@ function skillsOptions() {
     rebuildSteps();
     saveChoices();
   });
+  document.getElementById('showAllDrawBox').addEventListener('change', function () {
+    choices.showAllDraw = this.checked;
+    saveChoices();
+  });
 
   document.getElementById('shipName').addEventListener('input', function () {
     choices.shipName = this.value;
@@ -2079,9 +2112,11 @@ function skillsOptions() {
   /* ===== landing actions ===== */
   function startNew() {
     var keepLimits = choices.disableLimits, keepBlocks = choices.statBlocks, keepLevel = shipLevel();
+    var keepShowAll = choices.showAllDraw;
     choices = emptyChoices();
     choices.disableLimits = keepLimits;
     choices.statBlocks = keepBlocks;
+    choices.showAllDraw = keepShowAll;
     choices.level = keepLevel;
     rebuildSteps();
     saveChoices();
@@ -2175,6 +2210,7 @@ function skillsOptions() {
     choices.hulls = beforeHulls;
     c.disableLimits = choices.disableLimits;
     c.statBlocks = choices.statBlocks;
+    c.showAllDraw = choices.showAllDraw;
     choices = c;
     rebuildSteps();
     saveChoices();
