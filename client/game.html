@@ -20,12 +20,18 @@
   .g-btn:hover:not(:disabled) { background:var(--cyan); color:var(--ink-strong); }
   .g-btn:disabled { opacity:.35; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
   .g-btn.ghost { border-color:var(--line-bright); color:var(--ink-mid); }
-  .side-bar { display:flex; align-items:center; gap:10px; padding:4px 10px; border:1px solid var(--line);
+  /* one colour per seat, so up to four ships stay distinguishable on the board */
+  :root { --p0:#4fd8c9; --p1:#d2544e; --p2:#e0a93f; --p3:#9a7ce0; }
+  #barRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .side-bar { display:flex; align-items:center; gap:9px; padding:4px 10px;
+              border:1px solid var(--sc, var(--line)); color:var(--ink);
               border-radius:6px; font-family:var(--mono); font-size:11px; }
-  .side-bar.me { border-color:var(--cyan-dim); }
-  .side-bar.them { border-color:var(--red); }
-  .side-bar.turn { box-shadow:0 0 0 1px currentColor inset; opacity:1; }
+  .side-bar .sb-name { color:var(--sc, var(--ink)); font-weight:700; }
+  .side-bar .sb-team { font-size:9px; letter-spacing:.1em; color:var(--ink-dim);
+                       border:1px solid var(--line-bright); border-radius:3px; padding:0 4px; }
+  .side-bar.turn { box-shadow:0 0 0 1px var(--sc, currentColor) inset; opacity:1; }
   .side-bar:not(.turn) { opacity:.55; }
+  .side-bar.out { opacity:.3; text-decoration:line-through; }
   .side-bar b { font-size:14px; }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .sb-mv b { color:var(--icon-cyan); } .sb-cards b { color:var(--icon-card); }
@@ -38,11 +44,15 @@
   .obj { position:absolute; box-sizing:border-box; display:flex; flex-direction:column;
          align-items:center; justify-content:center; border-radius:5px; font-family:var(--mono);
          font-size:8.5px; line-height:1.1; text-align:center; overflow:hidden; padding:1px; }
-  .obj.mod   { border:1.5px solid var(--cyan); background:rgba(79,216,201,.14); color:var(--ink); }
-  .obj.mod.foe { border-color:var(--red); background:rgba(176,58,58,.16); }
+  .obj.mod   { border:1.5px solid var(--sc, var(--cyan)); color:var(--ink);
+               background:color-mix(in srgb, var(--sc, var(--cyan)) 16%, transparent); }
   .obj.mod.core { border-width:2.5px; }
+  /* your own pieces carry a faint inner ring so allies never read as yours */
+  .obj.mine::after { content:''; position:absolute; inset:2px; border-radius:3px;
+                     border:1px solid color-mix(in srgb, var(--sc, var(--cyan)) 55%, transparent); }
   .obj.mod.exh { opacity:.45; }
-  .obj.dep   { border:1.5px dashed var(--amber); background:rgba(232,169,74,.12); color:var(--amber); }
+  .obj.dep   { border:1.5px dashed var(--sc, var(--amber)); color:var(--sc, var(--amber));
+               background:color-mix(in srgb, var(--sc, var(--amber)) 12%, transparent); }
   .obj.ast   { border:1px solid var(--ink-dim); background:rgba(150,150,150,.18); color:var(--ink-dim);
                border-radius:50%; }
   .obj.ast .hp { color:var(--ink-mid); }
@@ -68,7 +78,8 @@
   .g-log { flex:1; overflow-y:auto; padding:8px 12px; font-family:var(--mono); font-size:10.5px;
            line-height:1.6; color:var(--ink-mid); }
   .g-log div { padding:1px 0; }
-  .g-log .t0 { color:var(--cyan); } .g-log .t1 { color:var(--red); }
+  .g-log .t0 { color:var(--p0); } .g-log .t1 { color:var(--p1); }
+  .g-log .t2 { color:var(--p2); } .g-log .t3 { color:var(--p3); }
   /* the hand is a user-resizable row; --hand-h is written by the drag grip */
   .g-handwrap { display:flex; flex-direction:column; height:var(--hand-h, 132px);
                 min-height:64px; max-height:72vh; background:var(--panel);
@@ -105,14 +116,24 @@
                  padding:28px 34px; text-align:center; }
   .g-over h2 { font-family:var(--disp); color:var(--cyan); margin:0 0 14px; letter-spacing:.06em; }
   .hidden { display:none !important; }
+  /* new-game roster */
+  #modePick .box { min-width:min(92vw, 480px); text-align:left; }
+  .rost-count { display:flex; gap:8px; margin:0 0 14px; }
+  .rost-row { display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:8px; align-items:center;
+              padding:6px 0; border-top:1px solid var(--line); }
+  .rost-row .rn { font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--sc, var(--cyan)); }
+  .rost-row select { width:100%; font-family:var(--mono); font-size:11px; padding:5px 6px;
+                     background:var(--panel); color:var(--ink); border:1px solid var(--line-bright);
+                     border-radius:5px; }
+  .rost-note { font-size:11px; color:var(--ink-dim); margin:12px 0 0; }
+  @media (max-width:520px) { .rost-row { grid-template-columns:1fr 1fr; } .rost-row .rn { grid-column:1 / -1; } }
 </style>
 </head>
 <body>
 <div class="g-wrap">
   <div class="g-top">
     <span class="g-turn" id="turnLabel">—</span>
-    <span class="side-bar me"   id="barMe"></span>
-    <span class="side-bar them" id="barThem"></span>
+    <span id="barRow"></span>
     <span style="flex:1"></span>
     <span class="g-turn" id="phaseLabel" style="color:var(--amber)"></span>
     <button type="button" class="g-btn ghost" id="newBtn">New Game</button>
@@ -133,10 +154,17 @@
 </div>
 <div class="g-over hidden" id="modePick"><div class="box">
   <h2>New Game</h2>
-  <p style="color:var(--ink-dim);font-size:12.5px;max-width:34ch;margin:0 0 18px">
-    Play against the computer, or pass one screen back and forth between two people.</p>
-  <button type="button" class="g-btn" data-mode="ai" style="margin:0 4px">Versus AI</button>
-  <button type="button" class="g-btn ghost" data-mode="local" style="margin:0 4px">Local — 2 players</button>
+  <div class="rost-count" id="rostCount">
+    <button type="button" class="g-btn" data-count="2">2 Players</button>
+    <button type="button" class="g-btn ghost" data-count="3">3 Players</button>
+    <button type="button" class="g-btn ghost" data-count="4">4 Players</button>
+  </div>
+  <div id="rostRows"></div>
+  <p class="rost-note hidden" id="rostWarn" style="color:var(--red)">
+     Put at least two seats on different teams.</p>
+  <p class="rost-note">Seats sharing a team win and lose together. Give everyone their own
+     team for a free-for-all — the game ends when only one team still has a Core.</p>
+  <p style="margin:16px 0 0"><button type="button" class="g-btn" id="startBtn">Start</button></p>
 </div></div>
 <div class="g-over hidden" id="overlay"><div class="box">
   <h2 id="overTitle">—</h2><button type="button" class="g-btn" onclick="location.reload()">Play again</button>
@@ -154,13 +182,33 @@
 <script>
 (function () {
   'use strict';
-  var CELL = 30, ME = 0, THEM = 1;
+  var CELL = 30;
   var selMod = null;   /* which of my modules the move controls drive */
-  /* 'ai'    — you are side 0 and the commander runs side 1
-     'local' — one screen, two people: the controls always belong to whoever is active */
-  var MODE = 'ai';
-  function meIdx() { return MODE === 'local' ? Engine.get().active : ME; }
-  function sideName(i) { return MODE === 'local' ? 'Player ' + (i + 1) : (i === ME ? 'You' : 'Enemy'); }
+  var COLORS = ['var(--p0)', 'var(--p1)', 'var(--p2)', 'var(--p3)'];
+  var TEAM_LETTER = ['A', 'B', 'C', 'D'];
+
+  /* The roster: one entry per seat, in turn order. `ai` hands that seat to the commander,
+     `team` groups seats that win and lose together. Two seats on two teams is the old
+     one-versus-one game; four seats on two teams is a pairs match. */
+  var SEATS = [{ team:0, ai:false }, { team:1, ai:true }];
+  /* whichever local seat the controls and hand currently belong to */
+  var VIEW = 0;
+
+  function isAI(i) { return !!(SEATS[i] && SEATS[i].ai); }
+  function localSeats() {
+    return SEATS.map(function (x, i) { return i; }).filter(function (i) { return !isAI(i); });
+  }
+  /* Control belongs to the active seat while it is a local one; when the computer is
+     thinking we keep showing the last human seat so its hand does not vanish. */
+  function meIdx() {
+    var G = Engine.get();
+    if (G && !isAI(G.active)) return G.active;
+    return VIEW;
+  }
+  function sideName(i) {
+    return 'Player ' + (i + 1) + (isAI(i) ? ' (AI)' : '');
+  }
+  function teamOf(i) { return SEATS[i] ? SEATS[i].team : i; }
   var gridEl = document.getElementById('grid');
   var handEl = document.getElementById('hand');
   var logEl  = document.getElementById('logPanel');
@@ -171,31 +219,59 @@
     return ['Cannon Unit','Cannon Unit','P.D. Unit','Graviton Unit','Shield Generator',
             'Grav Jet','Rocket Array','Boost','Dynamo','Torpedo Launcher','Armor Unit','Thrust Unit'];
   }
-  function start(mode) {
-    MODE = mode || MODE;
+  /* each seat opens with a slightly different hull so the board does not look mirrored */
+  var LOADOUTS = [['Cannon','P.D.','Graviton Engine'],
+                  ['Cannon','Armor','Thrust Engine'],
+                  ['Cannon','P.D.','Thrust Engine'],
+                  ['Cannon','Armor','Graviton Engine']];
+  function start() {
     selMod = null;
     AICommander.reset();
     document.getElementById('modePick').classList.add('hidden');
-    Engine.newGame(
-      { name:sideName(0), deck:starterDeck(), modules:['Cannon','P.D.','Graviton Engine'] },
-      { name:sideName(1), deck:starterDeck(), modules:['Cannon','Armor','Thrust Engine'] });
+    VIEW = localSeats().length ? localSeats()[0] : 0;
+    Engine.newGame(SEATS.map(function (seat, i) {
+      return { name: sideName(i), team: seat.team, ai: seat.ai,
+               deck: starterDeck(), modules: LOADOUTS[i % LOADOUTS.length] };
+    }));
   }
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   /* ---------- rendering ---------- */
+  /* Keep the hand and controls on a seat that still exists: the active local seat while one
+     is playing, otherwise the last human seat, and a surviving one once that seat is out. */
+  function syncView(G) {
+    if (!isAI(G.active) && !G.players[G.active].dead) { VIEW = G.active; return; }
+    if (G.players[VIEW] && !G.players[VIEW].dead) return;
+    var live = localSeats().filter(function (i) { return G.players[i] && !G.players[i].dead; });
+    if (!live.length) live = G.players.filter(function (s) { return !s.dead; })
+                                      .map(function (s) { return s.idx; });
+    if (live.length) VIEW = live[0];
+  }
+
   function render(G) {
     if (!G) return;
+    syncView(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
-    if (G.over) document.getElementById('overTitle').textContent =
-      MODE === 'local' ? sideName(G.over.winner) + ' wins'
-                       : (G.over.winner === ME ? 'You win' : 'You lose');
+    if (G.over) document.getElementById('overTitle').textContent = overText(G);
+  }
+
+  function overText(G) {
+    var w = G.over.winners || [];
+    if (!w.length) return 'Everyone is destroyed';
+    var mine = w.filter(function (i) { return !isAI(i); });
+    /* a single human in the game gets the personal verdict; otherwise name the winners */
+    if (localSeats().length === 1)
+      return mine.length ? 'You win' : 'You lose';
+    return w.map(function (i) { return sideName(i); }).join(' and ') +
+           (w.length > 1 ? ' win' : ' wins');
   }
 
   function bar(s, G) {
     var core = s.modules[s.coreId];
-    return '<span>' + esc(s.name) + '</span>' +
+    return '<span class="sb-name">' + esc(s.name) + '</span>' +
+      '<span class="sb-team">TEAM ' + (TEAM_LETTER[teamOf(s.idx)] || (teamOf(s.idx) + 1)) + '</span>' +
       '<span class="sb-hull">HULL <b>' + (core ? core.hull : 0) + '</b></span>' +
       '<span class="sb-sh">SH <b>' + s.shield + '</b>/' + s.shieldMax + '</span>' +
       '<span class="sb-mv">MV <b>' + s.moveLeft + '</b></span>' +
@@ -205,12 +281,11 @@
   function renderTop(G) {
     document.getElementById('turnLabel').textContent =
       'Turn ' + G.turn + ' — ' + G.players[G.active].name;
-    document.getElementById('turnLabel').style.color =
-      MODE === 'local' ? (G.active === 0 ? 'var(--cyan)' : 'var(--red)') : 'var(--cyan)';
-    document.getElementById('barMe').innerHTML = bar(G.players[0], G);
-    document.getElementById('barThem').innerHTML = bar(G.players[1], G);
-    document.getElementById('barMe').classList.toggle('turn', G.active === 0);
-    document.getElementById('barThem').classList.toggle('turn', G.active === 1);
+    document.getElementById('turnLabel').style.color = COLORS[G.active % 4];
+    document.getElementById('barRow').innerHTML = G.players.map(function (s, i) {
+      return '<span class="side-bar' + (G.active === i ? ' turn' : '') + (s.dead ? ' out' : '') +
+             '" style="--sc:' + COLORS[i % 4] + '">' + bar(s, G) + '</span>';
+    }).join('');
     var mine = G.active === meIdx() && !G.pending && !G.over;
     document.getElementById('endBtn').disabled = !mine || G.phase === 'play';
     var pb = document.getElementById('playPhaseBtn');
@@ -254,27 +329,29 @@
                      !m.exhausted && !!Engine.fx(m.name, 'mod').activate;
         var bad = !Engine.meetsReq(s, m);
         var pickable = si === meIdx() && p && p.kind === 'move';
-        var cls = 'mod' + (si === THEM ? ' foe' : '') + (id === s.coreId ? ' core' : '') +
+        var cls = 'mod' + (si === meIdx() ? ' mine' : '') + (id === s.coreId ? ' core' : '') +
                   (m.exhausted ? ' exh' : '') + (canAct || pickable ? ' ready' : '') + (bad ? ' badreq' : '') +
                   (si === meIdx() && id === selMod ? ' sel' : '') +
                   (targetIds.indexOf(id) >= 0 ? ' targetable' : '');
         html += obj(cls, m.x, m.y, shortName(m.name), m.hull, id,
-                    si === meIdx() && m.moveLeft > 0 ? m.moveLeft : 0);
+                    si === meIdx() && m.moveLeft > 0 ? m.moveLeft : 0, COLORS[si % 4]);
       });
       Object.keys(s.deployables).forEach(function (id) {
         var d = s.deployables[id];
         var canAct = si === meIdx() && G.phase === 'action' && !G.pending &&
                      !d.exhausted && !!Engine.fx(d.name, 'mod').activate;
         var moving = p && p.kind === 'moveObject' && p.objId === id;
-        html += obj('dep' + (canAct ? ' ready' : '') + (moving ? ' moving' : ''),
-                    d.x, d.y, shortName(d.name), d.hull, id);
+        html += obj('dep' + (canAct ? ' ready' : '') + (moving ? ' moving' : '') +
+                    (targetIds.indexOf(id) >= 0 ? ' targetable' : ''),
+                    d.x, d.y, shortName(d.name), d.hull, id, 0, COLORS[si % 4]);
       });
     });
     gridEl.innerHTML = html;
   }
-  function obj(cls, x, y, label, hp, id, mv) {
+  function obj(cls, x, y, label, hp, id, mv, sc) {
     return '<div class="obj ' + cls + '" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
-      'px;width:' + CELL + 'px;height:' + CELL + 'px"' + (id ? ' data-obj="' + id + '"' : '') + '>' +
+      'px;width:' + CELL + 'px;height:' + CELL + 'px' + (sc ? ';--sc:' + sc : '') + '"' +
+      (id ? ' data-obj="' + id + '"' : '') + '>' +
       '<span>' + esc(label) + '</span>' + (hp !== '' ? '<span class="hp">' + hp + '</span>' : '') +
       (mv ? '<span class="mv">↔' + mv + '</span>' : '') + '</div>';
   }
@@ -342,8 +419,11 @@
     var p = G.pending;
     if (!p) {
       promptEl.innerHTML = G.active !== meIdx()
-        ? '<div class="p-label">Enemy turn</div><div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
-          esc(AICommander.describe(THEM)) + '</div>'
+        ? '<div class="p-label">' + esc(G.players[G.active].name) + "'s turn" + '</div>' +
+          (isAI(G.active)
+            ? '<div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
+              esc(AICommander.describe(G.active)) + '</div>'
+            : '<div style="font-size:11px;color:var(--ink-dim)">Pass the screen over.</div>')
         : G.phase === 'play'
           ? '<div class="p-label">Play phase</div><div style="font-size:11px;color:var(--ink-dim)">Play a card, or End Play Phase. Whatever is left in hand is discarded.</div>'
           : '<div class="p-label">Action phase</div><div style="font-size:11px;color:var(--ink-dim)">Click your modules and cards to activate them, then end your turn.</div>';
@@ -420,12 +500,60 @@
   });
   document.getElementById('endBtn').addEventListener('click', function () { Engine.endTurn(); });
   document.getElementById('playPhaseBtn').addEventListener('click', function () { Engine.endPlayPhase(); });
-  function askMode() { document.getElementById('modePick').classList.remove('hidden'); }
+  /* ---------- new-game roster ---------- */
+  var rostRows = document.getElementById('rostRows');
+  var rostCount = document.getElementById('rostCount');
+
+  /* new seats default to a computer on a team of its own, which makes 3 and 4 players a
+     free-for-all until someone pairs them up */
+  function setCount(n) {
+    while (SEATS.length < n) SEATS.push({ team: SEATS.length, ai: true });
+    SEATS.length = n;
+    renderRoster();
+  }
+  function renderRoster() {
+    var n = SEATS.length;
+    /* dropping from four seats to two can leave a team letter that no longer exists */
+    SEATS.forEach(function (seat, i) { if (seat.team >= n) seat.team = i; });
+    Array.prototype.forEach.call(rostCount.children, function (b) {
+      b.classList.toggle('ghost', +b.getAttribute('data-count') !== n);
+    });
+    rostRows.innerHTML = SEATS.map(function (seat, i) {
+      var teams = '';
+      for (var t = 0; t < n; t++)
+        teams += '<option value="' + t + '"' + (seat.team === t ? ' selected' : '') + '>Team ' +
+                 TEAM_LETTER[t] + '</option>';
+      return '<div class="rost-row" style="--sc:' + COLORS[i % 4] + '">' +
+        '<span class="rn">Player ' + (i + 1) + '</span>' +
+        '<select data-team="' + i + '">' + teams + '</select>' +
+        '<select data-ai="' + i + '">' +
+          '<option value="0"' + (seat.ai ? '' : ' selected') + '>Local player</option>' +
+          '<option value="1"' + (seat.ai ? ' selected' : '') + '>Computer</option>' +
+        '</select></div>';
+    }).join('');
+    /* one team means nobody to fight, so there is no game to start */
+    var used = {};
+    SEATS.forEach(function (x) { used[x.team] = true; });
+    var ok = Object.keys(used).length >= 2;
+    document.getElementById('startBtn').disabled = !ok;
+    document.getElementById('rostWarn').classList.toggle('hidden', ok);
+  }
+  function askMode() {
+    renderRoster();
+    document.getElementById('modePick').classList.remove('hidden');
+  }
   document.getElementById('newBtn').addEventListener('click', askMode);
-  document.getElementById('modePick').addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-mode]');
-    if (b) start(b.getAttribute('data-mode'));
+  rostCount.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-count]');
+    if (b) setCount(+b.getAttribute('data-count'));
   });
+  rostRows.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.dataset.team !== undefined) SEATS[+t.dataset.team].team = +t.value;
+    if (t.dataset.ai !== undefined) SEATS[+t.dataset.ai].ai = t.value === '1';
+    renderRoster();
+  });
+  document.getElementById('startBtn').addEventListener('click', function () { start(); });
 
   /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
   function nudge(dx, dy) {
@@ -451,7 +579,11 @@
 
   /* ---------- enemy turn ----------
      All decision-making lives in client/game/ai/. This page only drives the clock. */
-  setInterval(function () { if (MODE === 'ai') AICommander.tick(THEM); }, 380);
+  setInterval(function () {
+    var G = Engine.get();
+    if (!G || G.over) return;
+    if (isAI(G.active)) AICommander.tick(G.active);
+  }, 380);
 
   /* ---------- resizable hand ---------- */
   (function () {
@@ -484,7 +616,7 @@
   })();
 
   Engine.onChange(render);
-  start('ai');      /* build a board so the page is not blank behind the picker */
+  start();          /* build a board so the page is not blank behind the picker */
   askMode();
 })();
 </script>

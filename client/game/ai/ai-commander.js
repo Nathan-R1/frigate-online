@@ -21,13 +21,43 @@ var AICommander = (function () {
   }
   function reset() { brains = {}; }
 
-  function foeOf(s) { return Engine.get().players[1 - s.idx]; }
+  /* the enemy this AI is currently orienting on — the nearest living one on another team */
+  function foeOf(s) { return Engine.foe(s); }
+  function foesOf(s) { return Engine.enemiesOf(s); }
+  /* every enemy piece on the board, regardless of which opposing side owns it */
+  function allFoeObjects(s) {
+    var out = [];
+    foesOf(s).forEach(function (f) { out = out.concat(K.modList(f)).concat(K.depList(f)); });
+    return out;
+  }
+
+  /* Is anything of theirs actually in a gun's envelope right now? Exhausted guns count —
+     this asks whether the fleets are in contact, not whether we can fire this instant. */
+  function inContact(s) {
+    var tgts = allFoeObjects(s);
+    return K.weapons(s).some(function (w) {
+      return tgts.some(function (t) {
+        return Engine.dist(w.mod, t) <= w.range && Engine.hasLos(w.mod, t);
+      });
+    });
+  }
 
   /* ---------- phase transitions ---------- */
   function updatePhase(s, st) {
     var G = Engine.get(), foe = foeOf(s);
     if (!st.doctrine) st.doctrine = D.choose(s);
     var core = foe.modules[foe.coreId];
+
+    /* Standoff breaker. Two cautious fleets with the same envelope both sit contentedly at
+       the edge of their band and never trade a shot — each one's ideal gap is the other's.
+       Once nothing has been in our sights for several turns, press in until contact
+       resumes; being shot at is better than a game that never ends. */
+    if (inContact(s)) { st.lastContact = G.turn; st.pressing = false; }
+    else if (st.lastContact === undefined) st.lastContact = G.turn;
+    else if (G.turn - st.lastContact >= 4 && !st.pressing) {
+      st.pressing = true;
+      log2(s, s.name + ' has had no contact for several turns — closing in.');
+    }
 
     if (core && K.expectedDamage(s) >= foe.shield + core.hull) { st.phase = 'FINISH'; return; }
 
@@ -78,22 +108,38 @@ var AICommander = (function () {
   function manoeuvre(s, st) {
     var foe = foeOf(s);
     var reach = P.budget(s);
-    var nodes = P.reachable(s, Math.min(30, reach + PLAN_HORIZON));
-    var best = null, bestScore = -1e9;
-    Object.keys(nodes).forEach(function (k) {
-      var n = nodes[k];
-      var sc = st.phase === 'FINISH'
-        ? D.firepowerAt(s, foe, n.dx, n.dy) * 5 - D.gapAt(s, foe, n.dx, n.dy)
-        : st.doctrine.score(s, foe, n.dx, n.dy, st);
-      /* a good square we cannot reach yet is still worth starting toward, just discounted:
-         steps we can take now are nearly free, steps beyond the budget are speculative */
-      sc -= Math.min(n.cost, reach) * 0.1;
-      if (n.cost > reach) sc -= (n.cost - reach) * 2.5;
-      /* keep heading for last turn's goal unless something clearly better appeared, so the
-         fleet does not dither at the mouth of a gap */
-      if (st.goal && st.goal.x === n.dx && st.goal.y === n.dy) sc += 6;
-      if (sc > bestScore) { bestScore = sc; best = n; }
-    });
+    var horizon = Math.min(30, reach + PLAN_HORIZON);
+
+    function pick(nodes) {
+      var best = null, bestScore = -1e9;
+      Object.keys(nodes).forEach(function (k) {
+        var n = nodes[k];
+        var sc = st.phase === 'FINISH'
+          ? D.firepowerAt(s, foe, n.dx, n.dy) * 5 - D.gapAt(s, foe, n.dx, n.dy)
+          : st.doctrine.score(s, foe, n.dx, n.dy, st);
+        /* out of contact for too long: keep the doctrine's shape but add a steady pull
+           inward, so "stay at the edge of my band" can no longer beat closing the gap */
+        if (st.pressing && st.phase !== 'FINISH') sc -= D.gapAt(s, foe, n.dx, n.dy) * 6;
+        /* a good square we cannot reach yet is still worth starting toward, just discounted:
+           steps we can take now are nearly free, steps beyond the budget are speculative */
+        sc -= Math.min(n.cost, reach) * 0.1;
+        if (n.cost > reach) sc -= (n.cost - reach) * 2.5;
+        /* keep heading for last turn's goal unless something clearly better appeared, so the
+           fleet does not dither at the mouth of a gap */
+        if (st.goal && st.goal.x === n.dx && st.goal.y === n.dy) sc += 6;
+        if (sc > bestScore) { bestScore = sc; best = n; }
+      });
+      return best;
+    }
+
+    var best = pick(P.reachable(s, horizon));
+    /* Nothing on the strict lattice beat standing still. That is usually a hull fenced in by
+       its own idle drones, leaving only routes that back away. Look again at the lattice that
+       lets us drive over them: a crushed decoy is cheaper than a game that never ends. */
+    if (!best || (!best.dx && !best.dy)) {
+      var loose = pick(P.reachable(s, horizon, true));
+      if (loose && (loose.dx || loose.dy)) best = loose;
+    }
     if (best && (best.dx || best.dy)) {
       var taken = P.advance(s, best);
       /* remember what is left of the route, in offsets from where we now stand */
@@ -107,7 +153,7 @@ var AICommander = (function () {
     /* Whatever Move survives the approach is spent here, in priority order. Clearing a firing
        line comes before tidying berths: a gun that can shoot this turn is worth more than a
        gun in the right place next turn. Both must happen before the Move is committed away. */
-    var tgts = K.modList(foe).concat(K.depList(foe));
+    var tgts = allFoeObjects(s);
     for (var r = 0; r < 3; r++) {
       var rotated = AIPlacement.repositionForLos(s, tgts);
       if (!rotated) break;
@@ -124,7 +170,7 @@ var AICommander = (function () {
      the bounding rectangle satisfies dist(a,r) + dist(r,b) === dist(a,b). */
   function blocksOurLine(s, foe, rock) {
     var G = Engine.get(), k = rock.x + ',' + rock.y, saved = G.cells[k];
-    var guns = K.weapons(s), tgts = K.modList(foe).concat(K.depList(foe));
+    var guns = K.weapons(s), tgts = allFoeObjects(s);
     var opens = false;
     for (var i = 0; i < guns.length && !opens; i++) {
       for (var j = 0; j < tgts.length && !opens; j++) {
@@ -166,15 +212,18 @@ var AICommander = (function () {
     ids.forEach(function (id) {
       var rock = (G.asteroids || {})[id];
       if (rock) { rocks.push(rock); return; }
-      var isDep = !!foe.deployables[id];
-      var t = foe.modules[id] || foe.deployables[id];
-      if (!t) return;
-      var sc = st.doctrine.targetBias(t, isDep, foe);
-      if (t.id === foe.coreId) {
-        var lethal = K.expectedDamage(s) >= foe.shield + t.hull;
+      /* with three or four sides a target id may belong to any enemy, so ask the engine
+         who owns it and judge the piece against that owner's ship */
+      var found = Engine.objectById(id);
+      if (!found || !found.owner || found.owner.team === s.team) return;
+      var owner = found.owner, t = found.obj, isDep = found.kind === 'deployable';
+      var sc = st.doctrine.targetBias(t, isDep, owner);
+      if (t.id === owner.coreId) {
+        var lethal = K.expectedDamage(s) >= owner.shield + t.hull;
         sc = lethal ? 500 : sc - 40;
       }
-      if (!isDep && K.preset(t).tt === 'offense' && K.modList(foe).filter(K.isGun).length <= 1) sc += 40;
+      if (!isDep && K.preset(t).tt === 'offense' && K.modList(owner).filter(K.isGun).length <= 1) sc += 40;
+      if (owner.idx !== foe.idx) sc -= 15;        /* mild pull towards the side we are engaging */
       var d = Math.min.apply(null, K.modList(s).map(function (m) { return Engine.dist(m, t); }).concat([99]));
       ships.push({ id: id, score: sc - d * 0.5 });
     });
@@ -204,11 +253,20 @@ var AICommander = (function () {
     return t.primary || t.secondary[0] || t.tertiary[0] || null;
   }
 
-  /* a ready gun that already has a ship in range with line of sight — the reason not to
-     spend another engine and another turn of Move getting closer */
+  /* Rocks the hull is actually resting against. The formation moves as a rigid shape, so one
+     of these pins the entire fleet in that direction; with a big enough hull all four
+     directions get pinned and the fleet never moves again. They are worth a shot even when
+     no enemy is anywhere near. */
+  function pinningRocks(s) {
+    var G = Engine.get();
+    return Object.keys(G.asteroids || {}).map(function (id) { return G.asteroids[id]; })
+      .filter(function (r) { return adjacentToHull(s, r); });
+  }
+
+  /* a ready gun that already has something worth shooting in range with line of sight — the
+     reason not to spend another engine and another turn of Move getting closer */
   function gunWithShot(s) {
-    var foe = foeOf(s);
-    var tgts = K.modList(foe).concat(K.depList(foe));
+    var tgts = allFoeObjects(s).concat(pinningRocks(s));
     var found = null;
     K.weapons(s).forEach(function (w) {
       if (found || w.mod.exhausted || !Engine.meetsReq(s, w.mod)) return;
@@ -224,7 +282,7 @@ var AICommander = (function () {
   function hasTargetFor(s, origin, name, extraMove) {
     var reach = K.attackReach(s, name);
     if (reach === null) return true;                  /* not a weapon — no range to satisfy */
-    var foe = foeOf(s), tgts = K.modList(foe).concat(K.depList(foe));
+    var tgts = allFoeObjects(s).concat(pinningRocks(s));
     for (var i = 0; i < tgts.length; i++) {
       var d = Engine.dist(origin, tgts[i]);
       if (d <= reach && Engine.hasLos(origin, tgts[i])) return true;   /* can hit from here */
@@ -284,9 +342,7 @@ var AICommander = (function () {
     /* 2. no shot, but is a target merely screened? Stepping one gun clear of its own hull is
        far cheaper than hauling the whole formation into a new position. */
     if (K.modList(s).some(function (m) { return m.moveLeft > 0; })) {
-      var foe2 = foeOf(s);
-      var tgts = K.modList(foe2).concat(K.depList(foe2));
-      var rotated = AIPlacement.repositionForLos(s, tgts);
+      var rotated = AIPlacement.repositionForLos(s, allFoeObjects(s));
       if (rotated) { log2(s, rotated.name + ' shifts to clear its line of fire.'); return; }
     }
 

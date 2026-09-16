@@ -127,26 +127,55 @@ var Engine = (function () {
     return a;
   }
 
-  function newGame(cfgA, cfgB) {
+  /* two sides face off across the middle; three or four take corners */
+  function spawnPoints(n) {
+    var m = RULES.boardSize, lo = 5, hi = m - 6, mid = Math.floor(m / 2);
+    if (n <= 2) return [{ x: lo, y: mid }, { x: hi, y: mid }];
+    return [{ x: lo, y: lo }, { x: hi, y: hi }, { x: hi, y: lo }, { x: lo, y: hi }];
+  }
+
+  /* newGame(configArray) — 2 to 4 sides. Each config may carry { name, team, ai, deck, modules }.
+     A side with no team is its own team, so the default is a free-for-all. */
+  function newGame(configs) {
+    if (!Array.isArray(configs)) configs = Array.prototype.slice.call(arguments);
+    configs = configs.slice(0, 4);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
           log: [], seq: 1, over: null, queue: [], asteroids: {} };
-    [cfgA, cfgB].forEach(function (cfg, i) {
+    var pts = spawnPoints(configs.length);
+    configs.forEach(function (cfg, i) {
       var s = makeSide(cfg.name, cfg);
-      s.idx = i; G.players.push(s);
-      /* core at a fixed start position, one side left, one right */
-      var cx = i === 0 ? 5 : RULES.boardSize - 6, cy = Math.floor(RULES.boardSize / 2);
-      s.coreId = placeModule(s, 'Core', cx, cy);
+      s.idx = i;
+      s.team = (cfg.team === undefined || cfg.team === null) ? i : cfg.team;
+      s.ai = !!cfg.ai;
+      s.dead = false;
+      G.players.push(s);
+      var p = pts[i] || pts[0];
+      s.coreId = placeModule(s, 'Core', p.x, p.y);
       (cfg.modules || []).forEach(function (mn, k) {
-        var spot = freeAdjacent(s, cx, cy, k);
+        var spot = freeAdjacent(s, p.x, p.y, k);
         if (spot) placeModule(s, mn, spot.x, spot.y);
       });
       (cfg.deck || []).forEach(function (tn) { addCardToDeck(s, tn); });
       shuffle(s.deck);
     });
     scatterAsteroids();
-    log('Game start.');
+    log(G.players.length + '-player game start.');
     startTurn();
     return G;
+  }
+
+  /* ---- who is on whose side ---- */
+  function alive(s) { return s && !s.dead && !!s.modules[s.coreId]; }
+  function enemiesOf(s) {
+    return G.players.filter(function (o) { return o.idx !== s.idx && o.team !== s.team && alive(o); });
+  }
+  function alliesOf(s) {
+    return G.players.filter(function (o) { return o.idx !== s.idx && o.team === s.team && alive(o); });
+  }
+  function teamsAlive() {
+    var t = {};
+    G.players.forEach(function (s) { if (alive(s)) t[s.team] = true; });
+    return Object.keys(t);
   }
 
   /* 10% of the interior, keeping the border clear and leaving each ship room to deploy */
@@ -199,7 +228,22 @@ var Engine = (function () {
 
   /* ================= turn loop ================= */
   function side() { return G.players[G.active]; }
-  function foe() { return G.players[1 - G.active]; }
+  /* the nearest living enemy, used wherever a single opposing side is needed */
+  function foe(s) {
+    s = s || side();
+    var list = enemiesOf(s);
+    if (!list.length) return G.players[(s.idx + 1) % G.players.length];
+    var mine = s.modules[s.coreId];
+    if (!mine) return list[0];
+    var best = list[0], bd = 1e9;
+    list.forEach(function (o) {
+      var c = o.modules[o.coreId];
+      if (!c) return;
+      var d = dist(mine, c);
+      if (d < bd) { bd = d; best = o; }
+    });
+    return best;
+  }
 
   function startTurn() {
     var s = side();
@@ -232,6 +276,15 @@ var Engine = (function () {
     return true;
   }
 
+  function nextLiving(from) {
+    var n = G.players.length;
+    for (var i = 1; i <= n; i++) {
+      var k = (from + i) % n;
+      if (alive(G.players[k])) return k;
+    }
+    return from;
+  }
+
   function endTurn() {
     if (G.over) return;
     G.pending = null; G.queue = [];
@@ -244,8 +297,9 @@ var Engine = (function () {
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
     s.moveLeft = 0;
     log(s.name + ' ends turn.');
-    G.active = 1 - G.active;
-    if (G.active === 0) G.turn++;
+    var nxt = nextLiving(G.active);
+    if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order */
+    G.active = nxt;
     startTurn();
   }
 
@@ -320,14 +374,30 @@ var Engine = (function () {
 
   function checkWin() {
     if (G.over) return true;
-    for (var i = 0; i < G.players.length; i++) {
-      var s = G.players[i], core = s.modules[s.coreId];
-      if (!core || core.hull <= 0) {
-        G.over = { loser: i, winner: 1 - i };
-        G.phase = 'over';
-        log(G.players[1 - i].name + ' wins — ' + s.name + "'s Core is destroyed.");
-        return true;
+    /* mark anyone whose Core is gone as out, then see how many teams remain */
+    G.players.forEach(function (s) {
+      if (!s.dead && !s.modules[s.coreId]) {
+        s.dead = true;
+        /* the rest of the hull goes with the Core, so the wreck stops blocking the board */
+        Object.keys(s.modules).forEach(function (id) {
+          var m = s.modules[id]; vacate(m.x, m.y); delete s.modules[id];
+        });
+        Object.keys(s.deployables).forEach(function (id) {
+          var d = s.deployables[id]; vacate(d.x, d.y); delete s.deployables[id];
+        });
+        s.moveLeft = 0;
+        log(s.name + ' is eliminated — their Core is destroyed.');
       }
+    });
+    var teams = teamsAlive();
+    if (teams.length <= 1) {
+      var winners = G.players.filter(alive);
+      G.over = { winners: winners.map(function (s) { return s.idx; }),
+                 team: teams.length ? +teams[0] : null };
+      G.phase = 'over';
+      log(winners.length ? (winners.map(function (s) { return s.name; }).join(' and ') + ' win.')
+                         : 'Everyone is destroyed.');
+      return true;
     }
     return false;
   }
@@ -380,23 +450,39 @@ var Engine = (function () {
       } });
   };
 
+  /* everything a given side is allowed to shoot at, across every enemy team plus the rocks */
+  function hostileObjects(s) {
+    var pool = Object.keys(G.asteroids).map(function (id) { return G.asteroids[id]; });
+    enemiesOf(s).forEach(function (e) {
+      Object.keys(e.modules).forEach(function (id) { pool.push(e.modules[id]); });
+      Object.keys(e.deployables).forEach(function (id) { pool.push(e.deployables[id]); });
+    });
+    return pool;
+  }
+
+  /* resolve an object id back to the thing and whoever owns it */
+  function objectById(id) {
+    if (G.asteroids[id]) return { obj: G.asteroids[id], kind: 'asteroid', owner: null };
+    for (var i = 0; i < G.players.length; i++) {
+      var p = G.players[i];
+      if (p.modules[id]) return { obj: p.modules[id], kind: 'module', owner: p };
+      if (p.deployables[id]) return { obj: p.deployables[id], kind: 'deployable', owner: p };
+    }
+    return null;
+  }
+
   OPS.attack = function (o, ctx) {
-    var s = ctx.side, enemy = G.players[1 - s.idx];
+    var s = ctx.side;
     var origins = attackOrigins(s, o, ctx);
     var reach = resolveRange(s, o.range);
-    var pool = Object.keys(enemy.modules).map(function (id) { return enemy.modules[id]; })
-      .concat(Object.keys(enemy.deployables).map(function (id) { return enemy.deployables[id]; }))
-      .concat(Object.keys(G.asteroids).map(function (id) { return G.asteroids[id]; }));
-    var targets = pool.filter(function (m) {
+    var targets = hostileObjects(s).filter(function (m) {
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
     if (!targets.length) { log('No target in range with line of sight.'); return; }
     prompt({ kind: 'target', label: 'Choose a target', targets: targets.map(function (m) { return m.id; }),
       onResolve: function (targetId) {
-        var rock = G.asteroids[targetId];
-        var isDep = !!enemy.deployables[targetId];
-        var m = rock || enemy.modules[targetId] || enemy.deployables[targetId];
-        if (!m) return;
+        var t = objectById(targetId);
+        if (!t) return;
         var n = resolveCount(s, o.attacks, ctx);
         var dmg = resolveCount(s, o.dmg, ctx);
         for (var i = 0; i < n; i++) {
@@ -404,11 +490,11 @@ var Engine = (function () {
           var c = o.check ? check(s, o.check, RULES.dc) : attackRoll();
           if (c.hit) {
             log('Hit (' + c.text + ').');
-            if (rock) damageAsteroid(m, dmg);
-            else if (isDep) damageDeployable(enemy, m, dmg);
-            else damageModule(enemy, m, dmg);
+            if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
+            else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
+            else damageModule(t.owner, t.obj, dmg);
           } else log('Miss (' + c.text + ').');
-          if (!G.asteroids[targetId] && !enemy.modules[targetId] && !enemy.deployables[targetId]) break;
+          if (!objectById(targetId)) break;
         }
       } });
   };
@@ -741,6 +827,8 @@ var Engine = (function () {
     endPlayPhase: endPlayPhase, hasLos: hasLos, lineBlocked: lineBlocked,
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,
+    enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
+    hostileObjects: hostileObjects, objectById: objectById,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
