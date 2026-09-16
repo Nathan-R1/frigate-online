@@ -353,6 +353,11 @@
 
   function sheetOf(i) { return (seatSheets[i] && seatSheets[i].sheet) || null; }
 
+  /* how much hull this sheet brings to the table before the first turn */
+  function starterCount(sh) {
+    return (sh && sh.tech || []).filter(function (t) { return Engine.isStarterCard(t.name); }).length;
+  }
+
   /* Hand the seat's build over to the builder and go there. The choices travel, not the
      sheet: they are the builder's own state, so the run picks up exactly where it stopped
      and "Create new character" still scraps it cleanly. */
@@ -423,18 +428,16 @@
     if (!sh) return base;
     var deck = (sh.tech || []).map(function (t) { return t.name; })
       .filter(function (n) { return !!Engine.findTech(n); });
-    var mods = (sh.mods || []).map(function (m) { return m.name; })
-      .filter(function (n) {
-        var p = Engine.findMod(n);
-        return p && p.type !== 'deployable' && n !== 'Core';
-      });
     var skills = {};
     Object.keys(sh.skills || {}).forEach(function (k) {
       skills[k] = parseInt((sh.skills[k] || {}).points, 10) || 0;
     });
     if (deck.length) base.deck = deck;
-    if (mods.length) base.modules = mods;
     if (Object.keys(skills).length) base.skills = skills;
+    /* A built ship deploys the Starter Cards in its own deck, so it gets no pre-placed hull
+       here. The sheet's `mods` list is not a loadout — the builder fills it with every module
+       the deck could ever create, for stat-block reference. */
+    base.modules = [];
     return base;
   }
 
@@ -804,7 +807,8 @@
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
       if (mine && rec.id === selMod && p && p.kind === 'move') cls += ' sel';
       if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving';
-      var canAct = mine && G.phase === 'action' && !p && !o.exhausted && !!fx.activate;
+      var canAct = mine && G.phase === 'action' && !p && !o.exhausted && !!fx.activate &&
+                   Engine.affordable(rec.side, o, rec.kind === 'dep' ? 'dep' : 'mod');
       if (canAct) cls += ' ready clickable';
       if (mine && p && p.kind === 'move') cls += ' clickable';
     }
@@ -897,7 +901,8 @@
         (c.heat ? '🔥' + c.heat + ' ' : '') + (c.exhausted ? 'exhausted' : 'ready') + '</div>' +
         '<div class="ht">' + esc(cardText(t)) + '</div>' +
         '<div class="hb"><button data-act="' + id + '"' +
-        (myTurn && !c.exhausted ? '' : ' disabled') + '>Activate</button></div></div>';
+        (myTurn && !c.exhausted && Engine.affordable(s, c, 'tech') ? '' : ' disabled') +
+        '>Activate</button></div></div>';
     });
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
@@ -906,7 +911,8 @@
         '<div class="hmeta">deployable · hull ' + d.hull + (d.exhausted ? ' · exhausted' : '') + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-dact="' + id + '"' +
-        (myTurn && !d.exhausted ? '' : ' disabled') + '>Activate</button></div></div>';
+        (myTurn && !d.exhausted && Engine.affordable(s, d, 'dep') ? '' : ' disabled') +
+        '>Activate</button></div></div>';
     });
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
@@ -916,7 +922,8 @@
         '<div class="hmeta">module · hull ' + m.hull + (m.exhausted ? ' · exhausted' : '') + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-mact="' + id + '"' +
-        (myTurn && !m.exhausted ? '' : ' disabled') + '>Activate</button></div></div>';
+        (myTurn && !m.exhausted && Engine.affordable(s, m, 'mod') ? '' : ' disabled') +
+        '>Activate</button></div></div>';
     });
     handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';
   }
@@ -1130,7 +1137,12 @@
         teams += '<option value="' + t + '"' + (seat.team === t ? ' selected' : '') + '>Team ' +
                  TEAM_LETTER[t] + '</option>';
       var sh = sheetOf(i);
-      var sub = sh ? esc(sh.shipName || sh.shipClass || 'Custom build') : 'Stock frigate';
+      var sub;
+      if (!sh) sub = 'Stock frigate';
+      else {
+        sub = esc(sh.shipName || sh.shipClass || 'Custom build');
+        if (!starterCount(sh)) sub += ' — no Starter Cards, deploys as a bare Core';
+      }
       return '<div class="rost-row" style="--sc:' + SEAT_HEX[i % 4] + '">' +
         '<span class="rn">Player ' + (i + 1) + '<small>' + sub + '</small></span>' +
         '<select data-team="' + i + '">' + teams + '</select>' +

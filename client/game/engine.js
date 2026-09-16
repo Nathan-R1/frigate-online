@@ -159,9 +159,33 @@ var Engine = (function () {
       shuffle(s.deck);
     });
     scatterAsteroids();
+    /* Anything in the deck carrying the Starter Card trait is played before combat, which is
+       how a ship arrives with a hull already built rather than a bare Core. */
+    G.setup = true;
+    G.players.forEach(playStarterCards);
+    G.setup = false;
     log(G.players.length + '-player game start.');
     startTurn();
     return G;
+  }
+
+  function isStarterCard(name) {
+    var t = findTech(name);
+    /* the presets spell it "Starter Card"; accept "Starting Card" too so a card tagged either
+       way deploys rather than silently sitting in the deck */
+    return !!t && /start(?:er|ing)\s*card/i.test(t.traits || '');
+  }
+
+  function playStarterCards(s) {
+    s.deck.slice().forEach(function (id) {
+      var card = s.cards[id];
+      if (!card || !isStarterCard(card.name)) return;
+      var i = s.deck.indexOf(id);
+      if (i >= 0) s.deck.splice(i, 1);
+      s.played.push(id);
+      log(s.name + ' deploys ' + card.name + ' before combat.');
+      run(fx(card.name, 'tech').onPlay || [], { side: s, card: card });
+    });
   }
 
   /* ---- who is on whose side ---- */
@@ -245,12 +269,18 @@ var Engine = (function () {
     return best;
   }
 
-  function startTurn() {
-    var s = side();
-    G.phase = 'upkeep';
+  /* Everything a side spent comes back the moment its turn ends, not when its next one
+     begins, so a fleet reads as ready all the way round the table instead of sitting greyed
+     out through everyone else's turn. */
+  function refresh(s) {
     Object.keys(s.cards).forEach(function (id) { s.cards[id].exhausted = false; });
     Object.keys(s.modules).forEach(function (id) { s.modules[id].exhausted = false; });
     Object.keys(s.deployables).forEach(function (id) { s.deployables[id].exhausted = false; });
+  }
+
+  function startTurn() {
+    var s = side();
+    G.phase = 'upkeep';
     tickDurations(s);
     s.moveLeft = 0;
     s.playsLeft = playCountOf(s);
@@ -307,6 +337,7 @@ var Engine = (function () {
     if (G.over) { emit(); return; }
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
     s.moveLeft = 0;
+    refresh(s);
     log(s.name + ' ends turn.');
     var nxt = nextLiving(G.active);
     if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order */
@@ -489,11 +520,36 @@ var Engine = (function () {
 
   OPS.createModule = function (o, ctx) {
     var s = ctx.side;
+    if (G.setup) {
+      /* deploying before the game begins: berth it ourselves, nearest the Core */
+      var cell = firstLegalCell(s, o.module);
+      if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' deploys ' + o.module + '.'); }
+      else log(s.name + ' has nowhere to berth ' + o.module + '.');
+      return;
+    }
     prompt({ kind: 'space', label: 'Place ' + o.module, filter: placementFilter(s, o.module),
       onResolve: function (cell) {
         if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' builds ' + o.module + '.'); }
       } });
   };
+
+  /* the legal berth closest to the Core, searched outward so a hull grows in a tight cluster */
+  function firstLegalCell(s, modName) {
+    var ok = placementFilter(s, modName);
+    var core = s.modules[s.coreId];
+    if (!core) return null;
+    var best = null, bd = 1e9;
+    for (var r = 1; r <= 6; r++) {
+      for (var dx = -r; dx <= r; dx++) for (var dy = -r; dy <= r; dy++) {
+        var x = core.x + dx, y = core.y + dy;
+        if (!ok(x, y)) continue;
+        var d = Math.abs(dx) + Math.abs(dy);
+        if (d < bd) { bd = d; best = { x: x, y: y }; }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
 
   OPS.createDeployable = function (o, ctx) {
     var s = ctx.side;
@@ -595,10 +651,17 @@ var Engine = (function () {
   OPS.grantPlays = function (o, ctx) { ctx.side.playsLeft += resolveCount(ctx.side, o.n, ctx); log('+' + o.n + ' play.'); };
 
   OPS.addCharge = function (o, ctx) { var c = ctx.card; if (c) { c.charges += resolveCount(ctx.side, o.n, ctx); } };
-  OPS.spendCharge = function (o, ctx) { var c = ctx.card; if (c) c.charges = Math.max(0, c.charges - resolveCount(ctx.side, o.n, ctx)); };
-  OPS.addHeat = function (o, ctx) { var c = ctx.card; if (c) c.heat += resolveCount(ctx.side, o.n, ctx); };
-  OPS.spendHeat = function (o, ctx) { var c = ctx.card; if (c) { ctx.heatSpent = Math.min(c.heat, resolveCount(ctx.side, o.n, ctx)); c.heat -= ctx.heatSpent; } };
-  OPS.spendAllHeat = function (o, ctx) { var c = ctx.card; if (c) { ctx.heatSpent = c.heat; c.heat = 0; } };
+  /* charges, heat and tokens sit on whatever is being activated — a card, a module like the
+     Repulsor Unit, or a deployable */
+  function holderOf(ctx) { return ctx.card || ctx.module || ctx.deployable || null; }
+
+  OPS.spendCharge = function (o, ctx) {
+    var c = holderOf(ctx);
+    if (c) c.charges = Math.max(0, (c.charges || 0) - resolveCount(ctx.side, o.n, ctx));
+  };
+  OPS.addHeat = function (o, ctx) { var c = holderOf(ctx); if (c) c.heat = (c.heat || 0) + resolveCount(ctx.side, o.n, ctx); };
+  OPS.spendHeat = function (o, ctx) { var c = holderOf(ctx); if (c) { ctx.heatSpent = Math.min(c.heat || 0, resolveCount(ctx.side, o.n, ctx)); c.heat -= ctx.heatSpent; } };
+  OPS.spendAllHeat = function (o, ctx) { var c = holderOf(ctx); if (c) { ctx.heatSpent = c.heat || 0; c.heat = 0; } };
 
   OPS.exhaustSelf = function (o, ctx) { if (ctx.card) ctx.card.exhausted = true; if (ctx.module) ctx.module.exhausted = true; };
   OPS.trashSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'trash'); };
@@ -613,19 +676,139 @@ var Engine = (function () {
     log('Refreshed ' + n + ' Offense Module(s).');
   };
 
-  OPS.exhaustOther = function (o, ctx) {
-    var s = ctx.side, want = o.n === 'all' ? 99 : num(o.n, 1), done = 0;
+  /* the pool a "remove a token from any of your cards" cost may draw on */
+  function tokenSources(s, o) {
+    return s.played.map(function (id) { return s.cards[id]; }).filter(function (c) {
+      if (!c) return false;
+      if (o.token === 'charge') return (c.charges || 0) > 0;
+      if (o.token === 'heat') return (c.heat || 0) > 0;
+      return (c.charges || 0) > 0 || (c.heat || 0) > 0;
+    });
+  }
+  OPS.spendToken = function (o, ctx) {
+    var n = resolveCount(ctx.side, o.n, ctx);
+    var src = tokenSources(ctx.side, o);
+    for (var i = 0; i < src.length && n > 0; i++) {
+      var c = src[i];
+      while (n > 0 && ((c.charges || 0) > 0 || (c.heat || 0) > 0)) {
+        if ((c.charges || 0) > 0 && o.token !== 'heat') c.charges--;
+        else if ((c.heat || 0) > 0 && o.token !== 'charge') c.heat--;
+        else break;
+        n--;
+      }
+    }
+  };
+
+  /* rocks within reach that an ability may eat */
+  function asteroidsWithin(s, within) {
+    var reach = resolveRange(s, within === undefined ? 'sensors' : within);
+    var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    return Object.keys(G.asteroids).map(function (id) { return G.asteroids[id]; })
+      .filter(function (r) {
+        return mods.some(function (m) { return dist(m, r) <= reach && hasLos(m, r); });
+      });
+  }
+  OPS.consumeAsteroid = function (o, ctx) {
+    var s = ctx.side, near = asteroidsWithin(s, o.within);
+    if (!near.length) return;
+    var best = near[0], core = s.modules[s.coreId];
+    if (core) near.forEach(function (r) { if (dist(core, r) < dist(core, best)) best = r; });
+    vacate(best.x, best.y);
+    delete G.asteroids[best.id];
+    log(s.name + ' consumes an asteroid at (' + best.x + ',' + best.y + ').');
+  };
+
+  /* modules this cost is allowed to exhaust */
+  function exhaustPool(s, o, ctx) {
     var self = ctx.module || null;
-    var pool = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+    return Object.keys(s.modules).map(function (id) { return s.modules[id]; })
       .filter(function (m) {
         if (m.exhausted) return false;
         if (m === self && !o.includeSelf) return false;
         return matchModule(m, o.filter, self);
       });
-    if (pool.length < want && o.n !== 'all') { log('Not enough modules to pay that cost.'); ctx.failed = true; return; }
+  }
+  OPS.exhaustOther = function (o, ctx) {
+    var s = ctx.side, want = o.n === 'all' ? 99 : num(o.n, 1), done = 0;
+    var pool = exhaustPool(s, o, ctx);
     pool.slice(0, want).forEach(function (m) { m.exhausted = true; done++; });
     ctx.exhaustedCount = done;
   };
+
+  /* ================= costs are prerequisites =================
+     An activation's cost is not a side effect of using it — it is the price of admission. If
+     the whole cost cannot be paid, the ability does not happen and nothing is spent: three
+     Offense Modules short of a Quantum Disrupter volley means no volley and no exhaustion,
+     and a Rocket Array with no charges left does not fire. */
+  function costShortfall(cost, ctx) {
+    var s = ctx.side;
+    for (var i = 0; i < (cost || []).length; i++) {
+      var o = cost[i], holder = holderOf(ctx), n;
+      switch (o.op) {
+        case 'exhaustOther':
+          var pool = exhaustPool(s, o, ctx);
+          var want = o.n === 'all' ? 1 : num(o.n, 1);
+          if (pool.length < want) {
+            return want === 1 ? 'needs a module it can exhaust'
+                              : 'needs ' + want + ' ready ' + (o.filter === 'offenseModule' ? 'Offense ' : '') +
+                                'Modules to exhaust, and has ' + pool.length;
+          }
+          break;
+        case 'spendCharge':
+          n = resolveCount(s, o.n, ctx);
+          if (!holder || (holder.charges || 0) < n)
+            return 'needs ' + n + ' charge' + (n === 1 ? '' : 's') +
+                   ', and has ' + ((holder && holder.charges) || 0);
+          break;
+        case 'spendHeat':
+          n = resolveCount(s, o.n, ctx);
+          if (!holder || (holder.heat || 0) < n)
+            return 'needs ' + n + ' heat, and has ' + ((holder && holder.heat) || 0);
+          break;
+        case 'spendAllHeat':
+          if (!holder || (holder.heat || 0) <= 0) return 'has no heat to spend';
+          break;
+        case 'spendToken':
+          n = resolveCount(s, o.n, ctx);
+          var have = tokenSources(s, o).reduce(function (a, c) {
+            return a + (o.token === 'heat' ? 0 : (c.charges || 0)) +
+                       (o.token === 'charge' ? 0 : (c.heat || 0)); }, 0);
+          if (have < n) return 'needs ' + n + ' token' + (n === 1 ? '' : 's') + ' to remove';
+          break;
+        case 'consumeAsteroid':
+          if (!asteroidsWithin(s, o.within).length) return 'has no asteroid in range to consume';
+          break;
+      }
+    }
+    return null;
+  }
+
+  /* Can this piece pay for its ability right now? A choice-mode ability counts if any one of
+     its options is payable. Used by the AI so it does not keep reaching for an ability it
+     cannot afford, and by the board to grey one out. */
+  function affordable(s, obj, kind) {
+    var e = fx(obj.name, kind === 'tech' ? 'tech' : 'mod');
+    var a = e.activate;
+    if (!a) return false;
+    var ctx = kind === 'tech' ? { side: s, card: obj }
+            : kind === 'dep' ? { side: s, module: obj, deployable: obj }
+            : { side: s, module: obj };
+    if (a.mode === 'choice')
+      return (a.options || []).some(function (opt) { return !costShortfall(opt.cost, ctx); });
+    return !costShortfall(a.cost, ctx);
+  }
+
+  /* Run an activation, but only if its cost can be met in full. */
+  function activate(cost, effect, ctx, label) {
+    var why = costShortfall(cost, ctx);
+    if (why) {
+      log(label + ' cannot be activated — it ' + why + '.');
+      emit();
+      return false;
+    }
+    run((cost || []).concat(effect || []), ctx);
+    return true;
+  }
   function matchModule(m, filter, self) {
     switch (filter) {
       case 'movementModule':       return isMovementModule(m);
@@ -750,12 +933,11 @@ var Engine = (function () {
       prompt({ kind: 'choice', label: card.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
           var opt = a.options[idx]; if (!opt) return;
-          run((opt.cost || []).concat(opt.effect || []), { side: s, card: card });
+          activate(opt.cost, opt.effect, { side: s, card: card }, card.name);
         } });
       return true;
     }
-    run((a.cost || []).concat(a.effect || []), { side: s, card: card });
-    return true;
+    return activate(a.cost, a.effect, { side: s, card: card }, card.name);
   }
 
   function activateModule(modId) {
@@ -773,12 +955,11 @@ var Engine = (function () {
       prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
           var opt = a.options[idx]; if (!opt) return;
-          run((opt.cost || []).concat(opt.effect || []), { side: s, module: m });
+          activate(opt.cost, opt.effect, { side: s, module: m }, m.name);
         } });
       return true;
     }
-    run((a.cost || []).concat(a.effect || []), { side: s, module: m });
-    return true;
+    return activate(a.cost, a.effect, { side: s, module: m }, m.name);
   }
 
   /* a deployable acts like a module: exhaust-gated, unlimited per turn */
@@ -797,12 +978,11 @@ var Engine = (function () {
       prompt({ kind: 'choice', label: d.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
           var opt = a.options[idx]; if (!opt) return;
-          run((opt.cost || []).concat(opt.effect || []), ctx);
+          activate(opt.cost, opt.effect, ctx, d.name);
         } });
       return true;
     }
-    run((a.cost || []).concat(a.effect || []), ctx);
-    return true;
+    return activate(a.cost, a.effect, ctx, d.name);
   }
 
   /* one module steps one square, spending that module's own Move */
@@ -902,7 +1082,8 @@ var Engine = (function () {
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
     undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph,
-    hostileObjects: hostileObjects, objectById: objectById,
+    hostileObjects: hostileObjects, objectById: objectById, isStarterCard: isStarterCard,
+    costShortfall: costShortfall, affordable: affordable,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,

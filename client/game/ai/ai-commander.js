@@ -294,6 +294,7 @@ var AICommander = (function () {
     var found = null;
     K.weapons(s).forEach(function (w) {
       if (found || w.mod.exhausted || !Engine.meetsReq(s, w.mod)) return;
+      if (!Engine.affordable(s, w.mod, 'mod')) return;      /* cannot pay for the shot */
       for (var i = 0; i < tgts.length; i++)
         if (Engine.dist(w.mod, tgts[i]) <= w.range && Engine.hasLos(w.mod, tgts[i])) { found = w.mod; return; }
     });
@@ -376,15 +377,18 @@ var AICommander = (function () {
     /* 4. still no shot: bring ONE engine online, then loop back to step 1 — after moving we
        may already be in range, and the remaining engines stay ready for next turn */
     var mv = K.modList(s).filter(function (m) {
-      return !m.exhausted && K.isEngine(m) && Engine.fx(m.name, 'mod').activate && Engine.meetsReq(s, m); })[0];
+      return !m.exhausted && K.isEngine(m) && Engine.fx(m.name, 'mod').activate &&
+             Engine.meetsReq(s, m) && Engine.affordable(s, m, 'mod'); })[0];
     if (mv) { Engine.activateModule(mv.id); return; }
     var mvCard = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
-      return !c.exhausted && Engine.fx(c.name, 'tech').activate && K.roleOf(c.name) === 'mobility'; })[0];
+      return !c.exhausted && Engine.fx(c.name, 'tech').activate &&
+             K.roleOf(c.name) === 'mobility' && Engine.affordable(s, c, 'tech'); })[0];
     if (mvCard) { Engine.activateCard(mvCard.id); return; }
 
     /* 3. top up the banks while still setting up */
     if (st.phase === 'PREP' || st.phase === 'RECOVER') {
-      var bank = K.underCharged(s).filter(function (c) { return !c.exhausted; })[0];
+      var bank = K.underCharged(s).filter(function (c) {
+        return !c.exhausted && Engine.affordable(s, c, 'tech'); })[0];
       if (bank) { Engine.activateCard(bank.id); return; }
     }
 
@@ -397,13 +401,15 @@ var AICommander = (function () {
     }
     if (st.keystoneId) {
       var ks = s.cards[st.keystoneId];
-      if (ks && !ks.exhausted && s.played.indexOf(st.keystoneId) >= 0) { Engine.activateCard(ks.id); return; }
+      if (ks && !ks.exhausted && s.played.indexOf(st.keystoneId) >= 0 &&
+          Engine.affordable(s, ks, 'tech')) { Engine.activateCard(ks.id); return; }
     }
 
     /* 5. deployables. A one-shot is only spent when its run ends within reach of a target;
        one that survives its activation may move up regardless, which is how TAT Guided closes. */
     var dep = K.depList(s).filter(function (d) {
       if (d.exhausted || !Engine.fx(d.name, 'mod').activate) return false;
+      if (!Engine.affordable(s, d, 'dep')) return false;
       if (!K.isOneShot(d.name)) return true;
       return hasTargetFor(s, d, d.name, K.selfMove(d.name));
     })[0];
@@ -412,11 +418,13 @@ var AICommander = (function () {
     /* 6. anything else with an ability — but never a weapon with nothing in range */
     var other = K.modList(s).filter(function (m) {
       if (m.exhausted || !Engine.fx(m.name, 'mod').activate || !Engine.meetsReq(s, m)) return false;
+      if (!Engine.affordable(s, m, 'mod')) return false;
       return hasTargetFor(s, m, m.name, 0);
     })[0];
     if (other) { Engine.activateModule(other.id); return; }
     var card = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
       if (c.exhausted || !Engine.fx(c.name, 'tech').activate) return false;
+      if (!Engine.affordable(s, c, 'tech')) return false;
       if (K.attackReach(s, c.name) === null) return true;
       /* a card fires from the hull, so any module may serve as its origin */
       return K.modList(s).some(function (m) { return hasTargetFor(s, m, c.name, 0); });
