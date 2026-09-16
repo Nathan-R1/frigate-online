@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frigate — Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="frigate-sheet/css/style.css">
+<link rel="stylesheet" href="frigate-sheet/css/frigate.css">
+<style>
+  body { margin:0; padding:0; height:100vh; overflow:hidden; font-family:var(--body); }
+  .g-wrap { display:grid; grid-template-rows:auto 1fr auto; height:100vh; }
+  .g-top { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel);
+           border-bottom:1px solid var(--line-bright); flex-wrap:wrap; }
+  .g-turn { font-family:var(--disp); font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--cyan); }
+  .g-btn { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+           padding:7px 14px; cursor:pointer; background:var(--panel-alt);
+           border:1px solid var(--cyan); color:var(--cyan); border-radius:6px; }
+  .g-btn:hover:not(:disabled) { background:var(--cyan); color:var(--ink-strong); }
+  .g-btn:disabled { opacity:.35; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
+  .g-btn.ghost { border-color:var(--line-bright); color:var(--ink-mid); }
+  .side-bar { display:flex; align-items:center; gap:10px; padding:4px 10px; border:1px solid var(--line);
+              border-radius:6px; font-family:var(--mono); font-size:11px; }
+  .side-bar.me { border-color:var(--cyan-dim); }
+  .side-bar.them { border-color:var(--red); }
+  .side-bar b { font-size:14px; }
+  .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
+  .sb-mv b { color:var(--icon-cyan); } .sb-cards b { color:var(--icon-card); }
+  .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
+  .g-board { position:relative; overflow:auto; background:var(--void); }
+  .grid { position:relative; }
+  .cell { position:absolute; box-sizing:border-box; border:1px solid rgba(255,255,255,.04); }
+  .cell.legal { background:rgba(79,216,201,.16); border-color:var(--cyan); cursor:pointer; }
+  .cell.legal:hover { background:rgba(79,216,201,.34); }
+  .obj { position:absolute; box-sizing:border-box; display:flex; flex-direction:column;
+         align-items:center; justify-content:center; border-radius:5px; font-family:var(--mono);
+         font-size:8.5px; line-height:1.1; text-align:center; overflow:hidden; padding:1px; }
+  .obj.mod   { border:1.5px solid var(--cyan); background:rgba(79,216,201,.14); color:var(--ink); }
+  .obj.mod.foe { border-color:var(--red); background:rgba(176,58,58,.16); }
+  .obj.mod.core { border-width:2.5px; }
+  .obj.mod.exh { opacity:.45; }
+  .obj.dep   { border:1.5px dashed var(--amber); background:rgba(232,169,74,.12); color:var(--amber); }
+  .obj.ast   { border:1px solid var(--ink-dim); background:rgba(150,150,150,.18); color:var(--ink-dim);
+               border-radius:50%; }
+  .obj.targetable { outline:2px solid var(--amber); cursor:pointer; }
+  .obj.ready { cursor:pointer; box-shadow:0 0 0 1px var(--cyan) inset; }
+  .obj.ready:hover { background:rgba(79,216,201,.34); }
+  .obj.moving { outline:2px dashed var(--amber); }
+  .obj.sel { outline:2px solid var(--cyan); }
+  .obj.badreq { border-style:dashed !important; border-color:var(--red) !important;
+                background:rgba(176,58,58,.2) !important; }
+  .obj .mv { font-size:7.5px; color:var(--icon-cyan); }
+  .movepad { display:grid; grid-template-columns:repeat(3,30px); gap:3px; margin:6px 0; }
+  .movepad button { font-family:var(--mono); font-size:12px; padding:5px 0; cursor:pointer;
+                    background:var(--panel-alt); border:1px solid var(--cyan-dim); color:var(--cyan); border-radius:4px; }
+  .movepad button:disabled { opacity:.25; cursor:default; }
+  .movepad .sp { visibility:hidden; }
+  .obj .hp { font-weight:700; color:var(--icon-hull); }
+  .g-right { display:flex; flex-direction:column; border-left:1px solid var(--line-bright);
+             background:var(--panel); min-height:0; }
+  .g-prompt { padding:10px 12px; border-bottom:1px solid var(--line); min-height:52px; }
+  .g-prompt .p-label { font-family:var(--disp); font-size:12px; text-transform:uppercase;
+                       letter-spacing:.06em; color:var(--amber); margin-bottom:6px; }
+  .g-log { flex:1; overflow-y:auto; padding:8px 12px; font-family:var(--mono); font-size:10.5px;
+           line-height:1.6; color:var(--ink-mid); }
+  .g-log div { padding:1px 0; }
+  .g-log .t0 { color:var(--cyan); } .g-log .t1 { color:var(--red); }
+  .g-hand { display:flex; gap:8px; padding:10px 14px; overflow-x:auto; background:var(--panel);
+            border-top:1px solid var(--line-bright); min-height:118px; align-items:stretch; }
+  .hcard { flex:0 0 165px; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+           background:var(--panel-alt); display:flex; flex-direction:column; gap:5px; }
+  .hcard .hn { font-family:var(--disp); font-size:11.5px; text-transform:uppercase; color:var(--ink); }
+  .hcard .ht { font-size:10.5px; color:var(--ink-dim); flex:1;
+               display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  .hcard .hb { display:flex; gap:5px; }
+  .hcard .hb button { flex:1; font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+                      text-transform:uppercase; padding:4px; cursor:pointer; border-radius:4px;
+                      background:none; border:1px solid var(--cyan-dim); color:var(--cyan); }
+  .hcard .hb button:disabled { opacity:.3; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
+  .hcard.inplay { border-color:var(--amber); }
+  .hcard .hmeta { font-family:var(--mono); font-size:9px; color:var(--amber); }
+  .g-over { position:fixed; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center;
+            justify-content:center; z-index:50; }
+  .g-over .box { background:var(--panel-alt); border:1px solid var(--cyan); border-radius:12px;
+                 padding:28px 34px; text-align:center; }
+  .g-over h2 { font-family:var(--disp); color:var(--cyan); margin:0 0 14px; letter-spacing:.06em; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div class="g-wrap">
+  <div class="g-top">
+    <span class="g-turn" id="turnLabel">—</span>
+    <span class="side-bar me"   id="barMe"></span>
+    <span class="side-bar them" id="barThem"></span>
+    <span style="flex:1"></span>
+    <span class="g-turn" id="phaseLabel" style="color:var(--amber)"></span>
+    <button type="button" class="g-btn ghost" id="newBtn">New Game</button>
+    <button type="button" class="g-btn" id="playPhaseBtn">End Play Phase</button>
+    <button type="button" class="g-btn" id="endBtn">End Turn</button>
+  </div>
+  <div class="g-mid">
+    <div class="g-board" id="boardWrap"><div class="grid" id="grid"></div></div>
+    <div class="g-right">
+      <div class="g-prompt" id="promptPanel"></div>
+      <div class="g-log" id="logPanel"></div>
+    </div>
+  </div>
+  <div class="g-hand" id="hand"></div>
+</div>
+<div class="g-over hidden" id="overlay"><div class="box">
+  <h2 id="overTitle">—</h2><button type="button" class="g-btn" onclick="location.reload()">Play again</button>
+</div></div>
+
+<script src="frigate-sheet/presets/tech-presets.js"></script>
+<script src="frigate-sheet/presets/mod-presets.js"></script>
+<script src="frigate-sheet/presets/card-effects.js"></script>
+<script src="game/engine.js"></script>
+<script src="game/ai/ai-knowledge.js"></script>
+<script src="game/ai/ai-path.js"></script>
+<script src="game/ai/ai-doctrine.js"></script>
+<script src="game/ai/ai-commander.js"></script>
+<script>
+(function () {
+  'use strict';
+  var CELL = 30, ME = 0, THEM = 1;
+  var selMod = null;   /* which of my modules the move controls drive */
+  var gridEl = document.getElementById('grid');
+  var handEl = document.getElementById('hand');
+  var logEl  = document.getElementById('logPanel');
+  var promptEl = document.getElementById('promptPanel');
+
+  /* a starting deck drawn from the presets, plus the modules a core option would grant */
+  function starterDeck() {
+    return ['Cannon Unit','Cannon Unit','P.D. Unit','Graviton Unit','Shield Generator',
+            'Grav Jet','Rocket Array','Boost','Dynamo','Torpedo Launcher','Armor Unit','Thrust Unit'];
+  }
+  function start() {
+    AICommander.reset();
+    Engine.newGame(
+      { name:'You',   deck:starterDeck(), modules:['Cannon','P.D.','Graviton Engine'] },
+      { name:'Enemy', deck:starterDeck(), modules:['Cannon','Armor','Thrust Engine'] });
+  }
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ---------- rendering ---------- */
+  function render(G) {
+    if (!G) return;
+    renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
+    document.getElementById('overlay').classList.toggle('hidden', !G.over);
+    if (G.over) document.getElementById('overTitle').textContent =
+      G.over.winner === ME ? 'You win' : 'You lose';
+  }
+
+  function bar(s, G) {
+    var core = s.modules[s.coreId];
+    return '<span>' + esc(s.name) + '</span>' +
+      '<span class="sb-hull">HULL <b>' + (core ? core.hull : 0) + '</b></span>' +
+      '<span class="sb-sh">SH <b>' + s.shield + '</b>/' + s.shieldMax + '</span>' +
+      '<span class="sb-mv">MV <b>' + s.moveLeft + '</b></span>' +
+      '<span class="sb-cards">HAND <b>' + s.hand.length + '</b></span>' +
+      '<span>PLAYS <b>' + s.playsLeft + '</b></span>';
+  }
+  function renderTop(G) {
+    document.getElementById('turnLabel').textContent =
+      'Turn ' + G.turn + ' — ' + G.players[G.active].name;
+    document.getElementById('barMe').innerHTML = bar(G.players[ME], G);
+    document.getElementById('barThem').innerHTML = bar(G.players[THEM], G);
+    var mine = G.active === ME && !G.pending && !G.over;
+    document.getElementById('endBtn').disabled = !mine || G.phase === 'play';
+    var pb = document.getElementById('playPhaseBtn');
+    pb.disabled = !mine || G.phase !== 'play';
+    pb.classList.toggle('ghost', G.phase !== 'play');
+    document.getElementById('phaseLabel').textContent =
+      G.phase === 'play' ? 'PLAY PHASE' : (G.phase === 'action' ? 'ACTION PHASE' : '');
+  }
+
+  function renderBoard(G) {
+    var n = Engine.RULES.boardSize, html = '';
+    gridEl.style.width = gridEl.style.height = (n * CELL) + 'px';
+    var p = G.pending;
+    var legal = (p && p.kind === 'space' && p.filter) ? p.filter : null;
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
+      var cls = 'cell' + (legal && legal(x, y) ? ' legal' : '');
+      html += '<div class="' + cls + '" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
+              'px;width:' + CELL + 'px;height:' + CELL + 'px" data-x="' + x + '" data-y="' + y + '"></div>';
+    }
+    /* asteroids and anomalies */
+    Object.keys(G.cells).forEach(function (k) {
+      var c = G.cells[k]; if (c.kind !== 'asteroid' && c.kind !== 'anomaly') return;
+      var xy = k.split(',');
+      html += obj('ast', xy[0], xy[1], c.kind === 'asteroid' ? '◦' : '✳', '');
+    });
+    var targetIds = (p && p.kind === 'target') ? p.targets : [];
+    if (selMod && !G.players[ME].modules[selMod]) selMod = null;
+    if (p && p.kind === 'move' && !selMod) {
+      var mine = G.players[ME].modules;
+      selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || null;
+    }
+    G.players.forEach(function (s, si) {
+      Object.keys(s.modules).forEach(function (id) {
+        var m = s.modules[id];
+        var canAct = si === ME && G.active === ME && G.phase === 'action' && !G.pending &&
+                     !m.exhausted && !!Engine.fx(m.name, 'mod').activate;
+        var bad = !Engine.meetsReq(s, m);
+        var pickable = si === ME && p && p.kind === 'move';
+        var cls = 'mod' + (si === THEM ? ' foe' : '') + (id === s.coreId ? ' core' : '') +
+                  (m.exhausted ? ' exh' : '') + (canAct || pickable ? ' ready' : '') + (bad ? ' badreq' : '') +
+                  (si === ME && id === selMod ? ' sel' : '') +
+                  (targetIds.indexOf(id) >= 0 ? ' targetable' : '');
+        html += obj(cls, m.x, m.y, shortName(m.name), m.hull, id,
+                    si === ME && m.moveLeft > 0 ? m.moveLeft : 0);
+      });
+      Object.keys(s.deployables).forEach(function (id) {
+        var d = s.deployables[id];
+        var canAct = si === ME && G.active === ME && G.phase === 'action' && !G.pending &&
+                     !d.exhausted && !!Engine.fx(d.name, 'mod').activate;
+        var moving = p && p.kind === 'moveObject' && p.objId === id;
+        html += obj('dep' + (canAct ? ' ready' : '') + (moving ? ' moving' : ''),
+                    d.x, d.y, shortName(d.name), d.hull, id);
+      });
+    });
+    gridEl.innerHTML = html;
+  }
+  function obj(cls, x, y, label, hp, id, mv) {
+    return '<div class="obj ' + cls + '" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
+      'px;width:' + CELL + 'px;height:' + CELL + 'px"' + (id ? ' data-obj="' + id + '"' : '') + '>' +
+      '<span>' + esc(label) + '</span>' + (hp !== '' ? '<span class="hp">' + hp + '</span>' : '') +
+      (mv ? '<span class="mv">↔' + mv + '</span>' : '') + '</div>';
+  }
+  function shortName(n) {
+    var w = n.split(' ');
+    return w.length > 1 ? w.map(function (x) { return x[0]; }).join('') : n.slice(0, 4);
+  }
+
+  function renderHand(G) {
+    var s = G.players[ME], html = '';
+    var mine = G.active === ME && !G.pending && !G.over;
+    var canPlay = mine && G.phase === 'play';
+    var myTurn = mine && G.phase === 'action';
+    s.hand.forEach(function (id) {
+      var c = s.cards[id], t = Engine.findTech(c.name) || {};
+      html += '<div class="hcard"><div class="hn">' + esc(c.name) + '</div>' +
+        '<div class="ht">' + esc(cardText(t)) + '</div>' +
+        '<div class="hb"><button data-play="' + id + '"' +
+        (canPlay && s.playsLeft > 0 ? '' : ' disabled') + '>Play</button></div></div>';
+    });
+    s.played.forEach(function (id) {
+      var c = s.cards[id], t = Engine.findTech(c.name) || {};
+      var e = Engine.fx(c.name, 'tech');
+      if (!e.activate) return;
+      html += '<div class="hcard inplay"><div class="hn">' + esc(c.name) + '</div>' +
+        '<div class="hmeta">' + (c.charges ? '⚡' + c.charges + ' ' : '') +
+        (c.heat ? '🔥' + c.heat + ' ' : '') + (c.exhausted ? 'exhausted' : 'ready') + '</div>' +
+        '<div class="ht">' + esc(cardText(t)) + '</div>' +
+        '<div class="hb"><button data-act="' + id + '"' +
+        (myTurn && !c.exhausted ? '' : ' disabled') + '>Activate</button></div></div>';
+    });
+    Object.keys(s.deployables).forEach(function (id) {
+      var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
+      if (!e.activate) return;
+      html += '<div class="hcard inplay"><div class="hn">' + esc(d.name) + '</div>' +
+        '<div class="hmeta">deployable · hull ' + d.hull + (d.exhausted ? ' · exhausted' : '') + '</div>' +
+        '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
+        '<div class="hb"><button data-dact="' + id + '"' +
+        (myTurn && !d.exhausted ? '' : ' disabled') + '>Activate</button></div></div>';
+    });
+    Object.keys(s.modules).forEach(function (id) {
+      var m = s.modules[id], e = Engine.fx(m.name, 'mod');
+      if (!e.activate) return;
+      html += '<div class="hcard inplay"><div class="hn">' + esc(m.name) + '</div>' +
+        '<div class="hmeta">module · hull ' + m.hull + (m.exhausted ? ' · exhausted' : '') + '</div>' +
+        '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
+        '<div class="hb"><button data-mact="' + id + '"' +
+        (myTurn && !m.exhausted ? '' : ' disabled') + '>Activate</button></div></div>';
+    });
+    handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';
+  }
+  function cardText(t) {
+    return [t.onbuild && 'On Play: ' + t.onbuild, t.passive && 'Passive: ' + t.passive,
+            t.onactivate && 'On Activate: ' + t.onactivate].filter(Boolean).join('  ');
+  }
+
+  function renderLog(G) {
+    logEl.innerHTML = G.log.slice(-120).map(function (l) {
+      return '<div class="t' + l.side + '">' + esc(l.msg) + '</div>';
+    }).join('');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderPrompt(G) {
+    var p = G.pending;
+    if (!p) {
+      promptEl.innerHTML = G.active !== ME
+        ? '<div class="p-label">Enemy turn</div><div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
+          esc(AICommander.describe(THEM)) + '</div>'
+        : G.phase === 'play'
+          ? '<div class="p-label">Play phase</div><div style="font-size:11px;color:var(--ink-dim)">Play a card, or End Play Phase. Whatever is left in hand is discarded.</div>'
+          : '<div class="p-label">Action phase</div><div style="font-size:11px;color:var(--ink-dim)">Click your modules and cards to activate them, then end your turn.</div>';
+      return; }
+    var h = '<div class="p-label">' + esc(p.label || p.kind) + '</div>';
+    if (p.kind === 'choice')
+      h += p.options.map(function (o, i) {
+        return '<button class="g-btn" style="margin:2px" data-choice="' + i + '">' + esc(o) + '</button>'; }).join('');
+    else if (p.kind === 'move') {
+      var s = G.players[G.active], sm = s.modules[selMod];
+      var total = Object.keys(s.modules).reduce(function (a, i) { return a + s.modules[i].moveLeft; }, 0);
+      h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Each module moves on its own. ' +
+           'Click one, then use the pad or arrow keys.</div>' +
+           '<div style="font-size:11px;margin-bottom:4px">Selected: <b style="color:var(--cyan)">' +
+           (sm ? esc(sm.name) + ' (' + sm.moveLeft + ' left)' : 'none') + '</b> — ' + total + ' Move unspent</div>' +
+           movePad(!!sm && sm.moveLeft > 0) +
+           '<button class="g-btn" data-done="1">Done moving</button>';
+    }
+    else if (p.kind === 'moveObject')
+      h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Move it — <b style="color:var(--amber)">' +
+           p.left + '</b> left.</div>' + movePad(p.left > 0) +
+           '<button class="g-btn" data-done="1">Done</button>';
+    else if (p.kind === 'space')
+      h += '<div style="font-size:11px;color:var(--ink-dim)">Click a highlighted cell.</div>' +
+           '<button class="g-btn ghost" style="margin-top:6px" data-done="1">Skip</button>';
+    else if (p.kind === 'target')
+      h += '<div style="font-size:11px;color:var(--ink-dim)">Click an outlined enemy module.</div>' +
+           '<button class="g-btn ghost" style="margin-top:6px" data-done="1">Cancel</button>';
+    promptEl.innerHTML = h;
+  }
+
+  function movePad(on) {
+    var d = on ? '' : ' disabled';
+    return '<div class="movepad">' +
+      '<button class="sp"></button><button data-mv="0,-1"' + d + '>↑</button><button class="sp"></button>' +
+      '<button data-mv="-1,0"' + d + '>←</button><button class="sp"></button><button data-mv="1,0"' + d + '>→</button>' +
+      '<button class="sp"></button><button data-mv="0,1"' + d + '>↓</button><button class="sp"></button></div>';
+  }
+
+  /* ---------- input ---------- */
+  gridEl.addEventListener('click', function (e) {
+    var G = Engine.get(), p = G.pending;
+    var o = e.target.closest('.obj');
+    if (p) {
+      if (p.kind === 'target' && o && p.targets.indexOf(o.getAttribute('data-obj')) >= 0)
+        return Engine.resolve(o.getAttribute('data-obj'));
+      /* during a move prompt, clicking one of your modules picks which one the controls drive */
+      if (p.kind === 'move' && o && G.players[ME].modules[o.getAttribute('data-obj')]) {
+        selMod = o.getAttribute('data-obj'); Engine.emit(); return;
+      }
+      var c = e.target.closest('.cell');
+      if (p.kind === 'space' && c && c.classList.contains('legal'))
+        return Engine.resolve({ x: +c.getAttribute('data-x'), y: +c.getAttribute('data-y') });
+      return;
+    }
+    /* no prompt open: clicking your own ready piece activates it */
+    if (!o || G.active !== ME || G.phase !== 'action') return;
+    var id = o.getAttribute('data-obj'), s = G.players[ME];
+    if (s.modules[id]) Engine.activateModule(id);
+    else if (s.deployables[id]) Engine.activateDeployable(id);
+  });
+  handEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.play)  Engine.playCard(b.dataset.play);
+    if (b.dataset.act)   Engine.activateCard(b.dataset.act);
+    if (b.dataset.mact)  Engine.activateModule(b.dataset.mact);
+    if (b.dataset.dact)  Engine.activateDeployable(b.dataset.dact);
+  });
+  promptEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.choice !== undefined) Engine.resolve(+b.dataset.choice);
+    if (b.dataset.mv) { var v = b.dataset.mv.split(','); nudge(+v[0], +v[1]); return; }
+    if (b.dataset.done) Engine.resolve(null);
+  });
+  document.getElementById('endBtn').addEventListener('click', function () { Engine.endTurn(); });
+  document.getElementById('playPhaseBtn').addEventListener('click', function () { Engine.endPlayPhase(); });
+  document.getElementById('newBtn').addEventListener('click', function () { start(); });
+
+  /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
+  function nudge(dx, dy) {
+    var G = Engine.get(), p = G.pending, s = G.players[ME];
+    if (p && p.kind === 'moveObject') { Engine.stepDeployable(p.objId, dx, dy); return; }
+    if (!selMod || !s.modules[selMod] || s.modules[selMod].moveLeft <= 0) selMod = nextMovable(s);
+    if (selMod) Engine.moveModule(selMod, dx, dy);
+  }
+  function nextMovable(s) {
+    var ids = Object.keys(s.modules).filter(function (i) { return s.modules[i].moveLeft > 0; });
+    return ids[0] || null;
+  }
+  var DIRS = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0],
+               w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] };
+  document.addEventListener('keydown', function (e) {
+    var G = Engine.get();
+    if (!G || G.active !== ME) return;
+    var d = DIRS[e.key];
+    if (d) { e.preventDefault(); nudge(d[0], d[1]); }
+    if (e.key === 'Escape' && G.pending) { e.preventDefault(); Engine.resolve(null); }
+    if (e.key === 'Enter' && G.pending && G.pending.kind === 'move') Engine.resolve(null);
+  });
+
+  /* ---------- enemy turn ----------
+     All decision-making lives in client/game/ai/. This page only drives the clock. */
+  setInterval(function () { AICommander.tick(THEM); }, 380);
+
+  Engine.onChange(render);
+  start();
+})();
+</script>
+</body>
+</html>
