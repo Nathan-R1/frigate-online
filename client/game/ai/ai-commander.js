@@ -11,6 +11,10 @@ var AICommander = (function () {
 
   var brains = {};   /* sideIndex -> persistent state */
 
+  function log2(s, msg) {
+    var G = Engine.get();
+    if (G && G.log) G.log.push({ turn: G.turn, side: s.idx, msg: msg });
+  }
   function brain(idx) {
     if (!brains[idx]) brains[idx] = { phase: 'PREP', doctrine: null, keystoneId: null, turnSeen: -1 };
     return brains[idx];
@@ -67,40 +71,166 @@ var AICommander = (function () {
   }
 
   /* ---------- positioning ---------- */
+  /* Plan past this turn's Move. A destination twelve squares away through a gap is a
+     legitimate answer when nothing closer improves anything — we take what Move we have
+     toward it now and pick the route up again next turn. */
+  var PLAN_HORIZON = 14;
   function manoeuvre(s, st) {
     var foe = foeOf(s);
-    var nodes = P.reachable(s);
+    var reach = P.budget(s);
+    var nodes = P.reachable(s, Math.min(30, reach + PLAN_HORIZON));
     var best = null, bestScore = -1e9;
     Object.keys(nodes).forEach(function (k) {
       var n = nodes[k];
       var sc = st.phase === 'FINISH'
         ? D.firepowerAt(s, foe, n.dx, n.dy) * 5 - D.gapAt(s, foe, n.dx, n.dy)
         : st.doctrine.score(s, foe, n.dx, n.dy, st);
-      sc -= n.cost * 0.1;                 /* prefer the cheaper of two equal positions */
+      /* a good square we cannot reach yet is still worth starting toward, just discounted:
+         steps we can take now are nearly free, steps beyond the budget are speculative */
+      sc -= Math.min(n.cost, reach) * 0.1;
+      if (n.cost > reach) sc -= (n.cost - reach) * 2.5;
+      /* keep heading for last turn's goal unless something clearly better appeared, so the
+         fleet does not dither at the mouth of a gap */
+      if (st.goal && st.goal.x === n.dx && st.goal.y === n.dy) sc += 6;
       if (sc > bestScore) { bestScore = sc; best = n; }
     });
-    if (best && (best.dx || best.dy)) P.moveTo(s, best);
+    if (best && (best.dx || best.dy)) {
+      var taken = P.advance(s, best);
+      /* remember what is left of the route, in offsets from where we now stand */
+      var steps = P.pathOf(best);
+      if (taken < steps.length) {
+        var rx = 0, ry = 0;
+        for (var i = taken; i < steps.length; i++) { rx += steps[i][0]; ry += steps[i][1]; }
+        st.goal = { x: rx, y: ry };
+      } else st.goal = null;
+    } else st.goal = null;
+    /* Whatever Move survives the approach is spent here, in priority order. Clearing a firing
+       line comes before tidying berths: a gun that can shoot this turn is worth more than a
+       gun in the right place next turn. Both must happen before the Move is committed away. */
+    var tgts = K.modList(foe).concat(K.depList(foe));
+    for (var r = 0; r < 3; r++) {
+      var rotated = AIPlacement.repositionForLos(s, tgts);
+      if (!rotated) break;
+      log2(s, rotated.name + ' shifts to clear its line of fire.');
+    }
+    AIPlacement.reconfigure(s, foe);
     K.modList(s).forEach(function (m) { m.moveLeft = 0; });   /* commit the turn's movement */
   }
 
   /* ---------- target choice ---------- */
-  function bestTarget(s, st, ids) {
-    var foe = foeOf(s), best = ids[0], bs = -1e9;
+  /* Is this rock the thing standing between a gun and something we want to shoot?
+     Tested by lifting it off the board and asking whether a blocked shot opens up —
+     collinearity cannot be inferred from Manhattan distances, because every square inside
+     the bounding rectangle satisfies dist(a,r) + dist(r,b) === dist(a,b). */
+  function blocksOurLine(s, foe, rock) {
+    var G = Engine.get(), k = rock.x + ',' + rock.y, saved = G.cells[k];
+    var guns = K.weapons(s), tgts = K.modList(foe).concat(K.depList(foe));
+    var opens = false;
+    for (var i = 0; i < guns.length && !opens; i++) {
+      for (var j = 0; j < tgts.length && !opens; j++) {
+        var g = guns[i], t = tgts[j];
+        if (Engine.dist(g.mod, t) > g.range) continue;      /* out of reach anyway */
+        if (Engine.hasLos(g.mod, t)) continue;              /* already have the shot */
+        delete G.cells[k];
+        opens = Engine.hasLos(g.mod, t);
+        G.cells[k] = saved;
+      }
+    }
+    return opens;
+  }
+
+  /* The closest to the target the formation could translate to, ignoring this turn's Move —
+     we care whether a rock matters for the route at all, not whether we can clear it today. */
+  /* A rock touching the hull is sitting on a square we will want — orthogonal adjacency is
+     exactly the set of squares a module can step into next. That is a cheaper and steadier
+     signal than probing the pathfinder, which rated every segment of a distant wall equally
+     because removing any one of them opened a hole. */
+  function adjacentToHull(s, rock) {
+    return K.modList(s).some(function (m) { return Engine.dist(m, rock) === 1; });
+  }
+  /* -1 astern .. +1 dead ahead: clear the road in front before tidying up behind */
+  function rockBearing(s, foe, rock) {
+    var core = s.modules[s.coreId];
+    if (!core) return 0;
+    return AIPlacement.bearing(core, AIPlacement.facing(s, foe), rock.x, rock.y);
+  }
+
+  /* Targets sort into three tiers:
+       primary   — the module this doctrine most wants gone
+       secondary — any other ship or deployable that is reachable
+       tertiary  — terrain, and only when clearing it opens a blocked shot
+     The tiers decide whether firing is worth it at all, not just what to aim at. */
+  function classifyTargets(s, st, ids) {
+    var foe = foeOf(s), G = Engine.get();
+    var ships = [], rocks = [];
     ids.forEach(function (id) {
+      var rock = (G.asteroids || {})[id];
+      if (rock) { rocks.push(rock); return; }
       var isDep = !!foe.deployables[id];
       var t = foe.modules[id] || foe.deployables[id];
       if (!t) return;
       var sc = st.doctrine.targetBias(t, isDep, foe);
       if (t.id === foe.coreId) {
         var lethal = K.expectedDamage(s) >= foe.shield + t.hull;
-        sc = lethal ? 500 : sc - 40;      /* shields soak it otherwise */
+        sc = lethal ? 500 : sc - 40;
       }
       if (!isDep && K.preset(t).tt === 'offense' && K.modList(foe).filter(K.isGun).length <= 1) sc += 40;
       var d = Math.min.apply(null, K.modList(s).map(function (m) { return Engine.dist(m, t); }).concat([99]));
-      sc -= d * 0.5;
-      if (sc > bs) { bs = sc; best = id; }
+      ships.push({ id: id, score: sc - d * 0.5 });
     });
-    return best;
+    ships.sort(function (a, b) { return b.score - a.score; });
+    /* Terrain earns a shot if it denies us a firing line or a route to the target. Several
+       rocks in a wall each "open a hole", so rank them: biggest gain first, then whichever is
+       nearest the fleet — that is the one actually plugging the way ahead. */
+    var scored = [];
+    rocks.forEach(function (r) {
+      var line = blocksOurLine(s, foe, r);
+      var touching = adjacentToHull(s, r);
+      if (!line && !touching) return;          /* neither in our sights nor under our feet */
+      var d = Math.min.apply(null, K.modList(s).map(function (m) { return Engine.dist(m, r); }).concat([99]));
+      scored.push({ id: r.id,
+                    score: (line ? 50 : 0) + (touching ? 25 : 0) +
+                           rockBearing(s, foe, r) * 15 - d });
+    });
+    scored.sort(function (a, b) { return b.score - a.score; });
+    var tertiary = scored.map(function (x) { return x.id; });
+    return { primary: ships.length ? ships[0].id : null,
+             secondary: ships.slice(1).map(function (x) { return x.id; }),
+             tertiary: tertiary };
+  }
+
+  function bestTarget(s, st, ids) {
+    var t = classifyTargets(s, st, ids);
+    return t.primary || t.secondary[0] || t.tertiary[0] || null;
+  }
+
+  /* a ready gun that already has a ship in range with line of sight — the reason not to
+     spend another engine and another turn of Move getting closer */
+  function gunWithShot(s) {
+    var foe = foeOf(s);
+    var tgts = K.modList(foe).concat(K.depList(foe));
+    var found = null;
+    K.weapons(s).forEach(function (w) {
+      if (found || w.mod.exhausted || !Engine.meetsReq(s, w.mod)) return;
+      for (var i = 0; i < tgts.length; i++)
+        if (Engine.dist(w.mod, tgts[i]) <= w.range && Engine.hasLos(w.mod, tgts[i])) { found = w.mod; return; }
+    });
+    return found;
+  }
+
+  /* Would this ability actually find something to shoot? `extraMove` is the distance the
+     piece may close as part of the same activation (a torpedo's run), so a one-shot weapon
+     is only spent when it can finish within reach of a real target. */
+  function hasTargetFor(s, origin, name, extraMove) {
+    var reach = K.attackReach(s, name);
+    if (reach === null) return true;                  /* not a weapon — no range to satisfy */
+    var foe = foeOf(s), tgts = K.modList(foe).concat(K.depList(foe));
+    for (var i = 0; i < tgts.length; i++) {
+      var d = Engine.dist(origin, tgts[i]);
+      if (d <= reach && Engine.hasLos(origin, tgts[i])) return true;   /* can hit from here */
+      if (extraMove > 0 && d <= reach + extraMove) return true;        /* can hit after its run */
+    }
+    return false;
   }
 
   /* ---------- prompt answers ---------- */
@@ -110,14 +240,8 @@ var AICommander = (function () {
     if (p.kind === 'move') { manoeuvre(s, st); return null; }
     if (p.kind === 'moveObject') return null;
     if (p.kind === 'space') {
-      var core = s.modules[s.coreId], pick = null, pd = 1e9;
-      for (var x = 0; x < Engine.RULES.boardSize; x++)
-        for (var y = 0; y < Engine.RULES.boardSize; y++)
-          if (p.filter(x, y)) {
-            var d = core ? Engine.dist({ x: x, y: y }, core) : 0;
-            if (d < pd) { pd = d; pick = { x: x, y: y }; }
-          }
-      return pick;
+      var name = AIPlacement.nameFromLabel(p.label);
+      return AIPlacement.best(s, foeOf(s), name, p.filter);
     }
     return null;
   }
@@ -152,16 +276,31 @@ var AICommander = (function () {
       return;
     }
 
-    /* 1. engines first — Move is the prerequisite for every plan */
+    /* 1. if a gun already bears on something, shoot — burning engines to close a gap we do
+       not have is how a turn gets wasted. Only reach for mobility when there is no shot. */
+    var readyGun = gunWithShot(s);
+    if (readyGun) { Engine.activateModule(readyGun.id); return; }
+
+    /* 2. no shot, but is a target merely screened? Stepping one gun clear of its own hull is
+       far cheaper than hauling the whole formation into a new position. */
+    if (K.modList(s).some(function (m) { return m.moveLeft > 0; })) {
+      var foe2 = foeOf(s);
+      var tgts = K.modList(foe2).concat(K.depList(foe2));
+      var rotated = AIPlacement.repositionForLos(s, tgts);
+      if (rotated) { log2(s, rotated.name + ' shifts to clear its line of fire.'); return; }
+    }
+
+    /* 3. still nothing: spend Move we already hold before generating more */
+    if (K.modList(s).some(function (m) { return m.moveLeft > 0; })) { manoeuvre(s, st); return; }
+
+    /* 4. still no shot: bring ONE engine online, then loop back to step 1 — after moving we
+       may already be in range, and the remaining engines stay ready for next turn */
     var mv = K.modList(s).filter(function (m) {
       return !m.exhausted && K.isEngine(m) && Engine.fx(m.name, 'mod').activate && Engine.meetsReq(s, m); })[0];
     if (mv) { Engine.activateModule(mv.id); return; }
     var mvCard = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
       return !c.exhausted && Engine.fx(c.name, 'tech').activate && K.roleOf(c.name) === 'mobility'; })[0];
     if (mvCard) { Engine.activateCard(mvCard.id); return; }
-
-    /* 2. spend the Move on a doctrine-chosen position */
-    if (K.modList(s).some(function (m) { return m.moveLeft > 0; })) { manoeuvre(s, st); return; }
 
     /* 3. top up the banks while still setting up */
     if (st.phase === 'PREP' || st.phase === 'RECOVER') {
@@ -181,18 +320,27 @@ var AICommander = (function () {
       if (ks && !ks.exhausted && s.played.indexOf(st.keystoneId) >= 0) { Engine.activateCard(ks.id); return; }
     }
 
-    /* 5. guns, then anything else with an ability */
-    var gun = K.modList(s).filter(function (m) {
-      return !m.exhausted && K.isGun(m) && Engine.meetsReq(s, m); })[0];
-    if (gun) { Engine.activateModule(gun.id); return; }
+    /* 5. deployables. A one-shot is only spent when its run ends within reach of a target;
+       one that survives its activation may move up regardless, which is how TAT Guided closes. */
     var dep = K.depList(s).filter(function (d) {
-      return !d.exhausted && Engine.fx(d.name, 'mod').activate; })[0];
+      if (d.exhausted || !Engine.fx(d.name, 'mod').activate) return false;
+      if (!K.isOneShot(d.name)) return true;
+      return hasTargetFor(s, d, d.name, K.selfMove(d.name));
+    })[0];
     if (dep) { Engine.activateDeployable(dep.id); return; }
+
+    /* 6. anything else with an ability — but never a weapon with nothing in range */
     var other = K.modList(s).filter(function (m) {
-      return !m.exhausted && Engine.fx(m.name, 'mod').activate && Engine.meetsReq(s, m); })[0];
+      if (m.exhausted || !Engine.fx(m.name, 'mod').activate || !Engine.meetsReq(s, m)) return false;
+      return hasTargetFor(s, m, m.name, 0);
+    })[0];
     if (other) { Engine.activateModule(other.id); return; }
     var card = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
-      return !c.exhausted && Engine.fx(c.name, 'tech').activate; })[0];
+      if (c.exhausted || !Engine.fx(c.name, 'tech').activate) return false;
+      if (K.attackReach(s, c.name) === null) return true;
+      /* a card fires from the hull, so any module may serve as its origin */
+      return K.modList(s).some(function (m) { return hasTargetFor(s, m, c.name, 0); });
+    })[0];
     if (card) { Engine.activateCard(card.id); return; }
 
     Engine.endTurn();

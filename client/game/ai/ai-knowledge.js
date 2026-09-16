@@ -7,7 +7,11 @@ var AIKnowledge = (function () {
   function depList(s) { return Object.keys(s.deployables).map(function (i) { return s.deployables[i]; }); }
   function preset(m) { return Engine.findMod(m.name) || {}; }
   function isGun(m) { return preset(m).tt === 'offense' && !!Engine.fx(m.name, 'mod').activate; }
-  function isEngine(m) { return preset(m).tt === 'movement'; }
+  /* the Core's preset type is 'movement' too, so exclude it — it is not a propulsion module
+     and counting it skews both engine tallies and the per-face spread in placement */
+  function isEngine(m) {
+    return preset(m).tt === 'movement' && !Engine.fx(m.name, 'mod').core;
+  }
 
   /* ---- card roles ---- */
   function opsOf(e) {
@@ -97,7 +101,46 @@ var AIKnowledge = (function () {
     return need || 2;
   }
 
+  /* ---- reading an activated ability ---- */
+  function activateOf(name) {
+    return Engine.fx(name, 'mod').activate || Engine.fx(name, 'tech').activate || null;
+  }
+  function activateEffect(name) {
+    var a = activateOf(name);
+    if (!a) return [];
+    var list = (a.effect || []).slice();
+    (a.options || []).forEach(function (o) { list = list.concat(o.effect || []); });
+    return list;
+  }
+  /* A top-level removeSelf means activating consumes the piece — Ion Torpedo and Fusion Mine.
+     TAT Guided's removeSelf is nested in attack.onHit, so it survives a miss and may be
+     activated purely to close distance. */
+  function isOneShot(name) {
+    var a = activateOf(name);
+    return !!a && (a.effect || []).some(function (o) { return o.op === 'removeSelf'; });
+  }
+  /* longest attack range this ability can produce, or null if it is not an attack at all */
+  function attackReach(s, name) {
+    var best = null;
+    activateEffect(name).forEach(function (o) {
+      if (o.op !== 'attack') return;
+      var r = o.range === 'sensors' ? Engine.sensorsOf(s) : (o.range === 'any' ? 99 : o.range);
+      if (typeof r === 'number' && (best === null || r > best)) best = r;
+    });
+    return best;
+  }
+  /* how far the piece may reposition itself as part of the same activation */
+  function selfMove(name) {
+    var n = 0;
+    activateEffect(name).forEach(function (o) {
+      if (o.op === 'moveSelf') n = Math.max(n, parseInt(o.n, 10) || 0);
+    });
+    return n;
+  }
+
   return { modList: modList, depList: depList, preset: preset, isGun: isGun, isEngine: isEngine,
+           activateOf: activateOf, activateEffect: activateEffect, isOneShot: isOneShot,
+           attackReach: attackReach, selfMove: selfMove,
            roleOf: roleOf, weapons: weapons, maxRange: maxRange, minRange: minRange,
            expectedDamage: expectedDamage, exposureAt: exposureAt, shieldFrac: shieldFrac,
            handByRole: handByRole, underCharged: underCharged, chargeTarget: chargeTarget };

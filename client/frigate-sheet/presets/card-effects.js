@@ -179,7 +179,7 @@ mod: {
 'Citadel':            { placement:'adjacentToCore',
                         passive:[{ trigger:'static',
                                    effect:[{op:'shareHullWithCore'},{op:'countsAsCore'}] }] },
-'Armor':              { placement:'adjacentToAnyAndAwayFromCore', minCoreDistance:2 },
+'Armor':              { placement:'adjacentToAny' },
 'Cannon':             { placement:'adjacentToCore',
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'attack',range:6,from:'self',attacks:2,dmg:2,
