@@ -4,7 +4,7 @@ var AIDoctrine = (function () {
   'use strict';
   var K = AIKnowledge;
 
-  function foeOf(s) { var G = Engine.get(); return G.players[1 - s.idx]; }
+  function foeOf(s) { return Engine.foe(s); }
   function anchor(s) { return K.modList(s).filter(K.isGun)[0] || s.modules[s.coreId]; }
   function nearestFoe(from, foe) {
     var all = K.modList(foe).concat(K.depList(foe));

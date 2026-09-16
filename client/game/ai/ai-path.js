@@ -13,7 +13,7 @@ var AIPath = (function () {
     return Math.min.apply(null, mods.map(function (m) { return m.moveLeft; }));
   }
 
-  function canTranslate(s, mods, dx, dy) {
+  function canTranslate(s, mods, dx, dy, overrunOwn) {
     var own = {};
     mods.forEach(function (m) { own[m.x + ',' + m.y] = true; });
     for (var i = 0; i < mods.length; i++) {
@@ -22,7 +22,8 @@ var AIPath = (function () {
       if (own[nx + ',' + ny]) continue;                 /* a sibling is vacating it */
       var c = Engine.cellAt(nx, ny);
       if (!c) continue;
-      if (c.kind === 'deployable' && c.owner !== s.idx) continue;   /* modules overrun deployables */
+      /* modules overrun deployables; ours are only crushed when we have no other way out */
+      if (c.kind === 'deployable' && (overrunOwn || c.owner !== s.idx)) continue;
       return false;
     }
     return true;
@@ -32,7 +33,17 @@ var AIPath = (function () {
      deliberately further than this turn's Move. A destination we cannot reach yet is still
      worth knowing about: we commit the first few steps now and continue next turn, which is
      how the fleet gets through a gap that takes longer to thread than one turn of Move. */
-  function reachable(s, horizon) {
+  function reachable(s, horizon, overrunOwn) {
+    if (overrunOwn) return search(s, horizon, true);
+    var out = search(s, horizon, false);
+    /* Boxed in. A long game leaves a ring of our own idle drones around the hull, and a
+       fleet that will not crush its own decoys simply stops moving for the rest of the
+       game. Re-run the search allowing that, and pay the drones. */
+    if (Object.keys(out).length <= 1) out = search(s, horizon, true);
+    return out;
+  }
+
+  function search(s, horizon, overrunOwn) {
     var mods = AIKnowledge.modList(s);
     var max = horizon === undefined ? budget(s) : horizon;
     var seen = { '0,0': { dx: 0, dy: 0, cost: 0, from: null, step: null } };
@@ -46,7 +57,7 @@ var AIPath = (function () {
         if (seen[k]) continue;
         /* legality is tested from the CURRENT board, translated by the offset so far */
         var probe = mods.map(function (m) { return { x: m.x + cur.dx, y: m.y + cur.dy }; });
-        if (!canTranslate(s, probe, dirs[i][0], dirs[i][1])) continue;
+        if (!canTranslate(s, probe, dirs[i][0], dirs[i][1], overrunOwn)) continue;
         seen[k] = { dx: nx, dy: ny, cost: cur.cost + 1, from: cur, step: dirs[i] };
         q.push(seen[k]);
       }
