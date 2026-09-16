@@ -39,6 +39,10 @@
   .g-board { position:relative; overflow:auto; background:var(--void); }
   .grid { position:relative; }
   .cells, .pieces { position:absolute; inset:0; }
+  /* the pieces layer spans the whole board, so it must not eat clicks on open ground —
+     only the pieces themselves take them, and everything else falls through to the cells */
+  .pieces { pointer-events:none; }
+  .piece { pointer-events:auto; }
   .cell { position:absolute; box-sizing:border-box; border:1px solid rgba(255,255,255,.04); }
   .cell.legal { background:rgba(79,216,201,.16); border-color:var(--cyan); cursor:pointer; }
   .cell.legal:hover { background:rgba(79,216,201,.34); }
@@ -46,7 +50,6 @@
      Silhouettes and animations come from the tabletop board; see client/game/pieces.js.
      Nothing on a piece is written out — the shape is the label, and hull lives on the
      module's card in the hand below. */
-  .pieces { position:absolute; inset:0; }
   .piece { position:absolute; box-sizing:border-box; }
   .piece .module-svg { width:100%; height:100%; display:block; overflow:visible;
     user-select:none; -webkit-user-select:none; transform-origin:50% 50%;
@@ -95,6 +98,8 @@
     text-shadow:0 0 6px rgba(79,216,201,.5); }
   .pc-move { bottom:-4px; left:50%; transform:translateX(-50%); color:#9cc0ff;
     border-color:rgba(91,148,240,.55); text-shadow:0 0 6px rgba(91,148,240,.5); }
+  .pc-tag { top:-3px; left:-3px; font-size:8px; letter-spacing:.02em; color:var(--pc);
+    border-color:color-mix(in srgb, var(--pc) 45%, transparent); }
 
   .module-svg .core-pulse { animation:core-pulse 2.6s ease-in-out infinite; }
   .module-svg .blink { animation:blink-led 2.4s steps(1, end) infinite; }
@@ -112,6 +117,58 @@
   @media (prefers-reduced-motion: reduce) {
     .piece *, .piece { animation:none !important; }
   }
+
+  /* ===== move phase =====
+     The route preview, the beacon, the landing ping and the blocked flash are the tabletop
+     board's movement graphics (client/board.css), scaled to this board's smaller cell. */
+  .pathlayer { position:absolute; inset:0; pointer-events:none; z-index:3; }
+  .move-path { position:absolute; left:0; top:0; overflow:visible;
+    filter:drop-shadow(0 0 5px rgba(79,216,201,.6)); }
+  .move-path polyline { fill:none; stroke:var(--route, var(--cyan)); stroke-linecap:round; stroke-linejoin:round; }
+  .move-path .path-base { stroke-width:2.2; opacity:.5; stroke-dasharray:4 11;
+    animation:path-breathe 2.2s ease-in-out infinite, path-flow .8s linear infinite; }
+  .move-path .path-pulse { stroke-width:6; stroke:#cdf4ff; opacity:.95; stroke-dasharray:6 70;
+    animation:path-pulse-flow 1.4s linear infinite; }
+  @keyframes path-breathe { 0%,100% { opacity:.35; } 50% { opacity:.65; } }
+  @keyframes path-flow { from { stroke-dashoffset:0; } to { stroke-dashoffset:-15; } }
+  @keyframes path-pulse-flow { from { stroke-dashoffset:0; } to { stroke-dashoffset:-76; } }
+  .move-beacon { position:absolute; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%;
+    background:#e6fbff; box-shadow:0 0 10px rgba(79,216,201,.95); pointer-events:none; }
+  .move-beacon::after { content:''; position:absolute; left:50%; top:50%; width:12px; height:12px;
+    margin:-6px 0 0 -6px; border-radius:50%; border:2px solid var(--route, rgba(79,216,201,.85));
+    animation:beacon-ring 1.2s ease-out infinite; }
+  @keyframes beacon-ring { 0% { transform:scale(.3); opacity:1; } 100% { transform:scale(3.2); opacity:0; } }
+  /* past the Move you hold, the whole preview goes red */
+  .pathlayer.over .move-path { filter:drop-shadow(0 0 5px rgba(210,84,78,.6)); }
+  .pathlayer.over polyline { stroke:var(--red); }
+  .pathlayer.over .path-pulse { stroke:#ffb0a9; }
+  .pathlayer.over .move-beacon { background:#ffc6c0; box-shadow:0 0 10px rgba(210,84,78,.95); }
+  .pathlayer.over .move-beacon::after { border-color:rgba(210,84,78,.85); }
+  /* cells the selected piece can still reach this turn */
+  .cell.inreach { background:rgba(79,216,201,.09); border-color:rgba(79,216,201,.22); }
+
+  .ping { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.65); box-shadow:0 0 10px rgba(255,255,255,.35);
+    pointer-events:none; animation:pingbloom .9s ease-out forwards; }
+  @keyframes pingbloom { 0% { opacity:0; transform:scale(.4); }
+    40% { opacity:1; transform:scale(1.15); } 100% { opacity:0; transform:scale(1.6); } }
+  .blockflash { position:absolute; border:2px solid rgba(255,70,70,.8);
+    background:rgba(255,70,70,.12); animation:bf .4s ease-out forwards; pointer-events:none; }
+  @keyframes bf { 0% { opacity:1; } 100% { opacity:0; } }
+
+  .dist-readout { position:fixed; z-index:90; font-family:var(--mono); font-size:9px;
+    font-weight:700; color:var(--cyan); background:rgba(10,15,22,.9); border:1px solid #22303f;
+    border-radius:8px; padding:2px 5px; pointer-events:none; }
+  .dist-readout.over { color:var(--red); border-color:rgba(210,84,78,.55);
+    box-shadow:0 0 8px rgba(210,84,78,.4); }
+  .move-counter { position:absolute; top:12px; left:12px; z-index:40; display:flex;
+    align-items:center; gap:10px; background:rgba(10,15,22,.85); border:1px solid #22303f;
+    border-radius:8px; padding:6px 12px; pointer-events:none; }
+  .mc-label { font-family:var(--mono); font-size:10px; letter-spacing:.2em; color:var(--ink-dim);
+    text-transform:uppercase; white-space:nowrap; }
+  .mc-val { font-family:var(--disp); font-weight:700; font-size:22px; line-height:1;
+    color:var(--cyan); text-shadow:0 0 10px rgba(79,216,201,.35); min-width:28px; text-align:center; }
+  .mc-sub { font-family:var(--mono); font-size:10px; color:var(--ink-dim); white-space:nowrap; }
   .movepad { display:grid; grid-template-columns:repeat(3,30px); gap:3px; margin:6px 0; }
   .movepad button { font-family:var(--mono); font-size:12px; padding:5px 0; cursor:pointer;
                     background:var(--panel-alt); border:1px solid var(--cyan-dim); color:var(--cyan); border-radius:4px; }
@@ -145,7 +202,13 @@
            background:var(--panel-alt); display:flex; flex-direction:column;
            gap:clamp(2px, 3cqh, 6px); overflow:hidden; }
   .hcard .hn { font-family:var(--disp); font-size:clamp(8px, 9cqh, 14px); line-height:1.2;
-               text-transform:uppercase; color:var(--ink); flex:none; }
+               text-transform:uppercase; color:var(--ink); flex:none;
+               display:flex; align-items:center; gap:5px; }
+  /* the module's board silhouette, so a card and its piece are easy to match up */
+  .hcard .ci { flex:none; width:clamp(12px, 13cqh, 20px); height:clamp(12px, 13cqh, 20px);
+               display:block; }
+  .hcard .ci .module-svg { width:100%; height:100%; display:block; overflow:visible;
+               filter:drop-shadow(0 0 3px var(--pc)); }
   .hcard .ht { font-size:clamp(7px, 7.5cqh, 12px); line-height:1.35; color:var(--ink-dim);
                flex:1; min-height:0; overflow:hidden; }
   .hcard .hb { display:flex; gap:5px; flex:none; }
@@ -188,7 +251,12 @@
     <button type="button" class="g-btn" id="endBtn">End Turn</button>
   </div>
   <div class="g-mid">
-    <div class="g-board" id="boardWrap"><div class="grid" id="grid"></div></div>
+    <div class="g-board" id="boardWrap"><div class="grid" id="grid"></div>
+      <div class="move-counter hidden" id="moveCounter">
+        <span class="mc-label">Move</span><span class="mc-val" id="mcVal">0</span>
+        <span class="mc-sub" id="mcSub"></span>
+      </div>
+    </div>
     <div class="g-right">
       <div class="g-prompt" id="promptPanel"></div>
       <div class="g-log" id="logPanel"></div>
@@ -199,6 +267,7 @@
     <div class="g-hand" id="hand"></div>
   </div>
 </div>
+<div class="dist-readout hidden" id="distReadout"></div>
 <div class="g-over hidden" id="modePick"><div class="box">
   <h2>New Game</h2>
   <div class="rost-count" id="rostCount">
@@ -349,11 +418,17 @@
      Two layers: a static grid of cells that only ever has its highlight class toggled, and a
      pieces layer that is diffed by object id. Rebuilding the pieces every frame would restart
      every rotation and pulse, so nodes are reused and only their classes and badges change. */
-  var cellsEl = null, piecesEl = null;
+  var cellsEl = null, piecesEl = null, pathEl = null, pathBase = null, pathPulse = null,
+      beaconEl = null, fxEl = null;
+  /* the route another player has announced but not yet walked */
+  var telegraphed = null;
+  /* shapes of yours that currently hold more than one kind of module */
+  var ambiguous = {};
 
   function ensureLayers(n) {
     if (cellsEl) return;
-    gridEl.style.width = gridEl.style.height = (n * CELL) + 'px';
+    var px = n * CELL;
+    gridEl.style.width = gridEl.style.height = px + 'px';
     cellsEl = document.createElement('div');
     cellsEl.className = 'cells';
     var html = '';
@@ -363,25 +438,208 @@
     cellsEl.innerHTML = html;
     piecesEl = document.createElement('div');
     piecesEl.className = 'pieces';
+    /* the route preview and the one-shot flashes sit above the pieces but take no clicks */
+    pathEl = document.createElement('div');
+    pathEl.className = 'pathlayer';
+    pathEl.innerHTML =
+      '<svg class="move-path" width="' + px + '" height="' + px + '">' +
+      '<polyline class="path-base"></polyline><polyline class="path-pulse"></polyline></svg>' +
+      '<div class="move-beacon hidden"></div>';
+    fxEl = document.createElement('div');
+    fxEl.className = 'pathlayer';
     gridEl.appendChild(cellsEl);
     gridEl.appendChild(piecesEl);
+    gridEl.appendChild(pathEl);
+    gridEl.appendChild(fxEl);
+    pathBase = pathEl.querySelector('.path-base');
+    pathPulse = pathEl.querySelector('.path-pulse');
+    beaconEl = pathEl.querySelector('.move-beacon');
+  }
+
+  /* ---------- movement preview ----------
+     A module may step onto empty ground or over a deployable, which it destroys; anything
+     else stops it. BFS gives the shortest legal route, and the preview shows it whether or
+     not this turn's Move covers the whole thing. */
+  function passable(x, y) {
+    var n = Engine.RULES.boardSize;
+    if (x < 0 || y < 0 || x >= n || y >= n) return false;
+    var c = Engine.cellAt(x, y);
+    return !c || c.kind === 'deployable';
+  }
+  function routeTo(from, tx, ty) {
+    if (from.x === tx && from.y === ty) return [{ x: from.x, y: from.y }];
+    if (!passable(tx, ty)) return null;
+    var seen = {}, q = [{ x: from.x, y: from.y, prev: null }], head = 0;
+    seen[from.x + ',' + from.y] = 1;
+    var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    while (head < q.length) {
+      var cur = q[head++];
+      for (var i = 0; i < 4; i++) {
+        var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
+        if (seen[k] || !passable(nx, ny)) continue;
+        seen[k] = 1;
+        var node = { x: nx, y: ny, prev: cur };
+        if (nx === tx && ny === ty) {
+          var out = [];
+          for (var m = node; m; m = m.prev) out.unshift({ x: m.x, y: m.y });
+          return out;
+        }
+        q.push(node);
+      }
+    }
+    return null;
+  }
+
+  /* the piece the movement controls are pointed at, and how far it may still go */
+  function mover(G) {
+    var p = G.pending;
+    if (!p || G.active !== meIdx()) return null;   /* never your movement on another turn */
+    if (p.kind === 'moveObject') {
+      var d = G.players[meIdx()].deployables[p.objId];
+      return d ? { obj: d, left: p.left } : null;
+    }
+    if (p.kind === 'move' && selMod) {
+      var m = G.players[meIdx()].modules[selMod];
+      return m ? { obj: m, left: m.moveLeft } : null;
+    }
+    return null;
+  }
+
+  var hoverCell = null;
+  function drawPoly(route, over) {
+    var pts = route.map(function (c) {
+      return (c.x * CELL + CELL / 2) + ',' + (c.y * CELL + CELL / 2); }).join(' ');
+    pathBase.setAttribute('points', pts);
+    pathPulse.setAttribute('points', pts);
+    pathEl.classList.toggle('over', !!over);
+    var last = route[route.length - 1];
+    beaconEl.style.left = (last.x * CELL + CELL / 2) + 'px';
+    beaconEl.style.top = (last.y * CELL + CELL / 2) + 'px';
+    beaconEl.classList.remove('hidden');
+  }
+  function drawRoute(G) {
+    /* another player's announced move owns the path layer while it is showing */
+    if (telegraphed) { drawPoly(telegraphed, false); distEl.classList.add('hidden'); return telegraphed; }
+    var mv = mover(G);
+    if (!mv || !hoverCell) return clearRoute();
+    var route = routeTo(mv.obj, hoverCell.x, hoverCell.y);
+    if (!route || route.length < 2) return clearRoute();
+    drawPoly(route, route.length - 1 > mv.left);
+    showDist(route.length - 1, mv.left, route.length - 1 > mv.left);
+    return route;
+  }
+  function clearRoute() {
+    if (!pathBase) return null;
+    pathBase.setAttribute('points', '');
+    pathPulse.setAttribute('points', '');
+    pathEl.classList.remove('over');
+    beaconEl.classList.add('hidden');
+    distEl.classList.add('hidden');
+    return null;
+  }
+  var distEl = document.getElementById('distReadout');
+  var lastPointer = { x: 0, y: 0 };
+  function showDist(cost, left, over) {
+    distEl.textContent = cost + ' / ' + left;
+    distEl.classList.toggle('over', over);
+    distEl.classList.remove('hidden');
+    distEl.style.left = (lastPointer.x + 14) + 'px';
+    distEl.style.top = (lastPointer.y + 14) + 'px';
+  }
+
+  /* one-shot flourishes: a ring where a piece lands, a red flash where it cannot go */
+  function ping(x, y) {
+    if (!fxEl) return;
+    var d = document.createElement('div');
+    d.className = 'ping';
+    d.style.left = (x * CELL + CELL / 2) + 'px';
+    d.style.top = (y * CELL + CELL / 2) + 'px';
+    fxEl.appendChild(d);
+    setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 900);
+  }
+  function blockFlash(x, y) {
+    if (!fxEl) return;
+    var d = document.createElement('div');
+    d.className = 'blockflash';
+    d.style.left = (x * CELL) + 'px'; d.style.top = (y * CELL) + 'px';
+    d.style.width = CELL + 'px'; d.style.height = CELL + 'px';
+    fxEl.appendChild(d);
+    setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 420);
   }
 
   function renderBoard(G) {
     ensureLayers(Engine.RULES.boardSize);
+    syncSelection(G);
     paintCells(G);
     paintPieces(G);
+    renderMoveHud(G);
+    drawRoute(G);
+  }
+
+  /* the Move counter from the tabletop board: what the selected piece has left, and what
+     the rest of the fleet still has banked */
+  function renderMoveHud(G) {
+    var mc = document.getElementById('moveCounter');
+    var mv = mover(G);
+    if (!mv) { mc.classList.add('hidden'); return; }
+    mc.classList.remove('hidden');
+    document.getElementById('mcVal').textContent = mv.left;
+    var s = G.players[meIdx()];
+    var rest = Object.keys(s.modules).reduce(function (a, i) {
+      return a + (i === selMod ? 0 : s.modules[i].moveLeft); }, 0);
+    document.getElementById('mcSub').textContent =
+      G.pending.kind === 'move' ? esc(mv.obj.name) + (rest ? ' · ' + rest + ' left on other modules' : '')
+                                : esc(mv.obj.name);
+  }
+
+  /* Who the movement controls point at. This has to settle before anything is painted: the
+     reachable shading, the counter and the route preview all read it, and a hand-off decided
+     halfway through a repaint would leave them describing the module that just stopped. */
+  function syncSelection(G) {
+    var mine = G.players[meIdx()].modules;
+    if (selMod && !mine[selMod]) selMod = null;
+    if (walking) return;
+    /* the selection only exists for the duration of a move prompt — otherwise the last piece
+       moved keeps its selection ring long after the movement is over */
+    if (!G.pending || G.pending.kind !== 'move') { selMod = null; return; }
+    /* pass the controls to the next module with Move left once this one is spent, so the
+       whole fleet can be moved without reselecting after every module */
+    if (!selMod || mine[selMod].moveLeft <= 0)
+      selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || selMod;
   }
 
   function paintCells(G) {
     var p = G.pending;
     var legal = (p && p.kind === 'space' && p.filter) ? p.filter : null;
+    var reach = reachSet(G);
     var kids = cellsEl.children;
     for (var i = 0; i < kids.length; i++) {
-      var c = kids[i];
-      var ok = !!legal && legal(+c.getAttribute('data-x'), +c.getAttribute('data-y'));
+      var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
+      var ok = !!legal && legal(x, y);
       if (ok !== c.classList.contains('legal')) c.classList.toggle('legal', ok);
+      var inr = !!reach && reach[x + ',' + y] === true;
+      if (inr !== c.classList.contains('inreach')) c.classList.toggle('inreach', inr);
     }
+  }
+
+  /* every square the piece being moved can still reach with the Move it holds */
+  function reachSet(G) {
+    var mv = mover(G);
+    if (!mv || mv.left <= 0) return null;
+    var seen = {}, q = [{ x: mv.obj.x, y: mv.obj.y, d: 0 }], head = 0;
+    seen[mv.obj.x + ',' + mv.obj.y] = false;
+    var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    while (head < q.length) {
+      var cur = q[head++];
+      if (cur.d >= mv.left) continue;
+      for (var i = 0; i < 4; i++) {
+        var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
+        if (k in seen || !passable(nx, ny)) continue;
+        seen[k] = true;
+        q.push({ x: nx, y: ny, d: cur.d + 1 });
+      }
+    }
+    return seen;
   }
 
   /* everything on the board this frame, in draw order: rocks first, then hulls on top */
@@ -431,6 +689,7 @@
       sp.className = 'move-corner ' + k;
       d.appendChild(sp);
     });
+    var tg = document.createElement('span'); tg.className = 'pc-badge pc-tag'; d.appendChild(tg);
     var ch = document.createElement('span'); ch.className = 'pc-badge pc-charge'; d.appendChild(ch);
     var mv = document.createElement('span'); mv.className = 'pc-badge pc-move'; d.appendChild(mv);
     return d;
@@ -450,7 +709,7 @@
       if (rec.kind === 'mod' && !Engine.meetsReq(rec.side, o)) cls += ' badreq';
       /* movement state only means anything while a move prompt is open */
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
-      if (mine && rec.id === selMod) cls += ' sel';
+      if (mine && rec.id === selMod && p && p.kind === 'move') cls += ' sel';
       if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving';
       var canAct = mine && G.phase === 'action' && !p && !o.exhausted && !!fx.activate;
       if (canAct) cls += ' ready clickable';
@@ -461,6 +720,10 @@
     d.title = rec.kind === 'ast' ? 'Asteroid — hull ' + o.hull
             : rec.kind === 'anom' ? 'Anomaly'
             : rec.side.name + ' — ' + o.name + ' — hull ' + o.hull + '/' + (o.hullMax || o.hull);
+    var tg = d.querySelector('.pc-tag');
+    var tag = (rec.si === meIdx() && ambiguous[rec.shape]) ? shortName(o.name) : '';
+    tg.textContent = tag;
+    tg.style.display = tag ? '' : 'none';
     var ch = d.querySelector('.pc-charge'), mv = d.querySelector('.pc-move');
     var charges = o.charges || 0;
     ch.textContent = charges ? '⚡' + charges : '';
@@ -472,13 +735,35 @@
     mv.style.display = showMv ? '' : 'none';
   }
 
+  /* "Cann", "P.D.", "TE", "GE" — a multi-word name goes to its initials, a single word to
+     its first four letters */
+  function shortName(n) {
+    var w = n.split(' ');
+    return w.length > 1 ? w.map(function (x) { return x[0]; }).join('') : n.slice(0, 4);
+  }
+
+  /* On your own turn, name your pieces only where the silhouette is not enough: two Cannons
+     need no labels, but a Cannon beside a P.D. does. Keyed by shape, so the tags appear
+     exactly on the groups you cannot tell apart at a glance. */
+  function ambiguousShapes(G) {
+    if (G.active !== meIdx()) return {};
+    var byShape = {}, out = {};
+    var s = G.players[meIdx()];
+    ['modules', 'deployables'].forEach(function (bag) {
+      Object.keys(s[bag]).forEach(function (id) {
+        var o = s[bag][id], sh = GamePieces.shapeOf(o.name, id === s.coreId);
+        (byShape[sh] = byShape[sh] || {})[o.name] = true;
+      });
+    });
+    Object.keys(byShape).forEach(function (sh) {
+      if (Object.keys(byShape[sh]).length > 1) out[sh] = true;
+    });
+    return out;
+  }
+
   function paintPieces(G) {
     var recs = boardObjects(G);
-    if (selMod && !G.players[meIdx()].modules[selMod]) selMod = null;
-    if (G.pending && G.pending.kind === 'move' && !selMod) {
-      var mine = G.players[meIdx()].modules;
-      selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || null;
-    }
+    ambiguous = ambiguousShapes(G);
     /* drop nodes whose object is gone, then place the rest in order, reusing what is there */
     var want = {};
     recs.forEach(function (r) { want[r.id] = r; });
@@ -524,7 +809,7 @@
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay"><div class="hn">' + esc(d.name) + '</div>' +
+      html += '<div class="hcard inplay"><div class="hn">' + pieceIcon(d.name, false) + esc(d.name) + '</div>' +
         '<div class="hmeta">deployable · hull ' + d.hull + (d.exhausted ? ' · exhausted' : '') + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-dact="' + id + '"' +
@@ -533,7 +818,8 @@
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay"><div class="hn">' + esc(m.name) + '</div>' +
+      html += '<div class="hcard inplay"><div class="hn">' + pieceIcon(m.name, id === s.coreId) +
+        esc(m.name) + '</div>' +
         '<div class="hmeta">module · hull ' + m.hull + (m.exhausted ? ' · exhausted' : '') + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-mact="' + id + '"' +
@@ -541,6 +827,15 @@
     });
     handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';
   }
+  /* the piece's own silhouette, in your colour, so a card is easy to match to the board */
+  var ICON_CACHE = {};
+  function pieceIcon(name, isCore) {
+    var shape = GamePieces.shapeOf(name, isCore), col = SEAT_HEX[meIdx() % 4];
+    var k = shape + col;
+    if (!ICON_CACHE[k]) ICON_CACHE[k] = GamePieces.markup(shape, col);
+    return '<span class="ci" style="--pc:' + col + '">' + ICON_CACHE[k] + '</span>';
+  }
+
   function cardText(t) {
     return [t.onbuild && 'On Play: ' + t.onbuild, t.passive && 'Passive: ' + t.passive,
             t.onactivate && 'On Activate: ' + t.onactivate].filter(Boolean).join('  ');
@@ -555,14 +850,19 @@
 
   function renderPrompt(G) {
     var p = G.pending;
+    /* A prompt always belongs to whoever is active, so on another player's turn there is
+       nothing here for you to answer — not even while they are moving. */
+    if (G.active !== meIdx()) {
+      promptEl.innerHTML = '<div class="p-label">' + esc(G.players[G.active].name) + "'s turn" + '</div>' +
+        (isAI(G.active)
+          ? '<div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
+            esc(AICommander.describe(G.active)) + '</div>'
+          : '<div style="font-size:11px;color:var(--ink-dim)">Pass the screen over.</div>');
+      return;
+    }
     if (!p) {
-      promptEl.innerHTML = G.active !== meIdx()
-        ? '<div class="p-label">' + esc(G.players[G.active].name) + "'s turn" + '</div>' +
-          (isAI(G.active)
-            ? '<div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
-              esc(AICommander.describe(G.active)) + '</div>'
-            : '<div style="font-size:11px;color:var(--ink-dim)">Pass the screen over.</div>')
-        : G.phase === 'play'
+      promptEl.innerHTML =
+        G.phase === 'play'
           ? '<div class="p-label">Play phase</div><div style="font-size:11px;color:var(--ink-dim)">Play a card, or End Play Phase. Whatever is left in hand is discarded.</div>'
           : '<div class="p-label">Action phase</div><div style="font-size:11px;color:var(--ink-dim)">Click your modules and cards to activate them, then end your turn.</div>';
       return; }
@@ -574,15 +874,16 @@
       var s = G.players[G.active], sm = s.modules[selMod];
       var total = Object.keys(s.modules).reduce(function (a, i) { return a + s.modules[i].moveLeft; }, 0);
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Each module moves on its own. ' +
-           'Click one, then use the pad or arrow keys.</div>' +
+           'Click one to select it, then click open ground to walk it there — or use the pad ' +
+           'and arrow keys.</div>' +
            '<div style="font-size:11px;margin-bottom:4px">Selected: <b style="color:var(--cyan)">' +
            (sm ? esc(sm.name) + ' (' + sm.moveLeft + ' left)' : 'none') + '</b> — ' + total + ' Move unspent</div>' +
            movePad(!!sm && sm.moveLeft > 0) +
            '<button class="g-btn" data-done="1">Done moving</button>';
     }
     else if (p.kind === 'moveObject')
-      h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Move it — <b style="color:var(--amber)">' +
-           p.left + '</b> left.</div>' + movePad(p.left > 0) +
+      h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Click where it should go, ' +
+           'or use the pad — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' + movePad(p.left > 0) +
            '<button class="g-btn" data-done="1">Done</button>';
     else if (p.kind === 'space')
       h += '<div style="font-size:11px;color:var(--ink-dim)">Click a highlighted cell.</div>' +
@@ -602,24 +903,85 @@
   }
 
   /* ---------- input ---------- */
+  /* the cell under the pointer, worked out from the grid rather than the element beneath the
+     cursor, because pieces and the path layer cover the cells */
+  function cellFromEvent(e) {
+    var r = gridEl.getBoundingClientRect(), n = Engine.RULES.boardSize;
+    var x = Math.floor((e.clientX - r.left) / CELL), y = Math.floor((e.clientY - r.top) / CELL);
+    if (x < 0 || y < 0 || x >= n || y >= n) return null;
+    return { x: x, y: y };
+  }
+  gridEl.addEventListener('mousemove', function (e) {
+    lastPointer.x = e.clientX; lastPointer.y = e.clientY;
+    var G = Engine.get();
+    if (!mover(G)) { if (hoverCell) { hoverCell = null; clearRoute(); } return; }
+    var c = cellFromEvent(e);
+    if (!c) { hoverCell = null; clearRoute(); return; }
+    if (hoverCell && hoverCell.x === c.x && hoverCell.y === c.y) { drawRoute(G); return; }
+    hoverCell = c;
+    drawRoute(G);
+  });
+  gridEl.addEventListener('mouseleave', function () { hoverCell = null; clearRoute(); });
+
+  /* walk the previewed route one step at a time, stopping when the Move runs out */
+  /* Walk one piece along the previewed route, stopping when its own Move runs out. The id is
+     captured up front: every step repaints the board, and the repaint hands the controls to
+     the next module with Move left — without pinning the walker here, an out-of-range click
+     would spend this module's Move and then march the rest of the fleet down the same line. */
+  var walking = false;
+  function walkRoute(route) {
+    var G = Engine.get(), mv = mover(G);
+    if (!mv || !route || walking) return;
+    var pend = G.pending, isDep = pend.kind === 'moveObject';
+    var id = isDep ? pend.objId : selMod;
+    walking = true;
+    try {
+      for (var i = 1; i < route.length; i++) {
+        var now = Engine.get(), s = now.players[meIdx()];
+        var piece = isDep ? s.deployables[id] : s.modules[id];
+        if (!piece || !now.pending) break;                 /* gone, or the prompt closed */
+        var left = isDep ? now.pending.left : piece.moveLeft;
+        if (left <= 0) break;
+        var dx = route[i].x - route[i-1].x, dy = route[i].y - route[i-1].y;
+        var ok = isDep ? Engine.stepDeployable(id, dx, dy) : Engine.moveModule(id, dx, dy);
+        if (!ok) { blockFlash(route[i].x, route[i].y); break; }
+        ping(route[i].x, route[i].y);
+      }
+    } finally { walking = false; }
+    Engine.emit();
+  }
+
+  /* whatever is standing on a square — asked of the game state rather than of the element
+     under the cursor, so a click anywhere in the cell counts even when it lands on the gap
+     between a silhouette and its corner */
+  function objIdAt(G, x, y) {
+    var c = Engine.cellAt(x, y);
+    return c ? c.id : null;
+  }
+
   gridEl.addEventListener('click', function (e) {
     var G = Engine.get(), p = G.pending;
-    var o = e.target.closest('.piece');
+    var cell = cellFromEvent(e);
+    var id = cell ? objIdAt(G, cell.x, cell.y) : null;
+    if (!id) { var el = e.target.closest('.piece'); if (el) id = el.getAttribute('data-obj'); }
     if (p) {
-      if (p.kind === 'target' && o && p.targets.indexOf(o.getAttribute('data-obj')) >= 0)
-        return Engine.resolve(o.getAttribute('data-obj'));
+      if (p.kind === 'target' && id && p.targets.indexOf(id) >= 0) return Engine.resolve(id);
       /* during a move prompt, clicking one of your modules picks which one the controls drive */
-      if (p.kind === 'move' && o && G.players[meIdx()].modules[o.getAttribute('data-obj')]) {
-        selMod = o.getAttribute('data-obj'); Engine.emit(); return;
+      if (p.kind === 'move' && id && G.players[meIdx()].modules[id]) {
+        selMod = id; hoverCell = null; Engine.emit(); return;
       }
-      var c = e.target.closest('.cell');
-      if (p.kind === 'space' && c && c.classList.contains('legal'))
-        return Engine.resolve({ x: +c.getAttribute('data-x'), y: +c.getAttribute('data-y') });
+      if (p.kind === 'space' && cell && p.filter && p.filter(cell.x, cell.y))
+        return Engine.resolve(cell);
+      /* clicking open ground walks the selected piece there along the previewed route */
+      if (mover(G) && cell) {
+        var route = routeTo(mover(G).obj, cell.x, cell.y);
+        if (route && route.length > 1) walkRoute(route);
+      }
       return;
     }
     /* no prompt open: clicking your own ready piece activates it */
-    if (!o || G.active !== meIdx() || G.phase !== 'action') return;
-    var id = o.getAttribute('data-obj'), s = G.players[meIdx()];
+    if (!id || G.active !== meIdx() || G.phase !== 'action') return;
+    var s = G.players[meIdx()];
     if (s.modules[id]) Engine.activateModule(id);
     else if (s.deployables[id]) Engine.activateDeployable(id);
   });
@@ -696,9 +1058,18 @@
   /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
   function nudge(dx, dy) {
     var G = Engine.get(), p = G.pending, s = G.players[meIdx()];
-    if (p && p.kind === 'moveObject') { Engine.stepDeployable(p.objId, dx, dy); return; }
+    if (p && p.kind === 'moveObject') {
+      var d = s.deployables[p.objId];
+      var to = d ? { x: d.x + dx, y: d.y + dy } : null;
+      if (!Engine.stepDeployable(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
+      else if (to) ping(to.x, to.y);
+      return;
+    }
     if (!selMod || !s.modules[selMod] || s.modules[selMod].moveLeft <= 0) selMod = nextMovable(s);
-    if (selMod) Engine.moveModule(selMod, dx, dy);
+    if (!selMod) return;
+    var m = s.modules[selMod], tx = m.x + dx, ty = m.y + dy;
+    if (Engine.moveModule(selMod, dx, dy)) ping(tx, ty);
+    else blockFlash(tx, ty);
   }
   function nextMovable(s) {
     var ids = Object.keys(s.modules).filter(function (i) { return s.modules[i].moveLeft > 0; });
@@ -717,11 +1088,28 @@
 
   /* ---------- enemy turn ----------
      All decision-making lives in client/game/ai/. This page only drives the clock. */
+  /* How fast the computer plays, and how long its intended move is drawn on the board before
+     it commits. The commander publishes the route, we hold the clock for the telegraph, then
+     the next tick walks it. */
+  var AI_TICK_MS = 380;
+  var AI_TELEGRAPH_MS = 700;
+  var holdUntil = 0;
+  Engine.onAnnounce(function (e) {
+    if (e.kind !== 'move' || !e.route || e.route.length < 2) return;
+    if (e.side === meIdx()) return;              /* your own moves you are making yourself */
+    telegraphed = e.route;
+    /* draw it in the moving player's own colour so it is obvious whose move this is */
+    pathEl.style.setProperty('--route', SEAT_HEX[e.side % 4]);
+    holdUntil = Date.now() + AI_TELEGRAPH_MS;
+    Engine.emit();
+  });
   setInterval(function () {
     var G = Engine.get();
     if (!G || G.over) return;
+    if (Date.now() < holdUntil) return;          /* still showing where they are going */
+    if (telegraphed) { telegraphed = null; pathEl.style.removeProperty('--route'); clearRoute(); }
     if (isAI(G.active)) AICommander.tick(G.active);
-  }, 380);
+  }, AI_TICK_MS);
 
   /* ---------- resizable hand ---------- */
   (function () {

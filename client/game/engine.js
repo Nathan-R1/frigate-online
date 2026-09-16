@@ -276,6 +276,16 @@ var Engine = (function () {
     return true;
   }
 
+  /* ---- presentation channel ----
+     Purely for the view: an actor may announce what it is about to do so the board can show
+     it before it happens. Nothing here changes game state, and with no listener attached the
+     announcement is a no-op. `telegraph` lets an actor ask whether anyone is watching, so a
+     headless run never pays for the pause. */
+  var watchers = [];
+  function onAnnounce(fn) { watchers.push(fn); }
+  function announce(e) { for (var i = 0; i < watchers.length; i++) watchers[i](e); }
+  function telegraph() { return watchers.length > 0; }
+
   function nextLiving(from) {
     var n = G.players.length;
     for (var i = 1; i <= n; i++) {
@@ -846,6 +856,7 @@ var Engine = (function () {
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
+    onAnnounce: onAnnounce, announce: announce, telegraph: telegraph,
     hostileObjects: hostileObjects, objectById: objectById,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
