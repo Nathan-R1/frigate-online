@@ -52,6 +52,8 @@
   .piece { pointer-events:auto; }
   .cell { position:absolute; box-sizing:border-box; border:1px solid rgba(255,255,255,.04); }
   .cell.legal { background:rgba(79,216,201,.16); border-color:var(--cyan); cursor:pointer; }
+  /* the footprint a patterned placement would fill, previewed under the cursor */
+  .cell.preview { background:rgba(232,169,74,.3); border-color:var(--amber); }
   .cell.legal:hover { background:rgba(79,216,201,.34); }
   /* ===== pieces =====
      Silhouettes and animations come from the tabletop board; see client/game/pieces.js.
@@ -858,6 +860,11 @@
   function paintCells(G) {
     var p = G.pending;
     var legal = (p && p.kind === 'space' && p.filter) ? p.filter : null;
+    /* a placement that fills a shape shows that shape under the cursor, so you can see
+       exactly where the block lands before committing to it */
+    var shape = {};
+    if (p && p.kind === 'space' && p.pattern && hoverCell && legal(hoverCell.x, hoverCell.y))
+      p.pattern.forEach(function (d) { shape[(hoverCell.x + d[0]) + ',' + (hoverCell.y + d[1])] = true; });
     /* the same tint carries two meanings, both "where this can reach": squares the selected
        piece can move to, and squares the shot being aimed can see */
     var reach = (p && p.kind === 'target') ? p.envelope : reachSet(G);
@@ -866,6 +873,8 @@
       var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
       var ok = !!legal && legal(x, y);
       if (ok !== c.classList.contains('legal')) c.classList.toggle('legal', ok);
+      var inShape = shape[x + ',' + y] === true;
+      if (inShape !== c.classList.contains('preview')) c.classList.toggle('preview', inShape);
       var inr = !!reach && reach[x + ',' + y] === true;
       if (inr !== c.classList.contains('inreach')) c.classList.toggle('inreach', inr);
     }
@@ -1408,11 +1417,16 @@
   /* ---------- input ---------- */
   /* the cell under the pointer, worked out from the grid rather than the element beneath the
      cursor, because pieces and the path layer cover the cells */
+  /* Measure the grid itself rather than reconstructing where it ought to be. A transformed
+     element's client rect is its painted box, so this already carries the pan, the zoom and
+     anything the surrounding layout does — reproducing that from the pane's rect plus the
+     view offset re-derives the same number and drifts whenever an assumption about the
+     ancestor's box is wrong. */
   function cellFromEvent(e) {
-    var r = boardEl.getBoundingClientRect(), n = Engine.RULES.boardSize;
-    var bx = (e.clientX - r.left - view.x) / view.zoom;
-    var by = (e.clientY - r.top - view.y) / view.zoom;
-    var x = Math.floor(bx / CELL), y = Math.floor(by / CELL);
+    var r = gridEl.getBoundingClientRect(), n = Engine.RULES.boardSize;
+    if (!r.width || !r.height) return null;
+    var cw = r.width / n, ch = r.height / n;
+    var x = Math.floor((e.clientX - r.left) / cw), y = Math.floor((e.clientY - r.top) / ch);
     if (x < 0 || y < 0 || x >= n || y >= n) return null;
     return { x: x, y: y };
   }
@@ -1461,7 +1475,15 @@
 
   gridEl.addEventListener('mousemove', function (e) {
     lastPointer.x = e.clientX; lastPointer.y = e.clientY;
-    var G = Engine.get();
+    var G = Engine.get(), pend = G.pending;
+    /* a patterned placement wants the hovered square so it can draw its footprint */
+    if (pend && pend.kind === 'space' && pend.pattern) {
+      var sc = cellFromEvent(e);
+      var same = hoverCell && sc && hoverCell.x === sc.x && hoverCell.y === sc.y;
+      hoverCell = sc;
+      if (!same) Engine.emit();
+      return;
+    }
     if (!mover(G)) { if (hoverCell) { hoverCell = null; clearRoute(); } return; }
     var c = cellFromEvent(e);
     if (!c) { hoverCell = null; clearRoute(); return; }
