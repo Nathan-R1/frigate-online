@@ -481,7 +481,7 @@
     <div class="ship-class-label">Sheet Builder</div>
   </div>
   <div class="menu-actions">
-    <button type="button" class="menu-toggle" onclick="window.close()" title="Close the sheet builder"><span class="menu-ico" aria-hidden="true">✕</span><span class="menu-label">Close</span></button>
+    <button type="button" class="menu-toggle" onclick="closeBuilder()" title="Close the sheet builder"><span class="menu-ico" aria-hidden="true">✕</span><span class="menu-label">Close</span></button>
   </div>
 </nav>
 
@@ -2444,6 +2444,23 @@ function skillsOptions() {
   function seatLabel() {
     return seatReq ? (seatReq.label || ('Player ' + (seatReq.seat + 1))) : '';
   }
+
+  /* Leave without saving. window.close() only works on a window script opened, and the
+     builder is normally navigated to in the current tab, so Close has to know its way back:
+     to whoever sent us here if anyone did, then to the page we came from, then to the board. */
+  function closeBuilder() {
+    if (seatReq) {
+      var back = seatReq.ret;
+      seatReq = null;
+      try { sessionStorage.removeItem(SEAT_REQUEST_KEY); } catch (e) {}
+      window.location.href = back || '../game.html';
+      return;
+    }
+    if (window.opener && !window.opener.closed) { window.close(); return; }
+    if (document.referrer) { window.history.back(); return; }
+    window.location.href = BOARD_URL;
+  }
+  window.closeBuilder = closeBuilder;
 
   /* Throw this seat's build away and begin a fresh run for the same player. */
   function scrapSeatBuild() {
