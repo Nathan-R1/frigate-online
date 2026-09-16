@@ -267,7 +267,7 @@
   /* new-game roster */
   #modePick .box { min-width:min(92vw, 480px); text-align:left; }
   .rost-count { display:flex; gap:8px; margin:0 0 14px; }
-  .rost-row { display:grid; grid-template-columns:1.1fr 1fr 1fr auto; gap:8px; align-items:center;
+  .rost-row { display:grid; grid-template-columns:1.1fr 1fr 1fr auto auto; gap:8px; align-items:center;
               padding:6px 0; border-top:1px solid var(--line); }
   .rost-row .rn { font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--sc, var(--cyan));
                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -278,11 +278,13 @@
                border:1px solid var(--line-bright); color:var(--ink-mid); }
   .rost-edit:hover { border-color:var(--cyan); color:var(--cyan); }
   .rost-edit svg { width:14px; height:14px; display:block; }
+  .rost-trash:hover:not(:disabled) { border-color:var(--red); color:var(--red); }
+  .rost-trash:disabled { opacity:.3; cursor:default; }
   .rost-row select { width:100%; font-family:var(--mono); font-size:11px; padding:5px 6px;
                      background:var(--panel); color:var(--ink); border:1px solid var(--line-bright);
                      border-radius:5px; }
   .rost-note { font-size:11px; color:var(--ink-dim); margin:12px 0 0; }
-  @media (max-width:520px) { .rost-row { grid-template-columns:1fr 1fr auto; }
+  @media (max-width:520px) { .rost-row { grid-template-columns:1fr 1fr auto auto; }
     .rost-row .rn { grid-column:1 / -1; } }
 </style>
 </head>
@@ -407,6 +409,18 @@
     return (sh && sh.tech || []).filter(function (t) { return Engine.cardIsStarter(t); }).length;
   }
 
+  /* Throw a seat's build away and put it back on the default ship. */
+  function resetSeat(i) {
+    var sh = sheetOf(i);
+    if (!sh) return;
+    var what = sh.shipName || sh.shipClass || 'this build';
+    if (!window.confirm('Discard ' + what + ' and put Player ' + (i + 1) +
+                        ' back on the default ship?')) return;
+    seatSheets[i] = null;
+    writeStore(GAME_SEATS_KEY, seatSheets);
+    renderRoster();
+  }
+
   /* Hand the seat's build over to the builder and go there. The choices travel, not the
      sheet: they are the builder's own state, so the run picks up exactly where it stopped
      and "Create new character" still scraps it cleanly. */
@@ -417,7 +431,7 @@
       choices: (seatSheets[i] && seatSheets[i].choices) || null,
       /* A seat that has never been built still opens on something: the stock frigate it
          would otherwise fly, so the builder has a sheet to modify rather than a blank run. */
-      sheet: sheetOf(i) || stockSheet(i),
+      sheet: sheetOf(i) || stockSheet(),
       ret: window.location.pathname + window.location.search
     });
     window.location.href = BUILDER_URL;
@@ -425,12 +439,8 @@
 
   /* The default kit as a sheet the builder can load — only the card names matter, the rest
      it derives from the presets itself. */
-  function stockSheet(i) {
-    return {
-      shipName: '',
-      tech: starterDeck().map(function (n) { return { name: n }; }),
-      mods: LOADOUTS[i % LOADOUTS.length].map(function (n) { return { name: n }; })
-    };
+  function stockSheet() {
+    return { shipName: '', tech: starterDeck(), mods: [] };
   }
   /* whichever local seat the controls and hand currently belong to */
   var VIEW = 0;
@@ -457,22 +467,32 @@
   var logEl  = document.getElementById('logPanel');
   var promptEl = document.getElementById('promptPanel');
 
-  /* a starting deck drawn from the presets, plus the modules a core option would grant */
+  /* The stock deck. Three of its cards are Starter Cards, so the default ship arrives with a
+     Cannon and a Graviton Engine already built and its Shield Generator in play — the same
+     rule a built sheet follows, rather than a hull handed out beside the rules. Promotion is
+     per copy, so only one of the two Cannon Units deploys. */
+  var STOCK_DECK = [
+    { name: 'Cannon Unit', starter: true }, { name: 'Cannon Unit' },
+    { name: 'P.D. Unit' },
+    { name: 'Graviton Unit', starter: true },
+    { name: 'Shield Generator', starter: true },
+    { name: 'Grav Jet' }, { name: 'Rocket Array' }, { name: 'Boost' }, { name: 'Dynamo' },
+    { name: 'Torpedo Launcher' }, { name: 'Armor Unit' }, { name: 'Thrust Unit' }
+  ];
   function starterDeck() {
-    return ['Cannon Unit','Cannon Unit','P.D. Unit','Graviton Unit','Shield Generator',
-            'Grav Jet','Rocket Array','Boost','Dynamo','Torpedo Launcher','Armor Unit','Thrust Unit'];
+    return STOCK_DECK.map(function (c) {
+      var base = (Engine.findTech(c.name) || {}).traits || '';
+      return { name: c.name,
+               traits: c.starter ? (base ? base + ' Starter Card' : 'Starter Card') : base };
+    });
   }
-  /* each seat opens with a slightly different hull so the board does not look mirrored */
-  var LOADOUTS = [['Cannon','P.D.','Graviton Engine'],
-                  ['Cannon','Armor','Thrust Engine'],
-                  ['Cannon','P.D.','Thrust Engine'],
-                  ['Cannon','Armor','Graviton Engine']];
   /* What a seat brings to the table: its own build if it has one, the stock frigate if not.
      Deployables in a sheet are things its cards create, not hull the ship starts with, so
      only real modules are placed on the board. */
   function seatConfig(i, seat) {
+    /* no pre-placed hull for anyone: every ship is built by the Starter Cards in its deck */
     var base = { name: sideName(i), team: seat.team, ai: seat.ai,
-                 deck: starterDeck(), modules: LOADOUTS[i % LOADOUTS.length] };
+                 deck: starterDeck(), modules: [] };
     var sh = sheetOf(i);
     if (!sh) return base;
     /* carry each copy's own traits through, so a promoted Cannon Unit deploys before combat
@@ -1254,6 +1274,11 @@
     '<path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.7" ' +
     'stroke-linejoin="round"/><path d="M14.5 5.5 18.5 9.5" stroke="currentColor" ' +
     'stroke-width="1.7" stroke-linecap="round"/></svg>';
+  var TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M4 7h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+    '<path d="M9 7V5h6v2" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' +
+    '<path d="M6.5 7l1 13h9l1-13" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' +
+    '<path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
 
   function renderRoster() {
     var n = SEATS.length;
@@ -1283,7 +1308,12 @@
         '</select>' +
         '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
           (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
-          EDIT_ICON + '</button></div>';
+          EDIT_ICON + '</button>' +
+        '<button type="button" class="rost-edit rost-trash" data-reset="' + i + '"' +
+          (sh ? '' : ' disabled') + ' title="' +
+          (sh ? 'Discard this build and go back to the default ship'
+              : 'This player is already flying the default ship') + '">' +
+          TRASH_ICON + '</button></div>';
     }).join('');
     /* one team means nobody to fight, so there is no game to start */
     var used = {};
@@ -1302,6 +1332,8 @@
     if (b) setCount(+b.getAttribute('data-count'));
   });
   rostRows.addEventListener('click', function (e) {
+    var t = e.target.closest('button[data-reset]');
+    if (t) { resetSeat(+t.getAttribute('data-reset')); return; }
     var b = e.target.closest('button[data-edit]');
     if (b) editSeat(+b.getAttribute('data-edit'));
   });
