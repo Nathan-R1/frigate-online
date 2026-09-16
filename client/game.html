@@ -214,6 +214,9 @@
            padding:clamp(4px, 5cqh, 10px) clamp(5px, 6cqh, 12px);
            background:var(--panel-alt); display:flex; flex-direction:column;
            gap:clamp(2px, 3cqh, 6px); overflow:hidden; }
+  /* the title opens the card's own details */
+  .hcard .hn[data-tech], .hcard .hn[data-mod] { cursor:pointer; }
+  .hcard .hn[data-tech]:hover, .hcard .hn[data-mod]:hover { color:var(--cyan); }
   .hcard .hn { font-family:var(--disp); font-size:clamp(8px, 9cqh, 14px); line-height:1.2;
                text-transform:uppercase; color:var(--ink); flex:none;
                display:flex; align-items:center; gap:5px; }
@@ -230,9 +233,16 @@
                       padding:clamp(2px, 3.5cqh, 6px); cursor:pointer; border-radius:4px;
                       background:none; border:1px solid var(--cyan-dim); color:var(--cyan); }
   .hcard .hb button:disabled { opacity:.3; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
+  /* in play and ready: amber. Spent for the turn: the border drops back and the card dims,
+     which with the disabled button says "exhausted" without a word for it. */
   .hcard.inplay { border-color:var(--amber); }
+  .hcard.inplay.spent { border-color:var(--line); opacity:.55; }
+  .hcard.inplay.spent .hn { color:var(--ink-dim); }
   .hcard .hmeta { font-family:var(--mono); font-size:clamp(6.5px, 6.5cqh, 11px);
-                  color:var(--amber); flex:none; }
+                  color:var(--amber); flex:none;
+                  display:flex; align-items:center; gap:5px; }
+  .hcard .hullpip { display:inline-flex; align-items:center; gap:3px; color:var(--icon-hull); }
+  .hcard .hullpip .ticon { width:1.1em; height:1.1em; flex:none; display:block; }
   .g-over { position:fixed; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center;
             justify-content:center; z-index:50; }
   .g-over .box { background:var(--panel-alt); border:1px solid var(--cyan); border-radius:12px;
@@ -968,7 +978,8 @@
     var myTurn = mine && G.phase === 'action';
     s.hand.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
-      html += '<div class="hcard"><div class="hn">' + esc(c.name) + '</div>' +
+      html += '<div class="hcard"><div class="hn" data-tech="' + esc(c.name) +
+        '" data-card="' + id + '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
         '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-play="' + id + '"' +
         (canPlay && s.playsLeft > 0 ? '' : ' disabled') + '>Play</button></div></div>';
@@ -977,9 +988,12 @@
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       var e = Engine.fx(c.name, 'tech');
       if (!e.activate) return;
-      html += '<div class="hcard inplay"><div class="hn">' + esc(c.name) + '</div>' +
-        '<div class="hmeta">' + (c.charges ? '⚡' + c.charges + ' ' : '') +
-        (c.heat ? '🔥' + c.heat + ' ' : '') + (c.exhausted ? 'exhausted' : 'ready') + '</div>' +
+      html += '<div class="hcard inplay' + (c.exhausted ? ' spent' : '') + '">' +
+        '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
+        '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
+        /* only charges and heat are worth a line; an empty one just leaves a gap */
+        ((c.charges || c.heat) ? '<div class="hmeta">' +
+          (c.charges ? '⚡' + c.charges + ' ' : '') + (c.heat ? '🔥' + c.heat : '') + '</div>' : '') +
         '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-act="' + id + '"' +
         (myTurn && !c.exhausted && Engine.affordable(s, c, 'tech') ? '' : ' disabled') +
@@ -988,8 +1002,10 @@
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay"><div class="hn">' + pieceIcon(d.name, false) + esc(d.name) + '</div>' +
-        '<div class="hmeta">deployable · hull ' + d.hull + (d.exhausted ? ' · exhausted' : '') + '</div>' +
+      html += '<div class="hcard inplay' + (d.exhausted ? ' spent' : '') + '">' +
+        '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
+        pieceIcon(d.name, false) + esc(d.name) + '</div>' +
+        '<div class="hmeta">deployable ' + hullPip(d) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-dact="' + id + '"' +
         (myTurn && !d.exhausted && Engine.affordable(s, d, 'dep') ? '' : ' disabled') +
@@ -998,9 +1014,10 @@
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay"><div class="hn">' + pieceIcon(m.name, id === s.coreId) +
-        esc(m.name) + '</div>' +
-        '<div class="hmeta">module · hull ' + m.hull + (m.exhausted ? ' · exhausted' : '') + '</div>' +
+      html += '<div class="hcard inplay' + (m.exhausted ? ' spent' : '') + '">' +
+        '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
+        pieceIcon(m.name, id === s.coreId) + esc(m.name) + '</div>' +
+        '<div class="hmeta">' + hullPip(m) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-mact="' + id + '"' +
         (myTurn && !m.exhausted && Engine.affordable(s, m, 'mod') ? '' : ' disabled') +
@@ -1028,6 +1045,9 @@
   var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M21 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   var SPEED_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var DURATION_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5.5l3.5 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var STORAGE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  var CAPACITY_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7.5" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 19c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  var STARTER_ICON = '<svg class="ticon" viewBox="0 0 64 64" fill="none"><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M43.66 13.34 A22 22 0 1 1 20.34 13.34"/><path d="M32 6 V30"/></g></svg>';
   var TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
 
   var INFO_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
@@ -1064,13 +1084,63 @@
     return out + esc(line.slice(last));
   }
 
+  /* hull as the heart icon and the number, with the full figure on hover once it is damaged */
+  function hullPip(o) {
+    var max = o.hullMax || o.hull;
+    return '<span class="hullpip" title="Hull ' + o.hull + ' of ' + max + '">' +
+           HULL_ICON + o.hull + '</span>';
+  }
+
   function cardText(t) {
     return [t.onbuild && 'On Play: ' + t.onbuild, t.passive && 'Passive: ' + t.passive,
             t.onactivate && 'On Activate: ' + t.onactivate]
       .filter(Boolean).map(withModPips).join('  ');
   }
 
-  /* ---------- module / deployable popup ---------- */
+  /* ---------- info popup ----------
+     One box for both kinds. A module or deployable is described by its preset; a tech by
+     its own, with a pip on anything it creates so you can drill from the card to the piece. */
+  function chipsHtml(list) {
+    return list.map(function (x) {
+      return '<span' + (x.cls ? ' class="' + x.cls + '"' : '') +
+             (x.tip ? ' title="' + esc(x.tip) + '"' : '') + '>' + x.text + '</span>';
+    }).join('');
+  }
+
+  function openTechPopup(name, card) {
+    var t = Engine.findTech(name);
+    if (!t) return;
+    var icon = document.getElementById('modPopIcon');
+    icon.style.removeProperty('--pc');
+    icon.innerHTML = '';
+    document.getElementById('modPopName').textContent = t.name;
+    var meta = [];
+    if (t.tt) meta.push({ text: (TYPE_ICONS[t.tt] || '⚔') + ' ' + cap(t.tt), cls: 't-cyan',
+                          tip: cap(t.tt) + ' technology' });
+    if (t.rarity && t.rarity !== 'common')
+      meta.push({ text: cap(t.rarity), cls: 't-amber', tip: 'Rarity' });
+    if (num(t.storage) > 0) meta.push({ text: STORAGE_ICON + esc(t.storage), cls: '',
+                                        tip: 'Storage cost, against Logistics' });
+    if (num(t.leadership) > 0) meta.push({ text: CAPACITY_ICON + esc(t.leadership), cls: '',
+                                           tip: 'Capacity cost, against Leadership' });
+    if (num(t.charges) > 0 || card && card.charges)
+      meta.push({ text: CHARGES_ICON + ((card && card.charges) || t.charges), cls: 't-charge',
+                  tip: card ? 'Charges on this card now' : 'Charges it starts with' });
+    if (card && card.heat) meta.push({ text: '🔥' + card.heat, cls: 't-amber', tip: 'Heat' });
+    if (Engine.cardIsStarter(card || { name: name }))
+      meta.push({ text: STARTER_ICON + 'Starter', cls: 't-amber',
+                  tip: 'Deploys before combat begins' });
+    if (t.traits) meta.push({ text: esc(t.traits), cls: '', tip: 'Traits' });
+    document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
+    var lines = [];
+    if (t.onbuild) lines.push('On Play: ' + t.onbuild);
+    if (t.passive) lines.push('Passive: ' + t.passive);
+    if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
+    document.getElementById('modPopDesc').innerHTML =
+      lines.length ? lines.map(withModPips).join('<br>') : 'No text.';
+    document.getElementById('modPop').classList.remove('hidden');
+  }
+
   function openModPopup(name) {
     var m = Engine.findMod(name);
     if (!m) return;
@@ -1094,10 +1164,7 @@
     if (num(m.charges) > 0) meta.push({ text: CHARGES_ICON + esc(m.charges), cls: 't-charge',
                                         tip: 'Charges it starts with' });
     if (m.traits) meta.push({ text: esc(m.traits), cls: '', tip: 'Traits' });
-    document.getElementById('modPopMeta').innerHTML = meta.map(function (x) {
-      return '<span' + (x.cls ? ' class="' + x.cls + '"' : '') +
-             (x.tip ? ' title="' + esc(x.tip) + '"' : '') + '>' + x.text + '</span>';
-    }).join('');
+    document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
     var lines = [];
     if (m.req) lines.push('Requires: ' + m.req);
     if (m.onbuild) lines.push('On Play: ' + m.onbuild);
@@ -1271,6 +1338,15 @@
   handEl.addEventListener('click', function (e) {
     var pip = e.target.closest('.mod-info');
     if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); return; }
+    var head = e.target.closest('.hn[data-tech], .hn[data-mod]');
+    if (head) {
+      if (head.hasAttribute('data-mod')) openModPopup(head.getAttribute('data-mod'));
+      else {
+        var cid = head.getAttribute('data-card'), st = Engine.get().players[meIdx()];
+        openTechPopup(head.getAttribute('data-tech'), cid ? st.cards[cid] : null);
+      }
+      return;
+    }
     var b = e.target.closest('button'); if (!b) return;
     if (b.dataset.play)  Engine.playCard(b.dataset.play);
     if (b.dataset.act)   Engine.activateCard(b.dataset.act);
