@@ -882,17 +882,21 @@ var Engine = (function () {
     if (o.from === 'offenseModule') list = list.filter(isOffenseModule);
     return list.length ? list : [s.modules[s.coreId]].filter(Boolean);
   }
+  /* Where a module may be built. This asks exactly what meetsReq asks of a module already on
+     the board, so a berth that is legal to build is a berth that stays legal — and anything
+     counting as a Core, such as the Citadel, satisfies "adjacent to Core" here too. */
   function placementFilter(s, modName) {
     var e = fx(modName, 'mod');
     return function (x, y) {
       if (!inBounds(x, y) || cellAt(x, y)) return false;
       var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
-      var core = s.modules[s.coreId];
+      var cores = mods.filter(function (m) { return isCoreLike(s, m); });
       var p = { x: x, y: y };
-      if (e.placement === 'adjacentToCore') return core && adjacent(p, core);
+      if (e.placement === 'adjacentToCore')
+        return cores.some(function (c) { return adjacent(p, c); });
       if (e.placement === 'adjacentToAnyAndAwayFromCore')
         return mods.some(function (m) { return adjacent(p, m); }) &&
-               core && stepDist(p, core) >= (e.minCoreDistance || 2);
+               cores.every(function (c) { return stepDist(p, c) >= (e.minCoreDistance || 2); });
       return mods.some(function (m) { return adjacent(p, m); });
     };
   }
@@ -1010,10 +1014,16 @@ var Engine = (function () {
   }
 
   /* ---- placement requirements are ongoing, not just a build-time check ---- */
+  /* A module that stands in for the Core. The Citadel says so in its own static passive, so
+     the rule is read off the card rather than hardcoded against its name. */
   function isCoreLike(s, m) {
     if (!m) return false;
     if (m.id === s.coreId) return true;
-    return !!fx(m.name, 'mod').countsAsCore || m.name === 'Citadel';
+    var e = fx(m.name, 'mod');
+    if (e.core || e.countsAsCore) return true;
+    return (e.passive || []).some(function (pas) {
+      return (pas.effect || []).some(function (o) { return o.op === 'countsAsCore'; });
+    });
   }
   function meetsReq(s, m) {
     var e = fx(m.name, 'mod');
