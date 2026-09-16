@@ -1293,8 +1293,10 @@
     walking = true;
     try {
       for (var i = 1; i < route.length; i++) {
-        var now = Engine.get(), s = now.players[meIdx()];
-        var piece = isDep ? s.deployables[id] : s.modules[id];
+        var now = Engine.get();
+        /* an object prompt may be pushing something that is not yours at all */
+        var found = isDep ? Engine.objectById(id) : null;
+        var piece = isDep ? (found && found.obj) : now.players[meIdx()].modules[id];
         if (!piece || !now.pending) break;                 /* gone, or the prompt closed */
         var left = isDep ? now.pending.left : piece.moveLeft;
         if (left <= 0) break;
