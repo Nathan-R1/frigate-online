@@ -9,6 +9,9 @@
 <link rel="stylesheet" href="../frigate-sheet/css/style.css">
 <link rel="stylesheet" href="../frigate-sheet/css/frigate.css">
 <style>
+  /* rarity accents: rare reads blue, epic reads gold. Both borrow themed palette
+     entries so they follow the light/dark switch like every other colour. */
+  :root { --rar-blue: var(--icon-computer); --rar-gold: var(--icon-diplomacy); }
   body { padding: 28px 18px 110px; }
   .builder { max-width: 1200px; margin: 0 auto; }
   .builder-panel { margin-top: 16px; padding: 22px 26px; position: relative; }
@@ -76,7 +79,8 @@
   .rar-ico { width: 18px; height: 14px; display: block; flex: none; }
   .rchip .rar-ico { width: 17px; height: 13px; }
   .rar-tag-uncommon { color: var(--icon-hull); }
-  .rar-tag-rare { color: var(--amber); }
+  .rar-tag-rare { color: var(--rar-blue); }
+  .rar-tag-epic { color: var(--rar-gold); }
   .opt-title-row .ticon { width: 15px; height: 15px; flex: none; }
   /* the hull silhouette leads its card, and takes the card's accent when ticked */
   .hull-ico { width: 48px; height: 61px; flex: none; display: block; color: var(--icon-cyan); }
@@ -128,9 +132,12 @@
   .opt.rar-uncommon:not(.sel) { border-color: var(--icon-hull); background: rgba(127,216,138,.07); }
   .opt.rar-uncommon:not(.sel):hover { border-color: var(--icon-hull); }
   .opt.rar-uncommon .opt-title { color: var(--icon-hull); }
-  .opt.rar-rare:not(.sel) { border-color: var(--amber); background: rgba(232,169,74,.08); }
-  .opt.rar-rare:not(.sel):hover { border-color: var(--amber); }
-  .opt.rar-rare .opt-title { color: var(--amber); }
+  .opt.rar-rare:not(.sel) { border-color: var(--rar-blue); background: rgba(89,185,232,.08); }
+  .opt.rar-rare:not(.sel):hover { border-color: var(--rar-blue); }
+  .opt.rar-rare .opt-title { color: var(--rar-blue); }
+  .opt.rar-epic:not(.sel) { border-color: var(--rar-gold); background: rgba(217,166,27,.1); }
+  .opt.rar-epic:not(.sel):hover { border-color: var(--rar-gold); }
+  .opt.rar-epic .opt-title { color: var(--rar-gold); }
   .opt.classopt:not(.sel) { border-color: var(--icon-charged); background: rgba(156,63,102,.08); }
   .opt.classopt:not(.sel):hover { border-color: var(--icon-charged); }
   .opt.classopt .opt-title { color: var(--icon-charged); }
@@ -138,7 +145,8 @@
   .rchip { display: inline-flex; align-items: center; line-height: 1; }
   .rchip-common { color: var(--ink-mid); }
   .rchip-uncommon { color: var(--icon-hull); }
-  .rchip-rare { color: var(--amber); }
+  .rchip-rare { color: var(--rar-blue); }
+  .rchip-epic { color: var(--rar-gold); }
   .grant-line { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; color: var(--ink-mid); }
   .sk-top { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-bottom: 6px; }
   .recbtn {
@@ -879,9 +887,14 @@
      REROLL_CHANCE of 0.125 restores the old 1/2 common, 1/4 uncommon, 1/8 rare, 1/8 reroll;
      it is 0 for now, so every slot always deals a card. */
   var REROLL_CHANCE = 0;
-  var RARITY_ORDER = ['common', 'uncommon', 'rare'];
-  function rollRarity() {
+  var RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic'];
+  /* epic rolls 1 slot in 20, and only for a class you have committed this many hull points to */
+  var EPIC_CHANCE = 0.05;
+  var EPIC_MIN_TICKS = 3;
+  function rollRarity(allowEpic) {
     if (REROLL_CHANCE > 0 && Math.random() < REROLL_CHANCE) return 'reroll';
+    if (allowEpic && Math.random() < EPIC_CHANCE) return 'epic';
+    /* the remaining slots keep the original 1/2 common, 1/4 uncommon, 1/8 rare shape */
     var r = Math.random() * 7;
     if (r < 4) return 'common';
     if (r < 6) return 'uncommon';
@@ -904,8 +917,8 @@
       }
       return pool;
     }
-    function take(cls) {
-      var want = rollRarity();
+    function take(cls, allowEpic) {
+      var want = rollRarity(allowEpic);
       if (want === 'reroll') { reroll = true; return; }
       var pool = poolOf(cls, want);
       /* that class may be out of cards at the rolled rarity; slide to another rather than drop the slot */
@@ -934,22 +947,25 @@
       var n = choices.hulls[hulls[h]] || 0;
       ticks += n;
       if (n >= 2) anyEven = true;
+      /* the epic tier unlocks per class, on the hull points you have put into it.
+         Show-all deliberately ignores that gate: it is the "everything in this pool" view. */
+      var epicOk = n >= EPIC_MIN_TICKS;
       if (choices.showAllDraw) {
         if (n > 0) takeAll(hulls[h].toLowerCase());
         continue;
       }
       for (var lvl = 1; lvl <= n; lvl++) {
-        take(lvl % 2 === 1 ? hulls[h].toLowerCase() : 'none');
+        take(lvl % 2 === 1 ? hulls[h].toLowerCase() : 'none', epicOk);
       }
     }
     /* show-all widens each level's pool, it does not invent levels: the classless pool is
        what an even level draws from, so it only appears once some class has reached one */
     if (choices.showAllDraw) { if (anyEven) takeAll('none'); }
     /* no hull ticked is not reachable from step 1, but an empty offer would be a dead end */
-    else if (!ticks) take('none');
+    else if (!ticks) take('none', false);
     /* the offer reads classless first, then each class in hull order. A normal draw is a
        handful of cards, so name alone orders them; a show-all offer is the whole pool, so
-       it groups by rarity (common to rare, as RARITY_ORDER lists them) before name. */
+       it groups by rarity (common through epic, as RARITY_ORDER lists them) before name. */
     var order = ['none'];
     for (var o = 0; o < hulls.length; o++) order.push(hulls[o].toLowerCase());
     var byRarity = !!choices.showAllDraw;
@@ -1154,6 +1170,7 @@
   var RARITY_ICONS = {
     common: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><circle cx="60" cy="46" r="42"/><line x1="23" y1="26" x2="97" y2="26"/></g></svg>',
     uncommon: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><polygon points="60,4 112,46 60,88 8,46"/><polygon points="60,20 96,46 60,72 24,46"/></g></svg>',
+    epic: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><polygon points="12,62 12,20 40,46 60,12 80,46 108,20 108,62"/><rect x="12" y="62" width="96" height="18"/><circle cx="60" cy="34" r="5"/></g></svg>',
     rare: '<svg class="rar-ico" viewBox="0 0 120 92" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><polygon points="20,2 100,2 118,32 60,90 2,32"/><line x1="2" y1="32" x2="118" y2="32"/><line x1="20" y1="2" x2="35" y2="32"/><line x1="100" y1="2" x2="85" y2="32"/><line x1="35" y1="32" x2="60" y2="90"/><line x1="85" y1="32" x2="60" y2="90"/></g></svg>'
   };
   function rarityIcon(r) { return RARITY_ICONS[r] || RARITY_ICONS.common; }
@@ -1736,7 +1753,7 @@ function skillsOptions() {
     if (f.vehs.deployable || dOn) veh += filterChip(DEPLOYABLE_ICON, 'v:deployable', 'Deployables', dOn);
     if (veh) row += '<span class="ff-div"></span>' + veh;
     if (k === 'tech') {
-      var RA = ['common', 'uncommon', 'rare'];
+      var RA = ['common', 'uncommon', 'rare', 'epic'];
       var rars = '';
       for (var r = 0; r < RA.length; r++) {
         var rOn = filters.rars.indexOf(RA[r]) !== -1;
