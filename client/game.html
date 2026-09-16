@@ -24,6 +24,8 @@
               border-radius:6px; font-family:var(--mono); font-size:11px; }
   .side-bar.me { border-color:var(--cyan-dim); }
   .side-bar.them { border-color:var(--red); }
+  .side-bar.turn { box-shadow:0 0 0 1px currentColor inset; opacity:1; }
+  .side-bar:not(.turn) { opacity:.55; }
   .side-bar b { font-size:14px; }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .sb-mv b { color:var(--icon-cyan); } .sb-cards b { color:var(--icon-card); }
@@ -43,6 +45,7 @@
   .obj.dep   { border:1.5px dashed var(--amber); background:rgba(232,169,74,.12); color:var(--amber); }
   .obj.ast   { border:1px solid var(--ink-dim); background:rgba(150,150,150,.18); color:var(--ink-dim);
                border-radius:50%; }
+  .obj.ast .hp { color:var(--ink-mid); }
   .obj.targetable { outline:2px solid var(--amber); cursor:pointer; }
   .obj.ready { cursor:pointer; box-shadow:0 0 0 1px var(--cyan) inset; }
   .obj.ready:hover { background:rgba(79,216,201,.34); }
@@ -66,20 +69,36 @@
            line-height:1.6; color:var(--ink-mid); }
   .g-log div { padding:1px 0; }
   .g-log .t0 { color:var(--cyan); } .g-log .t1 { color:var(--red); }
-  .g-hand { display:flex; gap:8px; padding:10px 14px; overflow-x:auto; background:var(--panel);
-            border-top:1px solid var(--line-bright); min-height:118px; align-items:stretch; }
-  .hcard { flex:0 0 165px; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
-           background:var(--panel-alt); display:flex; flex-direction:column; gap:5px; }
-  .hcard .hn { font-family:var(--disp); font-size:11.5px; text-transform:uppercase; color:var(--ink); }
-  .hcard .ht { font-size:10.5px; color:var(--ink-dim); flex:1;
-               display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
-  .hcard .hb { display:flex; gap:5px; }
-  .hcard .hb button { flex:1; font-family:var(--mono); font-size:9px; letter-spacing:.1em;
-                      text-transform:uppercase; padding:4px; cursor:pointer; border-radius:4px;
+  /* the hand is a user-resizable row; --hand-h is written by the drag grip */
+  .g-handwrap { display:flex; flex-direction:column; height:var(--hand-h, 132px);
+                min-height:64px; max-height:72vh; background:var(--panel);
+                border-top:1px solid var(--line-bright); }
+  .hand-grip { flex:none; height:9px; cursor:ns-resize; display:flex; align-items:center;
+               justify-content:center; background:var(--panel); touch-action:none; }
+  .hand-grip span { display:block; width:46px; height:3px; border-radius:2px; background:var(--line-bright); }
+  .hand-grip:hover span { background:var(--cyan); }
+  /* cards size themselves off the bar's height, so they stay proportional at any size */
+  .g-hand { flex:1; min-height:0; container-type:size;
+            display:flex; gap:8px; padding:0 14px 8px; overflow-x:auto; overflow-y:hidden;
+            align-items:stretch; }
+  .hcard { flex:0 0 auto; width:clamp(112px, 64cqh, 208px); height:100%;
+           border:1px solid var(--line); border-radius:8px;
+           padding:clamp(4px, 5cqh, 10px) clamp(5px, 6cqh, 12px);
+           background:var(--panel-alt); display:flex; flex-direction:column;
+           gap:clamp(2px, 3cqh, 6px); overflow:hidden; }
+  .hcard .hn { font-family:var(--disp); font-size:clamp(8px, 9cqh, 14px); line-height:1.2;
+               text-transform:uppercase; color:var(--ink); flex:none; }
+  .hcard .ht { font-size:clamp(7px, 7.5cqh, 12px); line-height:1.35; color:var(--ink-dim);
+               flex:1; min-height:0; overflow:hidden; }
+  .hcard .hb { display:flex; gap:5px; flex:none; }
+  .hcard .hb button { flex:1; font-family:var(--mono); font-size:clamp(6.5px, 7cqh, 11px);
+                      letter-spacing:.1em; text-transform:uppercase;
+                      padding:clamp(2px, 3.5cqh, 6px); cursor:pointer; border-radius:4px;
                       background:none; border:1px solid var(--cyan-dim); color:var(--cyan); }
   .hcard .hb button:disabled { opacity:.3; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
   .hcard.inplay { border-color:var(--amber); }
-  .hcard .hmeta { font-family:var(--mono); font-size:9px; color:var(--amber); }
+  .hcard .hmeta { font-family:var(--mono); font-size:clamp(6.5px, 6.5cqh, 11px);
+                  color:var(--amber); flex:none; }
   .g-over { position:fixed; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center;
             justify-content:center; z-index:50; }
   .g-over .box { background:var(--panel-alt); border:1px solid var(--cyan); border-radius:12px;
@@ -107,8 +126,18 @@
       <div class="g-log" id="logPanel"></div>
     </div>
   </div>
-  <div class="g-hand" id="hand"></div>
+  <div class="g-handwrap" id="handWrap">
+    <div class="hand-grip" id="handGrip" title="Drag to resize the hand"><span></span></div>
+    <div class="g-hand" id="hand"></div>
+  </div>
 </div>
+<div class="g-over hidden" id="modePick"><div class="box">
+  <h2>New Game</h2>
+  <p style="color:var(--ink-dim);font-size:12.5px;max-width:34ch;margin:0 0 18px">
+    Play against the computer, or pass one screen back and forth between two people.</p>
+  <button type="button" class="g-btn" data-mode="ai" style="margin:0 4px">Versus AI</button>
+  <button type="button" class="g-btn ghost" data-mode="local" style="margin:0 4px">Local — 2 players</button>
+</div></div>
 <div class="g-over hidden" id="overlay"><div class="box">
   <h2 id="overTitle">—</h2><button type="button" class="g-btn" onclick="location.reload()">Play again</button>
 </div></div>
@@ -119,6 +148,7 @@
 <script src="game/engine.js"></script>
 <script src="game/ai/ai-knowledge.js"></script>
 <script src="game/ai/ai-path.js"></script>
+<script src="game/ai/ai-placement.js"></script>
 <script src="game/ai/ai-doctrine.js"></script>
 <script src="game/ai/ai-commander.js"></script>
 <script>
@@ -126,6 +156,11 @@
   'use strict';
   var CELL = 30, ME = 0, THEM = 1;
   var selMod = null;   /* which of my modules the move controls drive */
+  /* 'ai'    — you are side 0 and the commander runs side 1
+     'local' — one screen, two people: the controls always belong to whoever is active */
+  var MODE = 'ai';
+  function meIdx() { return MODE === 'local' ? Engine.get().active : ME; }
+  function sideName(i) { return MODE === 'local' ? 'Player ' + (i + 1) : (i === ME ? 'You' : 'Enemy'); }
   var gridEl = document.getElementById('grid');
   var handEl = document.getElementById('hand');
   var logEl  = document.getElementById('logPanel');
@@ -136,11 +171,14 @@
     return ['Cannon Unit','Cannon Unit','P.D. Unit','Graviton Unit','Shield Generator',
             'Grav Jet','Rocket Array','Boost','Dynamo','Torpedo Launcher','Armor Unit','Thrust Unit'];
   }
-  function start() {
+  function start(mode) {
+    MODE = mode || MODE;
+    selMod = null;
     AICommander.reset();
+    document.getElementById('modePick').classList.add('hidden');
     Engine.newGame(
-      { name:'You',   deck:starterDeck(), modules:['Cannon','P.D.','Graviton Engine'] },
-      { name:'Enemy', deck:starterDeck(), modules:['Cannon','Armor','Thrust Engine'] });
+      { name:sideName(0), deck:starterDeck(), modules:['Cannon','P.D.','Graviton Engine'] },
+      { name:sideName(1), deck:starterDeck(), modules:['Cannon','Armor','Thrust Engine'] });
   }
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -151,7 +189,8 @@
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
     if (G.over) document.getElementById('overTitle').textContent =
-      G.over.winner === ME ? 'You win' : 'You lose';
+      MODE === 'local' ? sideName(G.over.winner) + ' wins'
+                       : (G.over.winner === ME ? 'You win' : 'You lose');
   }
 
   function bar(s, G) {
@@ -166,9 +205,13 @@
   function renderTop(G) {
     document.getElementById('turnLabel').textContent =
       'Turn ' + G.turn + ' — ' + G.players[G.active].name;
-    document.getElementById('barMe').innerHTML = bar(G.players[ME], G);
-    document.getElementById('barThem').innerHTML = bar(G.players[THEM], G);
-    var mine = G.active === ME && !G.pending && !G.over;
+    document.getElementById('turnLabel').style.color =
+      MODE === 'local' ? (G.active === 0 ? 'var(--cyan)' : 'var(--red)') : 'var(--cyan)';
+    document.getElementById('barMe').innerHTML = bar(G.players[0], G);
+    document.getElementById('barThem').innerHTML = bar(G.players[1], G);
+    document.getElementById('barMe').classList.toggle('turn', G.active === 0);
+    document.getElementById('barThem').classList.toggle('turn', G.active === 1);
+    var mine = G.active === meIdx() && !G.pending && !G.over;
     document.getElementById('endBtn').disabled = !mine || G.phase === 'play';
     var pb = document.getElementById('playPhaseBtn');
     pb.disabled = !mine || G.phase !== 'play';
@@ -187,35 +230,40 @@
       html += '<div class="' + cls + '" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
               'px;width:' + CELL + 'px;height:' + CELL + 'px" data-x="' + x + '" data-y="' + y + '"></div>';
     }
-    /* asteroids and anomalies */
-    Object.keys(G.cells).forEach(function (k) {
-      var c = G.cells[k]; if (c.kind !== 'asteroid' && c.kind !== 'anomaly') return;
-      var xy = k.split(',');
-      html += obj('ast', xy[0], xy[1], c.kind === 'asteroid' ? '◦' : '✳', '');
-    });
     var targetIds = (p && p.kind === 'target') ? p.targets : [];
-    if (selMod && !G.players[ME].modules[selMod]) selMod = null;
+    /* asteroids are objects now: they carry hull and can be shot away */
+    Object.keys(G.asteroids || {}).forEach(function (id) {
+      var a = G.asteroids[id];
+      html += obj('ast' + (targetIds.indexOf(id) >= 0 ? ' targetable' : ''),
+                  a.x, a.y, '◦', a.hull, id);
+    });
+    Object.keys(G.cells).forEach(function (k) {
+      var c = G.cells[k]; if (c.kind !== 'anomaly') return;
+      var xy = k.split(',');
+      html += obj('ast', xy[0], xy[1], '✳', '');
+    });
+    if (selMod && !G.players[meIdx()].modules[selMod]) selMod = null;
     if (p && p.kind === 'move' && !selMod) {
-      var mine = G.players[ME].modules;
+      var mine = G.players[meIdx()].modules;
       selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || null;
     }
     G.players.forEach(function (s, si) {
       Object.keys(s.modules).forEach(function (id) {
         var m = s.modules[id];
-        var canAct = si === ME && G.active === ME && G.phase === 'action' && !G.pending &&
+        var canAct = si === meIdx() && G.phase === 'action' && !G.pending &&
                      !m.exhausted && !!Engine.fx(m.name, 'mod').activate;
         var bad = !Engine.meetsReq(s, m);
-        var pickable = si === ME && p && p.kind === 'move';
+        var pickable = si === meIdx() && p && p.kind === 'move';
         var cls = 'mod' + (si === THEM ? ' foe' : '') + (id === s.coreId ? ' core' : '') +
                   (m.exhausted ? ' exh' : '') + (canAct || pickable ? ' ready' : '') + (bad ? ' badreq' : '') +
-                  (si === ME && id === selMod ? ' sel' : '') +
+                  (si === meIdx() && id === selMod ? ' sel' : '') +
                   (targetIds.indexOf(id) >= 0 ? ' targetable' : '');
         html += obj(cls, m.x, m.y, shortName(m.name), m.hull, id,
-                    si === ME && m.moveLeft > 0 ? m.moveLeft : 0);
+                    si === meIdx() && m.moveLeft > 0 ? m.moveLeft : 0);
       });
       Object.keys(s.deployables).forEach(function (id) {
         var d = s.deployables[id];
-        var canAct = si === ME && G.active === ME && G.phase === 'action' && !G.pending &&
+        var canAct = si === meIdx() && G.phase === 'action' && !G.pending &&
                      !d.exhausted && !!Engine.fx(d.name, 'mod').activate;
         var moving = p && p.kind === 'moveObject' && p.objId === id;
         html += obj('dep' + (canAct ? ' ready' : '') + (moving ? ' moving' : ''),
@@ -236,8 +284,8 @@
   }
 
   function renderHand(G) {
-    var s = G.players[ME], html = '';
-    var mine = G.active === ME && !G.pending && !G.over;
+    var s = G.players[meIdx()], html = '';
+    var mine = G.active === meIdx() && !G.pending && !G.over;
     var canPlay = mine && G.phase === 'play';
     var myTurn = mine && G.phase === 'action';
     s.hand.forEach(function (id) {
@@ -293,7 +341,7 @@
   function renderPrompt(G) {
     var p = G.pending;
     if (!p) {
-      promptEl.innerHTML = G.active !== ME
+      promptEl.innerHTML = G.active !== meIdx()
         ? '<div class="p-label">Enemy turn</div><div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
           esc(AICommander.describe(THEM)) + '</div>'
         : G.phase === 'play'
@@ -343,7 +391,7 @@
       if (p.kind === 'target' && o && p.targets.indexOf(o.getAttribute('data-obj')) >= 0)
         return Engine.resolve(o.getAttribute('data-obj'));
       /* during a move prompt, clicking one of your modules picks which one the controls drive */
-      if (p.kind === 'move' && o && G.players[ME].modules[o.getAttribute('data-obj')]) {
+      if (p.kind === 'move' && o && G.players[meIdx()].modules[o.getAttribute('data-obj')]) {
         selMod = o.getAttribute('data-obj'); Engine.emit(); return;
       }
       var c = e.target.closest('.cell');
@@ -352,8 +400,8 @@
       return;
     }
     /* no prompt open: clicking your own ready piece activates it */
-    if (!o || G.active !== ME || G.phase !== 'action') return;
-    var id = o.getAttribute('data-obj'), s = G.players[ME];
+    if (!o || G.active !== meIdx() || G.phase !== 'action') return;
+    var id = o.getAttribute('data-obj'), s = G.players[meIdx()];
     if (s.modules[id]) Engine.activateModule(id);
     else if (s.deployables[id]) Engine.activateDeployable(id);
   });
@@ -372,11 +420,16 @@
   });
   document.getElementById('endBtn').addEventListener('click', function () { Engine.endTurn(); });
   document.getElementById('playPhaseBtn').addEventListener('click', function () { Engine.endPlayPhase(); });
-  document.getElementById('newBtn').addEventListener('click', function () { start(); });
+  function askMode() { document.getElementById('modePick').classList.remove('hidden'); }
+  document.getElementById('newBtn').addEventListener('click', askMode);
+  document.getElementById('modePick').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-mode]');
+    if (b) start(b.getAttribute('data-mode'));
+  });
 
   /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
   function nudge(dx, dy) {
-    var G = Engine.get(), p = G.pending, s = G.players[ME];
+    var G = Engine.get(), p = G.pending, s = G.players[meIdx()];
     if (p && p.kind === 'moveObject') { Engine.stepDeployable(p.objId, dx, dy); return; }
     if (!selMod || !s.modules[selMod] || s.modules[selMod].moveLeft <= 0) selMod = nextMovable(s);
     if (selMod) Engine.moveModule(selMod, dx, dy);
@@ -389,7 +442,7 @@
                w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] };
   document.addEventListener('keydown', function (e) {
     var G = Engine.get();
-    if (!G || G.active !== ME) return;
+    if (!G || G.active !== meIdx()) return;
     var d = DIRS[e.key];
     if (d) { e.preventDefault(); nudge(d[0], d[1]); }
     if (e.key === 'Escape' && G.pending) { e.preventDefault(); Engine.resolve(null); }
@@ -398,10 +451,41 @@
 
   /* ---------- enemy turn ----------
      All decision-making lives in client/game/ai/. This page only drives the clock. */
-  setInterval(function () { AICommander.tick(THEM); }, 380);
+  setInterval(function () { if (MODE === 'ai') AICommander.tick(THEM); }, 380);
+
+  /* ---------- resizable hand ---------- */
+  (function () {
+    var grip = document.getElementById('handGrip'), wrap = document.getElementById('handWrap');
+    var MIN = 64, drag = null;
+    function maxH() { return Math.round(window.innerHeight * 0.72); }
+    function setH(h) {
+      h = Math.max(MIN, Math.min(maxH(), Math.round(h)));
+      document.documentElement.style.setProperty('--hand-h', h + 'px');
+      try { localStorage.setItem('frigateHandH', h); } catch (e) {}
+    }
+    try {
+      var saved = parseInt(localStorage.getItem('frigateHandH'), 10);
+      if (saved) setH(saved);
+    } catch (e) {}
+    grip.addEventListener('pointerdown', function (e) {
+      drag = { y: e.clientY, h: wrap.getBoundingClientRect().height };
+      grip.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    grip.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      setH(drag.h - (e.clientY - drag.y));   /* drag up grows the bar */
+    });
+    function stop() { drag = null; }
+    grip.addEventListener('pointerup', stop);
+    grip.addEventListener('pointercancel', stop);
+    /* double-click restores the default height */
+    grip.addEventListener('dblclick', function () { setH(132); });
+  })();
 
   Engine.onChange(render);
-  start();
+  start('ai');      /* build a board so the page is not blank behind the picker */
+  askMode();
 })();
 </script>
 </body>

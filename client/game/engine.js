@@ -11,7 +11,8 @@ var Engine = (function () {
   /* ---- rules constants ---- */
   var RULES = { attackDie: 6, attackHitsOn: 5,   /* d6, a 5 or 6 hits */
                 checkDie: 12, dc: 7,             /* d12 + skill, 7 or higher succeeds */
-                boardSize: 24, asteroidPct: 0.10, coreClearance: 3 };
+                boardSize: 24, asteroidPct: 0.10, coreClearance: 3,
+                asteroidHull: 3 };               /* terrain can be shot away */
 
   var G = null;                 // the live game
   var listeners = [];
@@ -128,7 +129,7 @@ var Engine = (function () {
 
   function newGame(cfgA, cfgB) {
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
-          log: [], seq: 1, over: null, queue: [] };
+          log: [], seq: 1, over: null, queue: [], asteroids: {} };
     [cfgA, cfgB].forEach(function (cfg, i) {
       var s = makeSide(cfg.name, cfg);
       s.idx = i; G.players.push(s);
@@ -162,10 +163,26 @@ var Engine = (function () {
     while (placed < count && cand.length) {
       var c = cand.splice(Math.floor(Math.random() * cand.length), 1)[0];
       if (cellAt(c.x, c.y)) continue;
-      occupy(c.x, c.y, { kind: 'asteroid' });
+      addAsteroid(c.x, c.y);
       placed++;
     }
     log(placed + ' asteroids scattered.');
+  }
+
+  function addAsteroid(x, y) {
+    if (!inBounds(x, y) || cellAt(x, y)) return null;
+    var id = uid('a');
+    G.asteroids[id] = { id: id, name: 'Asteroid', x: x, y: y,
+                        hull: RULES.asteroidHull, hullMax: RULES.asteroidHull, asteroid: true };
+    occupy(x, y, { kind: 'asteroid', id: id });
+    return id;
+  }
+  function damageAsteroid(a, amount) {
+    if (!a || amount <= 0) return 0;
+    a.hull -= amount;
+    log('Asteroid takes ' + amount + ' damage.');
+    if (a.hull <= 0) { log('Asteroid is destroyed.'); vacate(a.x, a.y); delete G.asteroids[a.id]; }
+    return amount;
   }
 
   function freeAdjacent(s, cx, cy, seed) {
@@ -368,15 +385,17 @@ var Engine = (function () {
     var origins = attackOrigins(s, o, ctx);
     var reach = resolveRange(s, o.range);
     var pool = Object.keys(enemy.modules).map(function (id) { return enemy.modules[id]; })
-      .concat(Object.keys(enemy.deployables).map(function (id) { return enemy.deployables[id]; }));
+      .concat(Object.keys(enemy.deployables).map(function (id) { return enemy.deployables[id]; }))
+      .concat(Object.keys(G.asteroids).map(function (id) { return G.asteroids[id]; }));
     var targets = pool.filter(function (m) {
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
     if (!targets.length) { log('No target in range with line of sight.'); return; }
     prompt({ kind: 'target', label: 'Choose a target', targets: targets.map(function (m) { return m.id; }),
       onResolve: function (targetId) {
+        var rock = G.asteroids[targetId];
         var isDep = !!enemy.deployables[targetId];
-        var m = enemy.modules[targetId] || enemy.deployables[targetId];
+        var m = rock || enemy.modules[targetId] || enemy.deployables[targetId];
         if (!m) return;
         var n = resolveCount(s, o.attacks, ctx);
         var dmg = resolveCount(s, o.dmg, ctx);
@@ -385,9 +404,11 @@ var Engine = (function () {
           var c = o.check ? check(s, o.check, RULES.dc) : attackRoll();
           if (c.hit) {
             log('Hit (' + c.text + ').');
-            if (isDep) damageDeployable(enemy, m, dmg); else damageModule(enemy, m, dmg);
+            if (rock) damageAsteroid(m, dmg);
+            else if (isDep) damageDeployable(enemy, m, dmg);
+            else damageModule(enemy, m, dmg);
           } else log('Miss (' + c.text + ').');
-          if (!enemy.modules[targetId] && !enemy.deployables[targetId]) break;
+          if (!G.asteroids[targetId] && !enemy.modules[targetId] && !enemy.deployables[targetId]) break;
         }
       } });
   };
@@ -468,10 +489,7 @@ var Engine = (function () {
         var spots = [[0,0]];
         if (o.pattern === 'selfAndAllAdjacent')
           spots = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-        spots.forEach(function (d) {
-          var x = cell.x + d[0], y = cell.y + d[1];
-          if (inBounds(x, y) && !cellAt(x, y)) occupy(x, y, { kind: 'asteroid' });
-        });
+        spots.forEach(function (d) { addAsteroid(cell.x + d[0], cell.y + d[1]); });
         log('Asteroids placed.');
       } });
   };
@@ -723,6 +741,7 @@ var Engine = (function () {
     endPlayPhase: endPlayPhase, hasLos: hasLos, lineBlocked: lineBlocked,
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,
+    addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
     findTech: findTech, findMod: findMod, fx: fx, checkWin: checkWin

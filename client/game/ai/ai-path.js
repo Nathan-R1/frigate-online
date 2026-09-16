@@ -28,10 +28,13 @@ var AIPath = (function () {
     return true;
   }
 
-  /* every offset reachable within the Move budget, with the step path to each */
-  function reachable(s) {
+  /* Offsets the formation can translate to, searched out to `horizon` steps — which is
+     deliberately further than this turn's Move. A destination we cannot reach yet is still
+     worth knowing about: we commit the first few steps now and continue next turn, which is
+     how the fleet gets through a gap that takes longer to thread than one turn of Move. */
+  function reachable(s, horizon) {
     var mods = AIKnowledge.modList(s);
-    var max = budget(s);
+    var max = horizon === undefined ? budget(s) : horizon;
     var seen = { '0,0': { dx: 0, dy: 0, cost: 0, from: null, step: null } };
     if (!mods.length || max <= 0) return seen;
     var q = [seen['0,0']], dirs = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -63,19 +66,32 @@ var AIPath = (function () {
     return true;
   }
 
-  /* move to the offset with the best doctrine score; rolls back anything illegal */
-  function moveTo(s, node) {
-    if (!node || (!node.dx && !node.dy)) return false;
+  function pathOf(node) {
     var steps = [];
     for (var n = node; n && n.step; n = n.from) steps.unshift(n.step);
-    var snap = Engine.snapshotModules(s.idx);
-    var failBefore = Engine.failingModules(s).length;
-    for (var i = 0; i < steps.length; i++) {
-      if (!applyStep(s, steps[i][0], steps[i][1])) { Engine.restoreModules(s.idx, snap); return false; }
-    }
-    if (Engine.failingModules(s).length > failBefore) { Engine.restoreModules(s.idx, snap); return false; }
-    return true;
+    return steps;
   }
 
-  return { reachable: reachable, moveTo: moveTo, budget: budget, canTranslate: canTranslate };
+  /* Walk as far along a route as this turn's Move allows. Partial progress is kept — that is
+     the point of planning past the budget — but the fleet is rolled back if a step would
+     strand a module, so slow progress never costs us one. */
+  function advance(s, node) {
+    var steps = pathOf(node);
+    if (!steps.length) return 0;
+    var snap = Engine.snapshotModules(s.idx);
+    var failBefore = Engine.failingModules(s).length;
+    var taken = 0;
+    for (var i = 0; i < steps.length; i++) {
+      if (budget(s) <= 0) break;
+      if (!applyStep(s, steps[i][0], steps[i][1])) break;   /* blocked: keep what we gained */
+      taken++;
+    }
+    if (Engine.failingModules(s).length > failBefore) { Engine.restoreModules(s.idx, snap); return 0; }
+    return taken;
+  }
+
+  function moveTo(s, node) { return advance(s, node) > 0; }
+
+  return { reachable: reachable, moveTo: moveTo, advance: advance, pathOf: pathOf,
+           budget: budget, canTranslate: canTranslate };
 })();
