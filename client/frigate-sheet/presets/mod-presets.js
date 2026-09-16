@@ -2,7 +2,7 @@ var MOD_PRESETS = [
     {name:'Quantum Disrupter', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 3 Weapon Modules to Target an Object: Range: 12, Check:Sensors, Damage: 6 ☣ ; Create an anomaly on a random space 0-11 away from this Module.'},
     {name:'Citadel', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'defense', onbuild:'', passive:'Shares Hull HP with your Core, and counts as a Core Module for the purposes of fulfilling requirements.', onactivate:''},
     {name:'Core', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'movement', onbuild:'', passive:'Hull HP is shared by Core Modules.', onactivate:''},
-    {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable.', onactivate:''},
+    {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable. This is a Stealth Effect.', onactivate:''},
     {name:'Directed Laser Beam', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to target an Object:\nRange: any, Attacks: 1, Dmg: 2 ⚡ (4 if range >= 10)'},
     {name:'Fusion Mine', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'offense', onbuild:'', passive:'When destroyed or an enemy enters this space activate.', onactivate:'Range: 1 AoE, Save: Piloting, Dmg: 2d6 💥\nAfter activating, remove.'},
     {name:'Armor', traits:'', req:'Adjacent to any, 2 spaces from Core', hull:'2', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:''},
@@ -17,6 +17,7 @@ var MOD_PRESETS = [
     {name:'TAT Guided', traits:'', req:'', hull:'2', speed:'4', type:'deployable', tt:'offense', onbuild:'Exhaust', passive:'', onactivate:'You may move this deployable up to 4 spaces, then Target an Object:\nRange: 1, Check: Search, Dmg: 4 💥\nAfter hitting an Object remove this deployable.'},
     {name:'Thrust Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust to gain 2 Move for each module.'},
     {name:'Shield Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent modules to gain 2 shields.'},
-    {name:'SPEAR Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent weapons modules to:\nRange: Sensors, Attacks: 4, Dmg: 2 \u26a1 (Exhaust the module hit for 1 round).'}
+    {name:'SPEAR Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent weapons modules to:\nRange: Sensors, Attacks: 4, Dmg: 2 \u26a1 (Exhaust the module hit for 1 round).'},
+    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'', passive:'This Module may appear as any other Module. This is a Stealth Effect.', onactivate:''}
   ];
 MOD_PRESETS.sort(function(a,b){return a.name.toLowerCase().localeCompare(b.name.toLowerCase());});
