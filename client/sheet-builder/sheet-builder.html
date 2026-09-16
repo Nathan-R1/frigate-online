@@ -1382,8 +1382,11 @@
     return true;
   }
   function techOptions() {
+    /* deckCounts() builds its keys core grants first, then each drawn card at the point it was
+       first added, and object key order is insertion order — so the deck already reads in the
+       order it was assembled. Sorting it would throw that away. */
     var deck = deckCounts();
-    var names = Object.keys(deck).sort(function (a, b) { return a.toLowerCase().localeCompare(b.toLowerCase()); });
+    var names = Object.keys(deck);
     var out = [];
     for (var i = 0; i < names.length; i++) {
       var t = findTech(names[i]);
