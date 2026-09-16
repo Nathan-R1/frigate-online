@@ -291,6 +291,18 @@
     font-family: var(--mono); font-size: 13px; line-height: 1;
   }
   .exp-del:hover { background: var(--red); color: var(--ink-strong); }
+  /* promote / demote, sitting to the left of the delete X. A part-promoted stack shows both,
+     so they live in one row rather than each claiming its own offset. */
+  .exp-starters { position: absolute; top: 8px; right: 44px; display: flex; gap: 4px; }
+  .exp-starter {
+    display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+    height: 26px; padding: 0 7px; border-radius: 6px; cursor: pointer;
+    background: rgba(255,255,255,.06); border: 1px solid var(--line-bright); color: var(--ink-mid);
+    font-family: var(--mono); font-size: 12px; line-height: 1;
+  }
+  .exp-starter .ticon { width: 13px; height: 13px; display: block; }
+  .exp-starter:hover { border-color: var(--amber); color: var(--amber); }
+  .cost-starter { color: var(--ink); }
   .exp-count {
     position: absolute; top: 8px; right: 42px;
     font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--amber);
@@ -690,7 +702,10 @@
     for (var i = 0; i < CORE_SECTIONS.length; i++) o[CORE_SECTIONS[i].key] = null;
     return o;
   }
-  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, showAllDraw: false, inv: emptyInv() }; }
+  /* `starters` counts how many copies of each tech are promoted to Starter Cards. A stack can
+     be split — two of your four Cannon Units deploying before combat and two staying in the
+     deck — so the count lives per name, not per preset. */
+  function emptyChoices() { return { hulls: {}, level: DEFAULT_LEVEL, removed: {}, core: emptyCore(), tech: null, mod: null, skills: defaultSkills(), shipName: '', disableLimits: false, statBlocks: false, showAllDraw: false, inv: emptyInv(), starters: {} }; }
   function loadChoices() {
     try {
       var raw = localStorage.getItem(BUILDER_KEY);
@@ -743,6 +758,14 @@
           c.inv = emptyInv();
           if (s.tech) c.inv.tech[s.tech] = 1;
           if (s.mod) c.inv.mod[s.mod] = 1;
+        }
+        /* how many copies of each tech were promoted to Starter Cards */
+        c.starters = {};
+        if (s.starters && typeof s.starters === 'object') {
+          Object.keys(s.starters).forEach(function (name) {
+            var n = parseInt(s.starters[name], 10);
+            if (!isNaN(n) && n >= 0) c.starters[name] = n;
+          });
         }
         if (s.skills && typeof s.skills === 'object') {
           for (var i = 0; i < SKILL_NAMES.length; i++) {
@@ -1104,6 +1127,39 @@
     return null;
   }
 
+  /* ===== Starter Cards =====
+     A Starter Card is played before combat begins, so it is how a ship arrives with a hull
+     instead of a bare Core. The trait is normally on the preset, but promotion is per copy:
+     the count here says how many of a stack carry it, and buildSheet writes the trait onto
+     exactly that many of the copies it emits. */
+  var STARTER_RE = /start(?:er|ing)\s*card/i;
+  function presetIsStarter(name) {
+    var t = findTech(name);
+    return !!t && STARTER_RE.test(t.traits || '');
+  }
+  function withStarter(traits) {
+    return STARTER_RE.test(traits || '') ? traits : ((traits ? traits + ' ' : '') + 'Starter Card');
+  }
+  function withoutStarter(traits) {
+    return String(traits || '').replace(/\s*start(?:er|ing)\s*card/ig, '').replace(/\s{2,}/g, ' ').trim();
+  }
+  function copiesOf(name) { return deckCounts()[name] || 0; }
+  /* how many copies of this tech are Starter Cards. With no explicit choice recorded, a tech
+     whose preset carries the trait counts all of its copies. */
+  function starterCountOf(name) {
+    var copies = copiesOf(name);
+    var m = choices.starters || {};
+    var n = Object.prototype.hasOwnProperty.call(m, name) ? parseInt(m[name], 10)
+                                                          : (presetIsStarter(name) ? copies : 0);
+    if (isNaN(n)) n = 0;
+    return Math.max(0, Math.min(copies, n));
+  }
+  function setStarterCount(name, n) {
+    if (!choices.starters) choices.starters = {};
+    choices.starters[name] = Math.max(0, Math.min(copiesOf(name), n));
+    saveChoices();
+  }
+
   /* ===== screens ===== */
   var landing = document.getElementById('landing');
   var win = document.getElementById('win');
@@ -1152,7 +1208,18 @@
       html += '<button type="button" class="exp-add" data-add="' + key + '">+</button>';
     }
     if (key === 'tech') {
-      html += '<button type="button" class="exp-del" data-del="' + id.replace(/"/g, '&quot;') +
+      /* A stack can be part-promoted, so both buttons show while it is mixed: one copy at a
+         time moves between "deploys before combat" and "stays in the deck". */
+      var copies = copiesOf(id), promoted = starterCountOf(id);
+      var q = id.replace(/"/g, '&quot;'), row = '';
+      if (promoted > 0)
+        row += '<button type="button" class="exp-starter demote" data-demote="' + q +
+          '" title="Demote from Starter Card">' + STARTER_ICON + '<span>−</span></button>';
+      if (promoted < copies)
+        row += '<button type="button" class="exp-starter promote" data-promote="' + q +
+          '" title="Promote to Starter Card">' + STARTER_ICON + '<span>+</span></button>';
+      if (row) html += '<span class="exp-starters">' + row + '</span>';
+      html += '<button type="button" class="exp-del" data-del="' + q +
         '" title="Remove one copy from your deck">✕</button>';
     }
     for (var i = 0; i < expand.length; i++) {
@@ -1191,6 +1258,10 @@
   var DEPLOYABLE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="var(--icon-amber)" stroke-width="1.6"/><circle cx="8" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="8" r="1.4" fill="var(--icon-amber)"/><circle cx="12" cy="12" r="1.4" fill="var(--icon-amber)"/><circle cx="8" cy="16" r="1.4" fill="var(--icon-amber)"/><circle cx="16" cy="16" r="1.4" fill="var(--icon-amber)"/></svg>';
   var STORAGE_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h20l-2-4H4L2 8Z" stroke="var(--icon-logistics)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="var(--icon-charged)" stroke-width="1.8"/><path d="M21 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="var(--icon-charged)" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  /* Starter Card: the power symbol, for a card that is switched on before the game begins */
+  var STARTER_ICON = '<svg class="ticon" viewBox="0 0 64 64" fill="none" aria-hidden="true">' +
+    '<g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round">' +
+    '<path d="M43.66 13.34 A22 22 0 1 1 20.34 13.34"/><path d="M32 6 V30"/></g></svg>';
   var HULL_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   /* rarity marks. The source art is drawn at 120x92 with a 2px stroke; at ~18px wide that
      renders sub-pixel, so the stroke is scaled up to keep the shapes readable. */
@@ -1211,12 +1282,15 @@
   function costPip(cls, icon, n, label) {
     return '<span class="cost ' + cls + '" title="' + label + '">' + icon + n + '</span>';
   }
-  function techCostHtml(t) {
+  function techCostHtml(t, starters) {
     var st = parseInt(t.storage, 10);
     var ld = parseInt(t.leadership, 10);
     var pips = '';
     if (!isNaN(st) && st > 0) pips += costPip('cost-st', STORAGE_ICON, st, 'Storage cost');
     if (!isNaN(ld) && ld > 0) pips += costPip('cost-ld', LEADERSHIP_ICON, ld, 'Capacity cost');
+    if (starters > 0)
+      pips += costPip('cost-starter', STARTER_ICON, starters,
+        starters + ' of these deploy before combat as Starter Cards');
     return pips ? '<span class="opt-cost">' + pips + '</span>' : '';
   }
   /* "Create Module Cannon." / "Create deployable Fusion Mine" earn an info pip right after the
@@ -1386,7 +1460,7 @@
       rarityIcon(rarity) + '</span>';
     /* the costs ride in the title row but are lifted out of its flow to the card's
        bottom-left corner, so the copies badge still claims the top-right */
-    var titleTags = techCostHtml(t);
+    var titleTags = techCostHtml(t, key === 'tech' ? starterCountOf(t.name) : 0);
     if (count > 1) {
       titleTags += '<span class="opt-count copies" title="You have ' + count + ' copies of ' +
         escapeHtml(t.name) + ' in your deck.">' + DECK_ICON + count + ' copies</span>';
@@ -1513,10 +1587,31 @@
     }
     return total;
   }
+  /* every copy in the deck promoted to a Starter Card */
+  function starterTotal() {
+    var inv = deckCounts(), n = 0;
+    for (var k in inv) n += starterCountOf(k);
+    return n;
+  }
   function skillCost(name) {
     if (name === 'Logistics') return storageCost();
     if (name === 'Leadership') return leadershipCost();
+    if (name === 'Science') return starterTotal();
     return 0;
+  }
+  /* What the skill allows. Storage and Capacity are capped by the skill itself; Science buys
+     Starter Cards at half rate on top of a base three, so its allowance is not its value. */
+  function skillCap(name, eff) {
+    if (name === 'Science') return 3 + Math.floor(eff / 2);
+    return eff;
+  }
+  function skillWarning(name, cost, cap) {
+    if (name === 'Science')
+      return '⚠ You have promoted ' + cost + ' Starter Card' + (cost === 1 ? '' : 's') +
+             ' — more than your allowance of ' + cap + ' (3 plus half your Science). ' +
+             'Raise Science or demote a card.';
+    return '⚠ Your tech deck costs ' + cost + ' — more than this skill\'s cap of ' + cap +
+           '. Raise ' + esc(name) + ' or drop cards.';
   }
   function recommendSkills() {
     var sk = {};
@@ -1582,7 +1677,8 @@ function skillsOptions() {
       var desc = SKILL_DESCRIPTIONS[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
       var cost = skillCost(n);
-      var short = cost > 0 && cost > eff;
+      var cap = skillCap(n, eff);
+      var short = cost > 0 && cost > cap;
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
         '<div class="sk-head' + (short ? ' sk-warn' : '') + '">' +
@@ -1599,8 +1695,7 @@ function skillsOptions() {
         (desc ? '<button type="button" class="skinfo' + (infoOpen ? ' on' : '') + '" title="' + esc(desc) + '"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg></button>' : '') +
         '</div>' +
         (infoOpen ? '<span class="sk-desc">' + esc(desc) + '</span>' : '') +
-        (short ? '<span class="sk-warn-desc">⚠ Your tech deck costs ' + cost +
-          ' — more than this skill\'s cap of ' + eff + '. Raise ' + esc(n) + ' or drop cards.</span>' : '') +
+        (short ? '<span class="sk-warn-desc">' + skillWarning(n, cost, cap) + '</span>' : '') +
         '</div>'
       );
     }
@@ -1936,9 +2031,27 @@ function skillsOptions() {
   }
 
   document.getElementById('winOptions').addEventListener('click', function (e) {
+    var promote = e.target.closest('[data-promote]');
+    if (promote) {
+      var pn = promote.getAttribute('data-promote');
+      setStarterCount(pn, starterCountOf(pn) + 1);
+      renderOptions();
+      return;
+    }
+    var demote = e.target.closest('[data-demote]');
+    if (demote) {
+      var dn = demote.getAttribute('data-demote');
+      setStarterCount(dn, starterCountOf(dn) - 1);
+      renderOptions();
+      return;
+    }
     var del = e.target.closest('.exp-del');
     if (del) {
-      removeOneFromDeck(del.getAttribute('data-del'));
+      var dname = del.getAttribute('data-del');
+      removeOneFromDeck(dname);
+      /* a stack cannot hold more Starter Cards than it has copies left */
+      if (choices.starters && Object.prototype.hasOwnProperty.call(choices.starters, dname))
+        setStarterCount(dname, starterCountOf(dname));
       saveChoices();
       renderOptions();
       return;
@@ -2234,6 +2347,14 @@ function skillsOptions() {
         if (json.tech[ti] && findTech(json.tech[ti].name)) {
           var tn = findTech(json.tech[ti].name).name;
           c.inv.tech[tn] = (c.inv.tech[tn] || 0) + 1;
+          /* The trait rides on the copy, so count the promoted ones back out of the sheet —
+             but only when the sheet actually carries traits. A bare name list says nothing
+             about promotion, and must not silently demote a preset-level Starter Card. */
+          if (!c.starters) c.starters = {};
+          if (json.tech[ti].traits !== undefined && json.tech[ti].traits !== null) {
+            if (!Object.prototype.hasOwnProperty.call(c.starters, tn)) c.starters[tn] = 0;
+            if (STARTER_RE.test(json.tech[ti].traits)) c.starters[tn]++;
+          }
           matched = true;
         }
       }
@@ -2342,10 +2463,11 @@ function skillsOptions() {
     for (var tn in techCounts) {
       var tech = findTech(tn);
       if (!tech) continue;
+      var starters = starterCountOf(tn);
       for (var tk = 0; tk < techCounts[tn]; tk++) {
         s.tech.push({
           name: tech.name,
-          traits: tech.traits || '',
+          traits: tk < starters ? withStarter(tech.traits) : withoutStarter(tech.traits),
           onbuild: tech.onbuild || '',
           passive: tech.passive || '',
           onactivate: tech.onactivate || '',

@@ -89,10 +89,16 @@ var Engine = (function () {
     return s;
   }
 
-  function addCardToDeck(s, techName) {
+  /* A deck entry is a name, or { name, traits } when the sheet has given this particular copy
+     traits of its own. Promoting one Cannon Unit to a Starter Card must not promote the other
+     three, so traits live on the copy and fall back to the preset. */
+  function addCardToDeck(s, entry) {
+    var techName = (entry && entry.name) || entry;
     var t = findTech(techName); if (!t) return null;
     var id = uid('c');
-    s.cards[id] = { id: id, name: techName, charges: 0, heat: 0, exhausted: false, durations: [], owner: s.idx };
+    s.cards[id] = { id: id, name: techName, charges: 0, heat: 0, exhausted: false,
+                    durations: [], owner: s.idx };
+    if (entry && entry.traits !== undefined && entry.traits !== null) s.cards[id].traits = entry.traits;
     s.deck.push(id);
     return id;
   }
@@ -169,17 +175,24 @@ var Engine = (function () {
     return G;
   }
 
+  /* the presets spell it "Starter Card"; accept "Starting Card" too so a card tagged either
+     way deploys rather than silently sitting in the deck */
+  function hasStarterTrait(traits) { return /start(?:er|ing)\s*card/i.test(traits || ''); }
   function isStarterCard(name) {
     var t = findTech(name);
-    /* the presets spell it "Starter Card"; accept "Starting Card" too so a card tagged either
-       way deploys rather than silently sitting in the deck */
-    return !!t && /start(?:er|ing)\s*card/i.test(t.traits || '');
+    return !!t && hasStarterTrait(t.traits);
+  }
+  /* a copy's own traits win over the preset's, so a promoted copy deploys and its siblings do not */
+  function cardIsStarter(card) {
+    if (!card) return false;
+    if (card.traits !== undefined && card.traits !== null) return hasStarterTrait(card.traits);
+    return isStarterCard(card.name);
   }
 
   function playStarterCards(s) {
     s.deck.slice().forEach(function (id) {
       var card = s.cards[id];
-      if (!card || !isStarterCard(card.name)) return;
+      if (!card || !cardIsStarter(card)) return;
       var i = s.deck.indexOf(id);
       if (i >= 0) s.deck.splice(i, 1);
       s.played.push(id);
@@ -1092,7 +1105,8 @@ var Engine = (function () {
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
     undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph,
-    hostileObjects: hostileObjects, objectById: objectById, isStarterCard: isStarterCard,
+    hostileObjects: hostileObjects, objectById: objectById,
+    isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
