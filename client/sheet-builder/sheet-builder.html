@@ -467,6 +467,12 @@
     font-family: var(--mono); font-size: 11px; letter-spacing: .03em;
     color: var(--ink-mid); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px;
   }
+  .seat-banner { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    margin:0 0 10px; padding:8px 12px; border:1px solid var(--icon-cyan);
+    border-radius:8px; background:rgba(53,208,224,.07);
+    font-size:12.5px; color:var(--ink-mid); }
+  .seat-banner #seatBannerText { flex:1; min-width:180px; }
+  .seat-banner .b-btn { flex:none; }
 </style>
 </head>
 <body>
@@ -503,6 +509,12 @@
     <div class="hint-text" id="landingHint">No saved choices yet.</div>
   </section>
 
+  <!-- SEAT BANNER: shown when the game sent us here to build for one of its players -->
+  <div class="seat-banner" id="seatBanner" style="display:none;">
+    <span id="seatBannerText"></span>
+    <button type="button" class="b-btn" onclick="scrapSeatBuild()">Scrap &amp; start over</button>
+  </div>
+
   <!-- PROGRESS -->
   <div class="psteps" id="psteps"></div>
 
@@ -526,7 +538,7 @@
     <div class="eyebrow"><span class="eb-text">Review &amp; Export</span></div>
     <div class="win-nav">
       <button type="button" class="b-btn" id="expBackBtn">← Back</button>
-      <button type="button" class="b-btn primary ready" onclick="exportSheet()">⇩ Export</button>
+      <button type="button" class="b-btn primary ready" id="exportBtn" onclick="exportSheet()">⇩ Export</button>
     </div>
     <div class="exp-grid" id="expSummary"></div>
     <div class="exp-field">
@@ -746,6 +758,21 @@
       return c;
     } catch (e) { return emptyChoices(); }
   }
+  /* run a choices blob through loadChoices' normalisation, so anything stale or malformed in
+     a seat's saved build is repaired the same way the autosave is */
+  function mergeChoices(raw) {
+    var keep = null;
+    try { keep = localStorage.getItem(BUILDER_KEY); } catch (e) {}
+    try {
+      localStorage.setItem(BUILDER_KEY, JSON.stringify(raw));
+      return loadChoices();
+    } catch (e) {
+      return emptyChoices();
+    } finally {
+      try { if (keep !== null) localStorage.setItem(BUILDER_KEY, keep); } catch (e2) {}
+    }
+  }
+
   function saveChoices() {
     try { localStorage.setItem(BUILDER_KEY, JSON.stringify(choices)); } catch (e) {}
   }
@@ -2370,6 +2397,60 @@ function skillsOptions() {
      which any open board tab overwrites as it unloads. */
   var SHEET_HANDOFF_KEY = 'frigatePendingSheet';
   var BOARD_URL = '../board.html';
+
+  /* ===== editing a seat in the game's new-game roster =====
+     The game parks a request here and sends the browser over. We adopt that seat's saved
+     choices as the working state — so the build can be picked up where it was left, or
+     scrapped with "Create new character" — and hand the finished sheet back on the way out.
+     Only the choices travel, because they are the builder's own state and round-trip exactly;
+     the sheet is derived from them when we return. */
+  var SEAT_REQUEST_KEY = 'frigateBuilderRequest';
+  var GAME_SEATS_KEY = 'frigateGameSeats';
+  var seatReq = null;
+
+  /* The game hands the request over in localStorage, because that is what crosses a
+     navigation. We move it straight into sessionStorage: the job outlives a reload of this
+     tab, which a long build will hit, but does not follow the builder into a fresh tab
+     opened later from somewhere else. */
+  function readSeatRequest() {
+    try {
+      var raw = localStorage.getItem(SEAT_REQUEST_KEY);
+      if (raw) { sessionStorage.setItem(SEAT_REQUEST_KEY, raw); localStorage.removeItem(SEAT_REQUEST_KEY); }
+      var held = sessionStorage.getItem(SEAT_REQUEST_KEY);
+      if (!held) return null;
+      var r = JSON.parse(held);
+      return (r && typeof r.seat === 'number') ? r : null;
+    } catch (e) { return null; }
+  }
+
+  /* Assign the finished build to the player who sent us here and go back to the game. */
+  function saveToSeat() {
+    if (!seatReq) return false;
+    var seats;
+    try { seats = JSON.parse(localStorage.getItem(GAME_SEATS_KEY) || '[]'); } catch (e) { seats = []; }
+    if (!Array.isArray(seats)) seats = [];
+    while (seats.length <= seatReq.seat) seats.push(null);
+    seats[seatReq.seat] = { sheet: buildSheet(), choices: choices };
+    try {
+      localStorage.setItem(GAME_SEATS_KEY, JSON.stringify(seats));
+      sessionStorage.removeItem(SEAT_REQUEST_KEY);
+    } catch (e) {
+      alert('Could not send the sheet back to the game: this browser is not allowing local storage.');
+      return false;
+    }
+    window.location.href = seatReq.ret || '../game.html';
+    return true;
+  }
+  function seatLabel() {
+    return seatReq ? (seatReq.label || ('Player ' + (seatReq.seat + 1))) : '';
+  }
+
+  /* Throw this seat's build away and begin a fresh run for the same player. */
+  function scrapSeatBuild() {
+    if (!confirm('Scrap this build and start over for ' + seatLabel() + '?')) return;
+    startNew();
+  }
+  window.scrapSeatBuild = scrapSeatBuild;
   function loadInGame(data) {
     try {
       localStorage.setItem(SHEET_HANDOFF_KEY, JSON.stringify(data));
@@ -2391,6 +2472,9 @@ function skillsOptions() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    /* Launched from the game to build for a seat? Then Export means "this is the one":
+       the file is still downloaded, and the build goes straight back to that player. */
+    if (seatReq) { saveToSeat(); return; }
     /* the confirm blocks here while the download finishes in the background */
     if (confirm('Load in-game?')) loadInGame(data);
   }
@@ -2401,13 +2485,32 @@ function skillsOptions() {
 
   /* ===== init ===== */
   choices = loadChoices();
+  seatReq = readSeatRequest();
+  if (seatReq) {
+    /* The seat's own build replaces whatever was in progress here. Its builder choices are
+       preferred because they round-trip exactly; a sheet is the fallback, and it is how a
+       seat that has never been built opens on the kit it would otherwise fly. */
+    if (seatReq.choices) choices = mergeChoices(seatReq.choices);
+    else { choices = emptyChoices(); if (seatReq.sheet) applyLoadedSheet(seatReq.sheet); }
+    saveChoices();
+    var eb = document.getElementById('exportBtn');
+    if (eb) eb.textContent = '⇩ Export & assign to ' + seatLabel();
+    var bn = document.getElementById('seatBanner');
+    if (bn) {
+      bn.style.display = '';
+      document.getElementById('seatBannerText').textContent =
+        'Building for ' + seatLabel() + ' — Export sends this sheet back to the game.';
+    }
+  }
   rebuildSteps();
   document.getElementById('shipName').value = choices.shipName;
   window.startNew = function () { startNew(); };
   window.loadExisting = function () { loadExisting(); };
   window.resumeRun = function () { resumeRun(); };
   window.goStep = goStep;
-  show('landing');
+  /* A seat arrives with a build to work on, so drop straight into the run at the first step
+     that still needs an answer instead of asking whether to start one. */
+  if (seatReq) resumeRun(); else show('landing');
   renderProgressDots();
 })();
 </script>

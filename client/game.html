@@ -229,14 +229,23 @@
   /* new-game roster */
   #modePick .box { min-width:min(92vw, 480px); text-align:left; }
   .rost-count { display:flex; gap:8px; margin:0 0 14px; }
-  .rost-row { display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:8px; align-items:center;
+  .rost-row { display:grid; grid-template-columns:1.1fr 1fr 1fr auto; gap:8px; align-items:center;
               padding:6px 0; border-top:1px solid var(--line); }
-  .rost-row .rn { font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--sc, var(--cyan)); }
+  .rost-row .rn { font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--sc, var(--cyan));
+                  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rost-row .rn small { display:block; font-weight:400; font-size:9.5px; color:var(--ink-dim);
+                        letter-spacing:.04em; }
+  .rost-edit { display:flex; align-items:center; justify-content:center; width:28px; height:28px;
+               padding:0; cursor:pointer; border-radius:5px; background:none;
+               border:1px solid var(--line-bright); color:var(--ink-mid); }
+  .rost-edit:hover { border-color:var(--cyan); color:var(--cyan); }
+  .rost-edit svg { width:14px; height:14px; display:block; }
   .rost-row select { width:100%; font-family:var(--mono); font-size:11px; padding:5px 6px;
                      background:var(--panel); color:var(--ink); border:1px solid var(--line-bright);
                      border-radius:5px; }
   .rost-note { font-size:11px; color:var(--ink-dim); margin:12px 0 0; }
-  @media (max-width:520px) { .rost-row { grid-template-columns:1fr 1fr; } .rost-row .rn { grid-column:1 / -1; } }
+  @media (max-width:520px) { .rost-row { grid-template-columns:1fr 1fr auto; }
+    .rost-row .rn { grid-column:1 / -1; } }
 </style>
 </head>
 <body>
@@ -310,6 +319,65 @@
      `team` groups seats that win and lose together. Two seats on two teams is the old
      one-versus-one game; four seats on two teams is a pairs match. */
   var SEATS = [{ team:0, ai:false }, { team:1, ai:true }];
+
+  /* ===== seat sheets =====
+     A seat may carry a build made in the sheet builder. We keep the finished sheet, which is
+     what the game plays with, alongside the builder's own choices, which is what lets the
+     build be reopened and edited rather than rebuilt from scratch. The roster itself is
+     remembered too, so sending the browser off to the builder and back does not lose a
+     four-player setup. */
+  var GAME_SEATS_KEY = 'frigateGameSeats';
+  var GAME_ROSTER_KEY = 'frigateGameRoster';
+  var SEAT_REQUEST_KEY = 'frigateBuilderRequest';
+  var BUILDER_URL = 'sheet-builder/sheet-builder.html';
+
+  function readStore(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function writeStore(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  var seatSheets = readStore(GAME_SEATS_KEY, []);
+  if (!Array.isArray(seatSheets)) seatSheets = [];
+  (function restoreRoster() {
+    var r = readStore(GAME_ROSTER_KEY, null);
+    if (!Array.isArray(r) || r.length < 2 || r.length > 4) return;
+    SEATS = r.map(function (x, i) {
+      return { team: (typeof x.team === 'number') ? x.team : i, ai: !!x.ai };
+    });
+  })();
+
+  function sheetOf(i) { return (seatSheets[i] && seatSheets[i].sheet) || null; }
+
+  /* Hand the seat's build over to the builder and go there. The choices travel, not the
+     sheet: they are the builder's own state, so the run picks up exactly where it stopped
+     and "Create new character" still scraps it cleanly. */
+  function editSeat(i) {
+    writeStore(GAME_ROSTER_KEY, SEATS);
+    writeStore(SEAT_REQUEST_KEY, {
+      seat: i, label: 'Player ' + (i + 1),
+      choices: (seatSheets[i] && seatSheets[i].choices) || null,
+      /* A seat that has never been built still opens on something: the stock frigate it
+         would otherwise fly, so the builder has a sheet to modify rather than a blank run. */
+      sheet: sheetOf(i) || stockSheet(i),
+      ret: window.location.pathname + window.location.search
+    });
+    window.location.href = BUILDER_URL;
+  }
+
+  /* The default kit as a sheet the builder can load — only the card names matter, the rest
+     it derives from the presets itself. */
+  function stockSheet(i) {
+    return {
+      shipName: '',
+      tech: starterDeck().map(function (n) { return { name: n }; }),
+      mods: LOADOUTS[i % LOADOUTS.length].map(function (n) { return { name: n }; })
+    };
+  }
   /* whichever local seat the controls and hand currently belong to */
   var VIEW = 0;
 
@@ -325,7 +393,9 @@
     return VIEW;
   }
   function sideName(i) {
-    return 'Player ' + (i + 1) + (isAI(i) ? ' (AI)' : '');
+    var sh = sheetOf(i);
+    var base = (sh && sh.shipName) ? sh.shipName : 'Player ' + (i + 1);
+    return base + (isAI(i) ? ' (AI)' : '');
   }
   function teamOf(i) { return SEATS[i] ? SEATS[i].team : i; }
   var gridEl = document.getElementById('grid');
@@ -343,15 +413,38 @@
                   ['Cannon','Armor','Thrust Engine'],
                   ['Cannon','P.D.','Thrust Engine'],
                   ['Cannon','Armor','Graviton Engine']];
+  /* What a seat brings to the table: its own build if it has one, the stock frigate if not.
+     Deployables in a sheet are things its cards create, not hull the ship starts with, so
+     only real modules are placed on the board. */
+  function seatConfig(i, seat) {
+    var base = { name: sideName(i), team: seat.team, ai: seat.ai,
+                 deck: starterDeck(), modules: LOADOUTS[i % LOADOUTS.length] };
+    var sh = sheetOf(i);
+    if (!sh) return base;
+    var deck = (sh.tech || []).map(function (t) { return t.name; })
+      .filter(function (n) { return !!Engine.findTech(n); });
+    var mods = (sh.mods || []).map(function (m) { return m.name; })
+      .filter(function (n) {
+        var p = Engine.findMod(n);
+        return p && p.type !== 'deployable' && n !== 'Core';
+      });
+    var skills = {};
+    Object.keys(sh.skills || {}).forEach(function (k) {
+      skills[k] = parseInt((sh.skills[k] || {}).points, 10) || 0;
+    });
+    if (deck.length) base.deck = deck;
+    if (mods.length) base.modules = mods;
+    if (Object.keys(skills).length) base.skills = skills;
+    return base;
+  }
+
   function start() {
     selMod = null;
     AICommander.reset();
     document.getElementById('modePick').classList.add('hidden');
+    writeStore(GAME_ROSTER_KEY, SEATS);
     VIEW = localSeats().length ? localSeats()[0] : 0;
-    Engine.newGame(SEATS.map(function (seat, i) {
-      return { name: sideName(i), team: seat.team, ai: seat.ai,
-               deck: starterDeck(), modules: LOADOUTS[i % LOADOUTS.length] };
-    }));
+    Engine.newGame(SEATS.map(function (seat, i) { return seatConfig(i, seat); }));
   }
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1019,6 +1112,11 @@
     SEATS.length = n;
     renderRoster();
   }
+  var EDIT_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.7" ' +
+    'stroke-linejoin="round"/><path d="M14.5 5.5 18.5 9.5" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round"/></svg>';
+
   function renderRoster() {
     var n = SEATS.length;
     /* dropping from four seats to two can leave a team letter that no longer exists */
@@ -1031,13 +1129,18 @@
       for (var t = 0; t < n; t++)
         teams += '<option value="' + t + '"' + (seat.team === t ? ' selected' : '') + '>Team ' +
                  TEAM_LETTER[t] + '</option>';
+      var sh = sheetOf(i);
+      var sub = sh ? esc(sh.shipName || sh.shipClass || 'Custom build') : 'Stock frigate';
       return '<div class="rost-row" style="--sc:' + SEAT_HEX[i % 4] + '">' +
-        '<span class="rn">Player ' + (i + 1) + '</span>' +
+        '<span class="rn">Player ' + (i + 1) + '<small>' + sub + '</small></span>' +
         '<select data-team="' + i + '">' + teams + '</select>' +
         '<select data-ai="' + i + '">' +
           '<option value="0"' + (seat.ai ? '' : ' selected') + '>Local player</option>' +
           '<option value="1"' + (seat.ai ? ' selected' : '') + '>Computer</option>' +
-        '</select></div>';
+        '</select>' +
+        '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
+          (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
+          EDIT_ICON + '</button></div>';
     }).join('');
     /* one team means nobody to fight, so there is no game to start */
     var used = {};
@@ -1054,6 +1157,10 @@
   rostCount.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-count]');
     if (b) setCount(+b.getAttribute('data-count'));
+  });
+  rostRows.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-edit]');
+    if (b) editSeat(+b.getAttribute('data-edit'));
   });
   rostRows.addEventListener('change', function (e) {
     var t = e.target;
