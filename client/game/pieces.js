@@ -1,0 +1,183 @@
+/* Board piece graphics.
+
+   The silhouettes, the slow rotations and the blinking lights are lifted from the tabletop
+   board (client/board.html) so the two views read the same way. A piece carries no text: its
+   shape says what class of module it is, and everything else — selection, exhaustion, a
+   broken connection, movement left — is a class or a floating badge.
+
+   hex = Core, triangle = Offense, square = Defense/Armor, diamond = Movement,
+   circle = Science, and anything unrecognised falls back to the hex. */
+var GamePieces = (function () {
+  'use strict';
+
+  var NS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs) {
+    var s = document.createElementNS(NS, tag);
+    for (var k in attrs) s.setAttribute(k, attrs[k]);
+    return s;
+  }
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+  function hexToRgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  /* multiply a colour: below 1 darkens it for the body fill, above 1 lifts the detail lines */
+  function shade(hex, f) {
+    var c = hexToRgb(hex);
+    return 'rgb(' + Math.round(clamp(c.r * f, 0, 255)) + ',' +
+                    Math.round(clamp(c.g * f, 0, 255)) + ',' +
+                    Math.round(clamp(c.b * f, 0, 255)) + ')';
+  }
+  function hashStr(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) / 4294967296;
+  }
+  function addRotate(node, dur, reverse) {
+    node.appendChild(svgEl('animateTransform', {
+      attributeName: 'transform', type: 'rotate',
+      from: reverse ? '360' : '0', to: reverse ? '0' : '360',
+      dur: dur, repeatCount: 'indefinite' }));
+  }
+  function addPing(node) {
+    node.appendChild(svgEl('animateTransform', {
+      attributeName: 'transform', type: 'scale', values: '.45;1.12', dur: '2.8s',
+      repeatCount: 'indefinite', calcMode: 'spline', keySplines: '0.2 0 0.6 1' }));
+    node.appendChild(svgEl('animate', {
+      attributeName: 'opacity', values: '0;.9;0', keyTimes: '0;.35;1',
+      dur: '2.8s', repeatCount: 'indefinite' }));
+  }
+
+  /* ---------- shapes ---------- */
+  function buildHex(svg, c) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    g.appendChild(svgEl('polygon', { points: '0,-26 22.5,-13 22.5,13 0,26 -22.5,13 -22.5,-13',
+      fill: shade(c, 0.16), stroke: c, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    var ping = svgEl('polygon', { points: '0,-15 13,-7.5 13,7.5 0,15 -13,7.5 -13,-7.5',
+      fill: 'none', stroke: shade(c, 1.35), 'stroke-width': 2.2, 'stroke-linejoin': 'round' });
+    addPing(ping);
+    g.appendChild(ping);
+    var core = svgEl('circle', { r: 5, fill: shade(c, 1.5) });
+    core.setAttribute('class', 'core-pulse');
+    g.appendChild(core);
+    svg.appendChild(g);
+  }
+
+  function buildTriangle(svg, c) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    g.appendChild(svgEl('path', { d: 'M0 -25 L25 17 L-25 17 Z', fill: shade(c, 0.16),
+      stroke: c, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    var frame = svgEl('g');
+    frame.appendChild(svgEl('path', { d: 'M0 -12 L10 9 L-10 9 Z', fill: 'none',
+      stroke: shade(c, 1.5), 'stroke-width': 2.4, 'stroke-linejoin': 'round' }));
+    addRotate(frame, '14s', false);
+    g.appendChild(frame);
+    var orb = svgEl('g');
+    orb.appendChild(svgEl('circle', { cx: 0, cy: -18, r: 2.8, fill: shade(c, 1.5) }));
+    orb.appendChild(svgEl('circle', { cx: 0, cy: 18, r: 2.1, fill: shade(c, 1.2), opacity: 0.7 }));
+    addRotate(orb, '6s', true);
+    g.appendChild(orb);
+    svg.appendChild(g);
+  }
+
+  function buildSquare(svg, c) {
+    var g = svgEl('g', { transform: 'translate(6 6)' });
+    g.appendChild(svgEl('rect', { x: 8, y: 8, width: 44, height: 44, rx: 6,
+      fill: shade(c, 0.16), stroke: c, 'stroke-width': 3 }));
+    var corners = [[14, 14], [46, 14], [14, 46], [46, 46]];
+    for (var i = 0; i < corners.length; i++) {
+      var lg = svgEl('circle', { cx: corners[i][0], cy: corners[i][1], r: 3.4, fill: shade(c, 1.5) });
+      lg.setAttribute('class', 'blink');
+      lg.setAttribute('style', 'animation-delay:' + (i * 0.22) + 's');
+      g.appendChild(lg);
+    }
+    var scan = svgEl('g', { 'class': 'scan scan-in' });
+    scan.appendChild(svgEl('rect', { x: 16, y: 27, width: 16, height: 3.5, rx: 1.75,
+      fill: shade(c, 1.6), opacity: 0.9 }));
+    scan.appendChild(svgEl('circle', { cx: 32, cy: 28.75, r: 2.2, fill: shade(c, 1.8), opacity: 0.95 }));
+    g.appendChild(scan);
+    svg.appendChild(g);
+  }
+
+  function buildDiamond(svg, c) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    g.appendChild(svgEl('polygon', { points: '0,-27 26,0 0,27 -26,0', fill: shade(c, 0.16),
+      stroke: c, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    var spin = svgEl('g');
+    spin.appendChild(svgEl('polygon', { points: '0,-14 14,0 0,14 -14,0', fill: 'none',
+      stroke: shade(c, 1.4), 'stroke-width': 2.2, 'stroke-linejoin': 'round' }));
+    addRotate(spin, '12s', false);
+    g.appendChild(spin);
+    var cross = svgEl('g', { 'class': 'mod-shimmer' });
+    cross.appendChild(svgEl('line', { x1: 0, y1: -22, x2: 0, y2: 22, stroke: shade(c, 1.5),
+      'stroke-width': 2, 'stroke-linecap': 'round' }));
+    cross.appendChild(svgEl('line', { x1: -22, y1: 0, x2: 22, y2: 0, stroke: shade(c, 1.5),
+      'stroke-width': 2, 'stroke-linecap': 'round' }));
+    g.appendChild(cross);
+    svg.appendChild(g);
+  }
+
+  function buildCircle(svg, c) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    g.appendChild(svgEl('circle', { r: 25, fill: shade(c, 0.16), stroke: c, 'stroke-width': 3 }));
+    var spin = svgEl('g');
+    spin.appendChild(svgEl('circle', { r: 18, fill: 'none', stroke: c, 'stroke-width': 5,
+      opacity: 0.9, 'stroke-dasharray': '22 16 9 30' }));
+    addRotate(spin, '9s', false);
+    g.appendChild(spin);
+    var spinR = svgEl('g');
+    spinR.appendChild(svgEl('circle', { r: 12, fill: 'none', stroke: shade(c, 1.4),
+      'stroke-width': 3.4, opacity: 0.85, 'stroke-dasharray': '15 15' }));
+    addRotate(spinR, '6.5s', true);
+    g.appendChild(spinR);
+    var core = svgEl('circle', { r: 6.5, fill: shade(c, 1.5) });
+    core.setAttribute('class', 'core-pulse');
+    g.appendChild(core);
+    svg.appendChild(g);
+  }
+
+  /* a lumpy rock, seeded off the asteroid's id so each one keeps its own silhouette */
+  function buildAsteroid(svg, seed) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    var n = 9 + Math.floor(seed * 4), pts = '';
+    for (var i = 0; i < n; i++) {
+      var ang = (i / n) * Math.PI * 2, r = 20 + hashStr('r' + i + seed) * 11;
+      pts += (Math.cos(ang) * r).toFixed(1) + ',' + (Math.sin(ang) * r).toFixed(1) + (i < n - 1 ? ' ' : '');
+    }
+    g.appendChild(svgEl('polygon', { points: pts, fill: '#6a7077', stroke: '#4b5158',
+      'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    for (i = 0; i < 3; i++) {
+      g.appendChild(svgEl('ellipse', {
+        cx: ((hashStr('d' + i + seed) - 0.5) * 20).toFixed(1),
+        cy: ((hashStr('c' + i + seed) - 0.5) * 16).toFixed(1),
+        rx: (3 + hashStr('e' + i + seed) * 3).toFixed(1),
+        ry: (2 + hashStr('f' + i + seed) * 2).toFixed(1), fill: 'rgba(0,0,0,.3)' }));
+    }
+    svg.appendChild(g);
+  }
+
+  var BUILDERS = { hex: buildHex, triangle: buildTriangle, square: buildSquare,
+                   diamond: buildDiamond, circle: buildCircle };
+
+  /* the module's own type decides its silhouette; the Core is special-cased because its
+     preset type is 'movement' and it must not read as an engine */
+  function shapeOf(name, isCore) {
+    if (isCore) return 'hex';
+    var m = (typeof Engine !== 'undefined' && Engine.findMod) ? Engine.findMod(name) : null;
+    var tt = m && m.tt;
+    if (tt === 'offense') return 'triangle';
+    if (tt === 'defense') return 'square';
+    if (tt === 'movement') return 'diamond';
+    if (tt === 'science') return 'circle';
+    return 'hex';
+  }
+
+  function build(shape, color, seed) {
+    var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'module-svg' });
+    if (shape === 'asteroid') { buildAsteroid(svg, seed === undefined ? 0.5 : seed); return svg; }
+    (BUILDERS[shape] || buildHex)(svg, color || '#7fa0b0');
+    return svg;
+  }
+
+  return { build: build, shapeOf: shapeOf, hash: hashStr, shade: shade };
+})();

@@ -395,8 +395,10 @@ var Engine = (function () {
       G.over = { winners: winners.map(function (s) { return s.idx; }),
                  team: teams.length ? +teams[0] : null };
       G.phase = 'over';
-      log(winners.length ? (winners.map(function (s) { return s.name; }).join(' and ') + ' win.')
-                         : 'Everyone is destroyed.');
+      log(winners.length
+        ? winners.map(function (s) { return s.name; }).join(' and ') +
+          (winners.length > 1 ? ' win.' : ' wins.')
+        : 'Everyone is destroyed.');
       return true;
     }
     return false;
@@ -478,26 +480,42 @@ var Engine = (function () {
     var targets = hostileObjects(s).filter(function (m) {
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
-    if (!targets.length) { log('No target in range with line of sight.'); return; }
+    if (!targets.length) { log(s.name + ' has no target in range with line of sight.'); return; }
     prompt({ kind: 'target', label: 'Choose a target', targets: targets.map(function (m) { return m.id; }),
       onResolve: function (targetId) {
         var t = objectById(targetId);
         if (!t) return;
+        /* name the piece that actually fires: the origin nearest the target that can see it */
+        var from = null, fd = 1e9;
+        origins.forEach(function (or) {
+          var d = dist(or, t.obj);
+          if (d <= reach && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
+        });
         var n = resolveCount(s, o.attacks, ctx);
         var dmg = resolveCount(s, o.dmg, ctx);
+        log(s.name + ' attacks with ' + (from ? from.name : 'its hull') + ' ' + at(from) +
+            ' targeting ' + labelOf(t) + ' ' + at(t.obj) +
+            ' — ' + n + (n === 1 ? ' attack, ' : ' attacks, ') + dmg + ' damage each.');
         for (var i = 0; i < n; i++) {
           /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
           var c = o.check ? check(s, o.check, RULES.dc) : attackRoll();
           if (c.hit) {
-            log('Hit (' + c.text + ').');
+            log('  ' + c.text + ' — hit.');
             if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
             else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
             else damageModule(t.owner, t.obj, dmg);
-          } else log('Miss (' + c.text + ').');
+          } else log('  ' + c.text + ' — miss.');
           if (!objectById(targetId)) break;
         }
       } });
   };
+
+  function at(o) { return o ? '(' + o.x + ',' + o.y + ')' : ''; }
+  function labelOf(t) {
+    if (!t) return 'nothing';
+    if (t.kind === 'asteroid') return 'an asteroid';
+    return t.owner.name + "'s " + t.obj.name;
+  }
 
   OPS.gainMove = function (o, ctx) {
     var s = ctx.side;
