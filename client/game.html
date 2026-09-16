@@ -34,13 +34,18 @@
   .side-bar.out { opacity:.3; text-decoration:line-through; }
   .side-bar b { font-size:14px; }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
-  .sb-mv b { color:var(--icon-cyan); } .sb-cards b { color:var(--icon-card); }
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
   .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab; }
   .g-board.dragging { cursor:grabbing; }
   .grid { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
-  .cells, .pieces { position:absolute; inset:0; }
+  .cells, .pieces, .links { position:absolute; inset:0; }
+  /* hull connectors, ported from client/board.css */
+  .links { pointer-events:none; }
+  .conn-base { animation:conn-march 2.4s linear infinite; }
+  @keyframes conn-march { from { stroke-dashoffset:24; } to { stroke-dashoffset:0; } }
+  .conn-pulse { animation:conn-pulse-flow 3.2s linear infinite; }
+  @keyframes conn-pulse-flow { from { stroke-dashoffset:102; } to { stroke-dashoffset:0; } }
   /* the pieces layer spans the whole board, so it must not eat clicks on open ground —
      only the pieces themselves take them, and everything else falls through to the cells */
   .pieces { pointer-events:none; }
@@ -319,6 +324,7 @@
     <span id="barRow"></span>
     <span style="flex:1"></span>
     <span class="g-turn" id="phaseLabel" style="color:var(--amber)"></span>
+    <button type="button" class="g-btn ghost" id="linkBtn" title="Cycle the hull connector style">Links: Glow</button>
     <button type="button" class="g-btn ghost" id="newBtn">New Game</button>
     <button type="button" class="g-btn" id="playPhaseBtn">End Play Phase</button>
     <button type="button" class="g-btn" id="endBtn">End Turn</button>
@@ -582,11 +588,11 @@
     var core = s.modules[s.coreId];
     return '<span class="sb-name">' + esc(s.name) + '</span>' +
       '<span class="sb-team">TEAM ' + (TEAM_LETTER[teamOf(s.idx)] || (teamOf(s.idx) + 1)) + '</span>' +
+      /* Move, hand size and plays left are all visible where they are actually used — on the
+         pieces, in the hand bar and in the prompt — so the top bar keeps only what you cannot
+         read off the board: hull and shields. */
       '<span class="sb-hull">HULL <b>' + (core ? core.hull : 0) + '</b></span>' +
-      '<span class="sb-sh">SH <b>' + s.shield + '</b>/' + s.shieldMax + '</span>' +
-      '<span class="sb-mv">MV <b>' + s.moveLeft + '</b></span>' +
-      '<span class="sb-cards">HAND <b>' + s.hand.length + '</b></span>' +
-      '<span>PLAYS <b>' + s.playsLeft + '</b></span>';
+      '<span class="sb-sh">SH <b>' + s.shield + '</b>/' + s.shieldMax + '</span>';
   }
   function renderTop(G) {
     document.getElementById('turnLabel').textContent =
@@ -597,10 +603,13 @@
              '" style="--sc:' + SEAT_HEX[i % 4] + '">' + bar(s, G) + '</span>';
     }).join('');
     var mine = G.active === meIdx() && !G.pending && !G.over;
-    document.getElementById('endBtn').disabled = !mine || G.phase === 'play';
-    var pb = document.getElementById('playPhaseBtn');
-    pb.disabled = !mine || G.phase !== 'play';
-    pb.classList.toggle('ghost', G.phase !== 'play');
+    /* the two are never both useful, so only the one for this phase is on screen */
+    var inPlay = G.phase === 'play';
+    var eb = document.getElementById('endBtn'), pb = document.getElementById('playPhaseBtn');
+    eb.classList.toggle('hidden', inPlay);
+    pb.classList.toggle('hidden', !inPlay);
+    eb.disabled = !mine;
+    pb.disabled = !mine;
     document.getElementById('phaseLabel').textContent =
       G.phase === 'play' ? 'PLAY PHASE' : (G.phase === 'action' ? 'ACTION PHASE' : '');
   }
@@ -610,7 +619,7 @@
      pieces layer that is diffed by object id. Rebuilding the pieces every frame would restart
      every rotation and pulse, so nodes are reused and only their classes and badges change. */
   var cellsEl = null, piecesEl = null, pathEl = null, pathBase = null, pathPulse = null,
-      beaconEl = null, fxEl = null;
+      beaconEl = null, fxEl = null, linksEl = null;
   /* the route another player has announced but not yet walked */
   var telegraphed = null;
   /* shapes of yours that hold more than one kind of piece, counted separately for hull and
@@ -666,6 +675,9 @@
       html += '<div class="cell" style="left:' + (x*CELL) + 'px;top:' + (y*CELL) +
               'px;width:' + CELL + 'px;height:' + CELL + 'px" data-x="' + x + '" data-y="' + y + '"></div>';
     cellsEl.innerHTML = html;
+    /* connectors sit under the pieces, so a strut runs behind the hull it joins */
+    linksEl = document.createElement('div');
+    linksEl.className = 'links';
     piecesEl = document.createElement('div');
     piecesEl.className = 'pieces';
     /* the route preview and the one-shot flashes sit above the pieces but take no clicks */
@@ -678,6 +690,7 @@
     fxEl = document.createElement('div');
     fxEl.className = 'pathlayer';
     gridEl.appendChild(cellsEl);
+    gridEl.appendChild(linksEl);
     gridEl.appendChild(piecesEl);
     gridEl.appendChild(pathEl);
     gridEl.appendChild(fxEl);
@@ -804,6 +817,7 @@
     if (view.needsFit) fitView(Engine.RULES.boardSize);
     syncSelection(G);
     paintCells(G);
+    renderConnections(G);
     paintPieces(G);
     renderMoveHud(G);
     drawRoute(G);
@@ -877,12 +891,96 @@
     return seen;
   }
 
+  /* ---------- hull connectors ----------
+     Ported from client/board.html: struts drawn between orthogonally adjacent modules of the
+     same side, so a hull reads as one ship rather than loose pieces. Deployables are free
+     craft, not hull, so they are not joined. */
+  var CONN_STYLES = ['glow', 'mech', 'off'];
+  var CONN_NAMES = { glow: 'Glow', mech: 'Mech', off: 'Off' };
+  var connStyle = 'glow';
+  try { connStyle = localStorage.getItem('frigateConnStyle') || 'glow'; } catch (e) {}
+  if (CONN_STYLES.indexOf(connStyle) < 0) connStyle = 'glow';
+  var connSig = null;
+
+  function svgEl(tag, attrs) {
+    var n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+  function connPairs(G) {
+    var out = [];
+    G.players.forEach(function (s, si) {
+      var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+      for (var i = 0; i < mods.length; i++) for (var j = i + 1; j < mods.length; j++) {
+        var a = mods[i], b = mods[j], dx = a.x - b.x, dy = a.y - b.y;
+        if ((dx === 0 && Math.abs(dy) === 1) || (dy === 0 && Math.abs(dx) === 1))
+          out.push({ a: a, b: b, si: si });
+      }
+    });
+    return out;
+  }
+  function centre(m) { return { x: m.x * CELL + CELL / 2, y: m.y * CELL + CELL / 2 }; }
+
+  function drawConnGlow(svg, a, b, c) {
+    var g = svgEl('g', { 'class': 'conn-glow' });
+    g.appendChild(svgEl('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y, stroke:c, opacity:0.12,
+      'stroke-width':9, 'stroke-linecap':'round' }));
+    g.appendChild(svgEl('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y, 'class':'conn-pulse', stroke:c,
+      'stroke-width':4, opacity:0.6, 'stroke-linecap':'round', 'stroke-dasharray':'22 80' }));
+    g.appendChild(svgEl('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y, 'class':'conn-base', stroke:c,
+      'stroke-width':3, 'stroke-linecap':'round', 'stroke-dasharray':'3 9' }));
+    svg.appendChild(g);
+  }
+  function drawConnMech(svg, a, b, c) {
+    var horiz = Math.abs(a.x - b.x) > Math.abs(a.y - b.y);
+    var x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y);
+    var g = svgEl('g', { 'class': 'conn-mech' });
+    var strut = horiz ? svgEl('rect', { x:x1, y:y1 - 8, width:CELL, height:16, rx:3 })
+                      : svgEl('rect', { x:x1 - 8, y:y1, width:16, height:CELL, rx:3 });
+    strut.setAttribute('fill', '#212936');
+    strut.setAttribute('stroke', GamePieces.shade(c, 0.8));
+    strut.setAttribute('stroke-width', 1.5);
+    g.appendChild(strut);
+    [a, b].forEach(function (p) {
+      g.appendChild(svgEl('circle', { cx:p.x, cy:p.y, r:7, fill:GamePieces.shade(c, 0.5),
+        stroke:c, 'stroke-width':2 }));
+      var o = horiz ? [[0,-4],[0,4]] : [[-4,0],[4,0]];
+      o.forEach(function (d) {
+        g.appendChild(svgEl('circle', { cx:p.x + d[0], cy:p.y + d[1], r:1.3, fill:'#0c1117' }));
+      });
+    });
+    svg.appendChild(g);
+  }
+
+  function renderConnections(G) {
+    var pairs = connStyle === 'off' ? [] : connPairs(G);
+    /* rebuilding restarts the animations, so only redraw when something actually moved */
+    var sig = connStyle + '|' + pairs.map(function (p) {
+      return p.si + ':' + p.a.x + ',' + p.a.y + '-' + p.b.x + ',' + p.b.y; }).join(';');
+    if (sig === connSig) return;
+    connSig = sig;
+    linksEl.innerHTML = '';
+    if (!pairs.length) return;
+    var px = Engine.RULES.boardSize * CELL;
+    var svg = svgEl('svg', { width: px, height: px });
+    svg.style.position = 'absolute';
+    svg.style.left = svg.style.top = '0';
+    linksEl.appendChild(svg);
+    pairs.forEach(function (p) {
+      var c = SEAT_HEX[p.si % 4];
+      if (connStyle === 'mech') drawConnMech(svg, centre(p.a), centre(p.b), c);
+      else drawConnGlow(svg, centre(p.a), centre(p.b), c);
+    });
+  }
+
   /* everything on the board this frame, in draw order: rocks first, then hulls on top */
   function boardObjects(G) {
     var out = [];
     Object.keys(G.asteroids || {}).forEach(function (id) {
       var a = G.asteroids[id];
-      out.push({ id: id, o: a, kind: 'ast', shape: 'asteroid', color: '#6a7077' });
+      /* down to its last hull point the rock has broken up, so it is drawn as debris */
+      out.push({ id: id, o: a, kind: 'ast', color: '#6a7077',
+                 shape: a.hull <= 1 ? 'debris' : 'asteroid' });
     });
     Object.keys(G.cells).forEach(function (k) {
       var c = G.cells[k];
@@ -909,13 +1007,14 @@
   function buildPiece(rec) {
     var d = document.createElement('div');
     d.setAttribute('data-obj', rec.id);
+    d.setAttribute('data-shape', rec.shape);
     d.style.width = d.style.height = CELL + 'px';
     d.style.setProperty('--pc', rec.color);
-    if (rec.shape === 'asteroid') {
+    if (rec.kind === 'ast') {
       var seed = GamePieces.hash(rec.id);
       d.style.setProperty('--astro-start', Math.floor(seed * 360) + 'deg');
       d.style.setProperty('--astro-speed', (28 + seed * 42).toFixed(0) + 's');
-      d.appendChild(GamePieces.build('asteroid', rec.color, seed));
+      d.appendChild(GamePieces.build(rec.shape, rec.color, seed));
     } else {
       d.appendChild(GamePieces.build(rec.shape, rec.color));
     }
@@ -1017,7 +1116,13 @@
     for (var i = 0; i < piecesEl.children.length; i++)
       byId[piecesEl.children[i].getAttribute('data-obj')] = piecesEl.children[i];
     recs.forEach(function (rec, idx) {
-      var node = byId[rec.id] || buildPiece(rec);
+      /* a rock that has broken up needs new art, not just new classes */
+      var node = byId[rec.id];
+      if (node && node.getAttribute('data-shape') !== rec.shape) {
+        piecesEl.removeChild(node);
+        node = null;
+      }
+      node = node || buildPiece(rec);
       var ref = piecesEl.children[idx];
       if (ref !== node) piecesEl.insertBefore(node, ref || null);
       paintPiece(node, rec, G);
@@ -1460,6 +1565,18 @@
   document.getElementById('modPop').addEventListener('click', function (e) {
     if (e.target.id === 'modPop') closeModPopup();      /* click the backdrop to dismiss */
   });
+  (function () {
+    var btn = document.getElementById('linkBtn');
+    function label() { btn.textContent = 'Links: ' + CONN_NAMES[connStyle]; }
+    label();
+    btn.addEventListener('click', function () {
+      connStyle = CONN_STYLES[(CONN_STYLES.indexOf(connStyle) + 1) % CONN_STYLES.length];
+      try { localStorage.setItem('frigateConnStyle', connStyle); } catch (e) {}
+      label();
+      connSig = null;
+      Engine.emit();
+    });
+  })();
   document.getElementById('endBtn').addEventListener('click', function () { Engine.endTurn(); });
   document.getElementById('playPhaseBtn').addEventListener('click', function () { Engine.endPlayPhase(); });
   /* ---------- new-game roster ---------- */

@@ -156,6 +156,29 @@ var GamePieces = (function () {
     svg.appendChild(g);
   }
 
+  /* the same rock once it is nearly broken up: the lump replaced by a scatter of chunks */
+  function buildDebris(svg, seed) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    var count = 6 + Math.floor(hashStr('n' + seed) * 4);
+    for (var i = 0; i < count; i++) {
+      var k = 'd' + i + seed;
+      var ang = (i / count) * Math.PI * 2 + hashStr('a' + k) * 0.9;
+      var rad = 7 + hashStr('r' + k) * 17;
+      var cx = Math.cos(ang) * rad, cy = Math.sin(ang) * rad;
+      var size = 3.5 + hashStr('s' + k) * 4.5;
+      var pts = '', sides = 3 + Math.floor(hashStr('p' + k) * 3);
+      for (var j = 0; j < sides; j++) {
+        var a2 = (j / sides) * Math.PI * 2 + hashStr('j' + j + k) * 0.8;
+        var r2 = size * (0.6 + hashStr('q' + j + k) * 0.6);
+        pts += (cx + Math.cos(a2) * r2).toFixed(1) + ',' + (cy + Math.sin(a2) * r2).toFixed(1) +
+               (j < sides - 1 ? ' ' : '');
+      }
+      g.appendChild(svgEl('polygon', { points: pts, fill: '#6a7077', stroke: '#4b5158',
+        'stroke-width': 1.4, 'stroke-linejoin': 'round', opacity: (0.7 + hashStr('o' + k) * 0.3).toFixed(2) }));
+    }
+    svg.appendChild(g);
+  }
+
   var BUILDERS = { hex: buildHex, triangle: buildTriangle, square: buildSquare,
                    diamond: buildDiamond, circle: buildCircle };
 
@@ -187,6 +210,7 @@ var GamePieces = (function () {
   function build(shape, color, seed) {
     var svg = svgEl('svg', { viewBox: '0 0 72 72', 'class': 'module-svg' });
     if (shape === 'asteroid') { buildAsteroid(svg, seed === undefined ? 0.5 : seed); return svg; }
+    if (shape === 'debris') { buildDebris(svg, seed === undefined ? 0.5 : seed); return svg; }
     (BUILDERS[shape] || buildHex)(svg, color || '#7fa0b0');
     return svg;
   }
