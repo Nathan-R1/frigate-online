@@ -460,10 +460,10 @@ var Engine = (function () {
   }
 
   /* ================= op queue with prompts ================= */
-  function run(ops, ctx) {
+  function enqueue(ops, ctx) {
     G.queue = (ops || []).map(function (o) { return { op: o, ctx: ctx }; }).concat(G.queue);
-    step();
   }
+  function run(ops, ctx) { enqueue(ops, ctx); step(); }
 
   function step() {
     while (!G.pending && G.queue.length && !G.over) {
@@ -593,11 +593,25 @@ var Engine = (function () {
     return null;
   }
 
+  /* Everything a friendly beam may take hold of: your own hull and drones, and your allies'.
+     A tractor beam does not care whose module it is pulling. */
+  function friendlyObjects(s) {
+    var out = [];
+    [s].concat(alliesOf(s)).forEach(function (f) {
+      Object.keys(f.modules).forEach(function (id) { out.push(f.modules[id]); });
+      Object.keys(f.deployables).forEach(function (id) { out.push(f.deployables[id]); });
+    });
+    return out;
+  }
+
   OPS.attack = function (o, ctx) {
     var s = ctx.side;
     var origins = attackOrigins(s, o, ctx);
     var reach = resolveRange(s, o.range);
-    var targets = hostileObjects(s).filter(function (m) {
+    var pool = o.targets === 'any' ? hostileObjects(s).concat(friendlyObjects(s)) : hostileObjects(s);
+    var targets = pool.filter(function (m) {
+      /* a beam cannot grab the very module it is firing from */
+      if (ctx.module && m.id === ctx.module.id) return false;
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
     if (!targets.length) { log(s.name + ' has no target in range with line of sight.'); return; }
@@ -614,17 +628,31 @@ var Engine = (function () {
         });
         var n = resolveCount(s, o.attacks, ctx);
         var dmg = resolveCount(s, o.dmg, ctx);
-        log(s.name + ' attacks with ' + (from ? from.name : 'its hull') + ' ' + at(from) +
+        var hit = false;
+        /* a zero-damage beam is not an attack, and reads oddly as one when it grabs your own hull */
+        log(s.name + (dmg > 0 ? ' attacks with ' : ' locks on with ') +
+            (from ? from.name + ' ' + at(from) : 'its hull') +
             ' targeting ' + labelOf(t) + ' ' + at(t.obj) +
-            ' — ' + n + (n === 1 ? ' attack, ' : ' attacks, ') + dmg + ' damage each.');
+            (dmg > 0 ? ' — ' + n + (n === 1 ? ' attack, ' : ' attacks, ') + dmg + ' damage each.'
+                     : '.'));
         for (var i = 0; i < n; i++) {
           /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
           var c = o.check ? check(s, o.check, RULES.dc) : attackRoll();
           if (c.hit) {
             log('  ' + c.text + ' — hit.');
-            if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
-            else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
-            else damageModule(t.owner, t.obj, dmg);
+            if (dmg > 0) {
+              if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
+              else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
+              else damageModule(t.owner, t.obj, dmg);
+            }
+            /* riders such as a tractor beam's shove run once, on the first hit that lands.
+               Queued rather than run, because we are inside the prompt being resolved. */
+            if (o.onSuccess && !hit) {
+              hit = true;
+              var sub = {}; for (var k in ctx) sub[k] = ctx[k];
+              sub.target = objectById(targetId);
+              enqueue(o.onSuccess, sub);
+            }
           } else log('  ' + c.text + ' — miss.');
           if (!objectById(targetId)) break;
         }
@@ -869,6 +897,17 @@ var Engine = (function () {
     vacate(d.x, d.y); delete ctx.side.deployables[d.id];
     log(d.name + ' is removed.');
   };
+  /* Push whatever the shot caught. The prompt is the same one a deployable's own move uses,
+     so the board already knows how to draw the route and walk it. */
+  OPS.moveObject = function (o, ctx) {
+    var t = (o.what === 'target') ? ctx.target : (ctx.deployable ? objectById(ctx.deployable.id) : null);
+    if (!t) return;
+    var n = resolveCount(ctx.side, o.n, ctx);
+    if (n <= 0) return;
+    prompt({ kind: 'moveObject', label: 'Move ' + t.obj.name + ' up to ' + n,
+             objId: t.obj.id, left: n, onResolve: function () {} });
+  };
+
   OPS.moveSelf = function (o, ctx) {
     var d = ctx.deployable; if (!d) return;
     var n = resolveCount(ctx.side, o.n, ctx);
@@ -1100,16 +1139,21 @@ var Engine = (function () {
       .filter(function (m) { return !meetsReq(s, m); });
   }
 
-  function stepDeployable(depId, dx, dy) {
-    var s = side(), d = s.deployables[depId];
-    if (!d || !G.pending || G.pending.left <= 0) return false;
-    var nx = d.x + dx, ny = d.y + dy;
+  /* Shove one object a square. Works for anything on the board — your drone under its own
+     power, an enemy module on the end of a tractor beam, a rock — because the mover is not
+     always the owner. */
+  function stepObject(objId, dx, dy) {
+    var t = objectById(objId);
+    if (!t || !G.pending || G.pending.left <= 0) return false;
+    var o = t.obj, nx = o.x + dx, ny = o.y + dy;
     if (!inBounds(nx, ny) || cellAt(nx, ny)) return false;
-    vacate(d.x, d.y); d.x = nx; d.y = ny;
-    occupy(nx, ny, { kind: 'deployable', owner: s.idx, id: d.id });
+    vacate(o.x, o.y); o.x = nx; o.y = ny;
+    occupy(nx, ny, t.kind === 'asteroid' ? { kind: 'asteroid', id: o.id }
+                                         : { kind: t.kind, owner: t.owner.idx, id: o.id });
     G.pending.left--; emit();
     return true;
   }
+  var stepDeployable = stepObject;
 
   return {
     RULES: RULES,
@@ -1124,7 +1168,7 @@ var Engine = (function () {
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
     undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph,
-    hostileObjects: hostileObjects, objectById: objectById,
+    hostileObjects: hostileObjects, objectById: objectById, stepObject: stepObject,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,

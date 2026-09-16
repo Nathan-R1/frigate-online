@@ -685,8 +685,9 @@
     var p = G.pending;
     if (!p || G.active !== meIdx()) return null;   /* never your movement on another turn */
     if (p.kind === 'moveObject') {
-      var d = G.players[meIdx()].deployables[p.objId];
-      return d ? { obj: d, left: p.left } : null;
+      /* whatever is on the end of the beam: your drone, an enemy module, a rock */
+      var t = Engine.objectById(p.objId);
+      return t ? { obj: t.obj, left: p.left } : null;
     }
     if (p.kind === 'move' && selMod) {
       var m = G.players[meIdx()].modules[selMod];
@@ -894,6 +895,8 @@
     var cls = 'piece ' + rec.kind;
     var targetIds = (p && p.kind === 'target') ? p.targets : [];
     if (targetIds.indexOf(rec.id) >= 0) cls += ' targetable';
+    /* the piece on the end of a tractor beam may be anything at all, including a rock */
+    if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving clickable';
     if (rec.kind === 'mod' || rec.kind === 'dep') {
       var mine = rec.si === meIdx();
       var fx = Engine.fx(o.name, 'mod');
@@ -902,7 +905,6 @@
       /* movement state only means anything while a move prompt is open */
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
       if (mine && rec.id === selMod && p && p.kind === 'move') cls += ' sel';
-      if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving';
       var canAct = mine && G.phase === 'action' && !p && !o.exhausted && !!fx.activate &&
                    Engine.affordable(rec.side, o, rec.kind === 'dep' ? 'dep' : 'mod');
       if (canAct) cls += ' ready clickable';
@@ -923,9 +925,10 @@
     ch.textContent = charges ? '⚡' + charges : '';
     ch.style.display = charges ? '' : 'none';
     /* Move remaining is only shown while you are actually moving pieces */
-    var showMv = p && (p.kind === 'move' || p.kind === 'moveObject') &&
-                 rec.si === meIdx() && o.moveLeft > 0;
-    mv.textContent = showMv ? o.moveLeft : '';
+    var showMv = p && p.kind === 'move' && rec.si === meIdx() && o.moveLeft > 0;
+    var pushed = p && p.kind === 'moveObject' && p.objId === rec.id;
+    mv.textContent = pushed ? p.left : (showMv ? o.moveLeft : '');
+    showMv = showMv || pushed;
     mv.style.display = showMv ? '' : 'none';
   }
 
@@ -1296,7 +1299,7 @@
         var left = isDep ? now.pending.left : piece.moveLeft;
         if (left <= 0) break;
         var dx = route[i].x - route[i-1].x, dy = route[i].y - route[i-1].y;
-        var ok = isDep ? Engine.stepDeployable(id, dx, dy) : Engine.moveModule(id, dx, dy);
+        var ok = isDep ? Engine.stepObject(id, dx, dy) : Engine.moveModule(id, dx, dy);
         if (!ok) { blockFlash(route[i].x, route[i].y); break; }
         ping(route[i].x, route[i].y);
       }
@@ -1459,9 +1462,9 @@
   function nudge(dx, dy) {
     var G = Engine.get(), p = G.pending, s = G.players[meIdx()];
     if (p && p.kind === 'moveObject') {
-      var d = s.deployables[p.objId];
-      var to = d ? { x: d.x + dx, y: d.y + dy } : null;
-      if (!Engine.stepDeployable(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
+      var t = Engine.objectById(p.objId);
+      var to = t ? { x: t.obj.x + dx, y: t.obj.y + dy } : null;
+      if (!Engine.stepObject(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
       else if (to) ping(to.x, to.y);
       return;
     }
