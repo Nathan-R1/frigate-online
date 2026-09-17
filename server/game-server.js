@@ -5,9 +5,9 @@
  *
  * WHY IT IS BUILT THIS WAY
  *
- * The rules are client/game/engine.js. Rather than write them a second time in another
- * language and spend the rest of the project keeping the two honest, the server loads that
- * very file and runs it. Each room gets its own V8 context (node's vm), because the engine
+ * The rules are shared/engine.js — the same file the browser loads. Rather than write them
+ * a second time in another language and spend the rest of the project keeping the two
+ * honest, the server runs that very file. Each room gets its own V8 context (node's vm), because the engine
  * keeps one game in a module-level variable — a fresh context per room is the cheapest way to
  * have several games at once without touching the engine's shape.
  *
@@ -63,15 +63,15 @@ var ROOM_TTL_MS = 60 * 60 * 1000;
 /* ---------- the rules, loaded once and instantiated per room ---------- */
 
 var SOURCES = [
-  'client/frigate-sheet/presets/tech-presets.js',
-  'client/frigate-sheet/presets/mod-presets.js',
-  'client/frigate-sheet/presets/card-effects.js',
-  'client/game/engine.js',
-  'client/game/ai/ai-knowledge.js',
-  'client/game/ai/ai-path.js',
-  'client/game/ai/ai-placement.js',
-  'client/game/ai/ai-doctrine.js',
-  'client/game/ai/ai-commander.js'
+  'shared/presets/tech-presets.js',
+  'shared/presets/mod-presets.js',
+  'shared/presets/card-effects.js',
+  'shared/engine.js',
+  'shared/ai/ai-knowledge.js',
+  'shared/ai/ai-path.js',
+  'shared/ai/ai-placement.js',
+  'shared/ai/ai-doctrine.js',
+  'shared/ai/ai-commander.js'
 ];
 var RULES_SRC = SOURCES.map(function (f) {
   return '/* ' + f + ' */\n' + fs.readFileSync(path.join(ROOT, f), 'utf8');

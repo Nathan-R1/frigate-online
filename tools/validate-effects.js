@@ -1,5 +1,5 @@
 const fs=require('fs'), path=require('path');
-const base=path.join(__dirname,'..','client','frigate-sheet','presets')+path.sep;
+const base=path.join(__dirname,'..','shared','presets')+path.sep;
 eval(fs.readFileSync(base+'tech-presets.js','utf8'));
 eval(fs.readFileSync(base+'mod-presets.js','utf8'));
 eval(fs.readFileSync(base+'card-effects.js','utf8'));
