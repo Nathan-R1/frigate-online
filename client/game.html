@@ -261,8 +261,10 @@
                       padding:clamp(2px, 3.5cqh, 6px); cursor:pointer; border-radius:4px;
                       background:none; border:1px solid var(--cyan-dim); color:var(--cyan); }
   .hcard .hb button:disabled { opacity:.3; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
-  /* in play and ready: amber. Spent for the turn: the border drops back and the card dims,
-     which with the disabled button says "exhausted" without a word for it. */
+  /* In play and usable: amber. Otherwise the border drops back and the card dims — which,
+     with the disabled button, says so without a word for it. "Usable" means more than
+     un-exhausted: a card whose cost it cannot pay, such as a Hardening Array down to no
+     charges, is just as unavailable and reads the same way. */
   .hcard.inplay { border-color:var(--amber); }
   .hcard.inplay.spent { border-color:var(--line); opacity:.55; }
   .hcard.inplay.spent .hn { color:var(--ink-dim); }
@@ -1318,7 +1320,8 @@
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       var e = Engine.fx(c.name, 'tech');
       if (!e.activate) return;
-      html += '<div class="hcard inplay' + (c.exhausted ? ' spent' : '') + pickClass(G, id) +
+      var cReady = !c.exhausted && Engine.affordable(s, c, 'tech');
+      html += '<div class="hcard inplay' + (cReady ? '' : ' spent') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
         '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
@@ -1326,33 +1329,35 @@
         ((c.charges || c.heat) ? '<div class="hmeta">' + tokenPips(c) + '</div>' : '') +
         '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-act="' + id + '"' +
-        (myTurn && !c.exhausted && Engine.affordable(s, c, 'tech') ? '' : ' disabled') +
+        (myTurn && cReady ? '' : ' disabled') +
         '>Activate</button></div></div>';
     });
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay' + (d.exhausted ? ' spent' : '') + pickClass(G, id) +
+      var dReady = !d.exhausted && Engine.affordable(s, d, 'dep');
+      html += '<div class="hcard inplay' + (dReady ? '' : ' spent') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
         pieceIcon(d.name, false) + esc(d.name) + '</div>' +
         '<div class="hmeta">deployable ' + hullPip(d) + tokenPips(d) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-dact="' + id + '"' +
-        (myTurn && !d.exhausted && Engine.affordable(s, d, 'dep') ? '' : ' disabled') +
+        (myTurn && dReady ? '' : ' disabled') +
         '>Activate</button></div></div>';
     });
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay' + (m.exhausted ? ' spent' : '') + pickClass(G, id) +
+      var mReady = !m.exhausted && Engine.affordable(s, m, 'mod');
+      html += '<div class="hcard inplay' + (mReady ? '' : ' spent') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
         pieceIcon(m.name, id === s.coreId) + esc(m.name) + '</div>' +
         '<div class="hmeta">' + hullPip(m) + tokenPips(m) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-mact="' + id + '"' +
-        (myTurn && !m.exhausted && Engine.affordable(s, m, 'mod') ? '' : ' disabled') +
+        (myTurn && mReady ? '' : ' disabled') +
         '>Activate</button></div></div>';
     });
     handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';

@@ -302,6 +302,8 @@
   }
   .exp-starter .ticon { width: 13px; height: 13px; display: block; }
   .exp-starter:hover { border-color: var(--amber); color: var(--amber); }
+  .exp-starter.no-starter { cursor: default; opacity: .45; }
+  .exp-starter.no-starter:hover { border-color: var(--line-bright); color: var(--ink-mid); }
   .cost-starter { color: var(--ink); }
   .exp-count {
     position: absolute; top: 8px; right: 42px;
@@ -1133,9 +1135,17 @@
      the count here says how many of a stack carry it, and buildSheet writes the trait onto
      exactly that many of the copies it emits. */
   var STARTER_RE = /start(?:er|ing)\s*card/i;
+  var DISCARD_RE = /\bdiscard\b/i;
   function presetIsStarter(name) {
     var t = findTech(name);
     return !!t && STARTER_RE.test(t.traits || '');
+  }
+  /* A Starter Card is played before combat begins. A Discard card goes straight to the
+     discard pile when it is played, so promoting one would spend it before the first turn
+     for nothing — it cannot be a Starter Card. */
+  function canBeStarter(name) {
+    var t = findTech(name);
+    return !!t && !DISCARD_RE.test(t.traits || '');
   }
   function withStarter(traits) {
     return STARTER_RE.test(traits || '') ? traits : ((traits ? traits + ' ' : '') + 'Starter Card');
@@ -1147,6 +1157,7 @@
   /* how many copies of this tech are Starter Cards. With no explicit choice recorded, a tech
      whose preset carries the trait counts all of its copies. */
   function starterCountOf(name) {
+    if (!canBeStarter(name)) return 0;
     var copies = copiesOf(name);
     var m = choices.starters || {};
     var n = Object.prototype.hasOwnProperty.call(m, name) ? parseInt(m[name], 10)
@@ -1155,6 +1166,7 @@
     return Math.max(0, Math.min(copies, n));
   }
   function setStarterCount(name, n) {
+    if (!canBeStarter(name)) return;
     if (!choices.starters) choices.starters = {};
     choices.starters[name] = Math.max(0, Math.min(copiesOf(name), n));
     saveChoices();
@@ -1212,12 +1224,17 @@
          time moves between "deploys before combat" and "stays in the deck". */
       var copies = copiesOf(id), promoted = starterCountOf(id);
       var q = id.replace(/"/g, '&quot;'), row = '';
-      if (promoted > 0)
-        row += '<button type="button" class="exp-starter demote" data-demote="' + q +
-          '" title="Demote from Starter Card">' + STARTER_ICON + '<span>−</span></button>';
-      if (promoted < copies)
-        row += '<button type="button" class="exp-starter promote" data-promote="' + q +
-          '" title="Promote to Starter Card">' + STARTER_ICON + '<span>+</span></button>';
+      if (!canBeStarter(id)) {
+        row = '<span class="exp-starter no-starter" title="A Discard card is spent the moment ' +
+          'it is played, so it cannot deploy before combat">' + STARTER_ICON + '<span>✕</span></span>';
+      } else {
+        if (promoted > 0)
+          row += '<button type="button" class="exp-starter demote" data-demote="' + q +
+            '" title="Demote from Starter Card">' + STARTER_ICON + '<span>−</span></button>';
+        if (promoted < copies)
+          row += '<button type="button" class="exp-starter promote" data-promote="' + q +
+            '" title="Promote to Starter Card">' + STARTER_ICON + '<span>+</span></button>';
+      }
       if (row) html += '<span class="exp-starters">' + row + '</span>';
       html += '<button type="button" class="exp-del" data-del="' + q +
         '" title="Remove one copy from your deck">✕</button>';
@@ -2353,7 +2370,7 @@ function skillsOptions() {
           if (!c.starters) c.starters = {};
           if (json.tech[ti].traits !== undefined && json.tech[ti].traits !== null) {
             if (!Object.prototype.hasOwnProperty.call(c.starters, tn)) c.starters[tn] = 0;
-            if (STARTER_RE.test(json.tech[ti].traits)) c.starters[tn]++;
+            if (STARTER_RE.test(json.tech[ti].traits) && canBeStarter(tn)) c.starters[tn]++;
           }
           matched = true;
         }
