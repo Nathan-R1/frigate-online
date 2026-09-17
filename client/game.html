@@ -469,7 +469,11 @@
   /* The roster: one entry per seat, in turn order. `ai` hands that seat to the commander,
      `team` groups seats that win and lose together. Two seats on two teams is the old
      one-versus-one game; four seats on two teams is a pairs match. */
+  /* SEATS is the roster you are editing in the New Game menu. SEATED is the roster the game
+     on the board was started with — a copy, so changing a dropdown never reaches into a game
+     already in progress. */
   var SEATS = [{ team:0, ai:false }, { team:1, ai:true }];
+  var SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
 
   /* ===== seat sheets =====
      A seat may carry a build made in the sheet builder. We keep the finished sheet, which is
@@ -545,9 +549,9 @@
   /* whichever local seat the controls and hand currently belong to */
   var VIEW = 0;
 
-  function isAI(i) { return !!(SEATS[i] && SEATS[i].ai); }
+  function isAI(i) { return !!(SEATED[i] && SEATED[i].ai); }
   function localSeats() {
-    return SEATS.map(function (x, i) { return i; }).filter(function (i) { return !isAI(i); });
+    return SEATED.map(function (x, i) { return i; }).filter(function (i) { return !isAI(i); });
   }
   /* Control belongs to the active seat while it is a local one; when the computer is
      thinking we keep showing the last human seat so its hand does not vanish. */
@@ -561,7 +565,11 @@
     var base = (sh && sh.shipName) ? sh.shipName : 'Player ' + (i + 1);
     return base + (isAI(i) ? ' (AI)' : '');
   }
-  function teamOf(i) { return SEATS[i] ? SEATS[i].team : i; }
+  function teamOf(i) { return SEATED[i] ? SEATED[i].team : i; }
+  /* May you act right now? Only when the active seat is one you are actually playing. With an
+     all-computer roster meIdx() falls back to a seat you are merely watching, so seat equality
+     alone is not enough. */
+  function isMyTurn(G) { return !!G && G.active === meIdx() && !isAI(G.active); }
   var gridEl = document.getElementById('grid');
   var handEl = document.getElementById('hand');
   var logEl  = document.getElementById('logPanel');
@@ -617,8 +625,10 @@
     AICommander.reset();
     document.getElementById('modePick').classList.add('hidden');
     writeStore(GAME_ROSTER_KEY, SEATS);
+    /* the roster is now committed: this is the game's own copy from here on */
+    SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
     VIEW = localSeats().length ? localSeats()[0] : 0;
-    Engine.newGame(SEATS.map(function (seat, i) { return seatConfig(i, seat); }));
+    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat); }));
   }
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -673,7 +683,7 @@
       return '<span class="side-bar' + (G.active === i ? ' turn' : '') + (s.dead ? ' out' : '') +
              '" style="--sc:' + SEAT_HEX[i % 4] + '">' + bar(s, G) + '</span>';
     }).join('');
-    var mine = G.active === meIdx() && !G.pending && !G.over;
+    var mine = isMyTurn(G) && !G.pending && !G.over;
     /* the two are never both useful, so only the one for this phase is on screen */
     var inPlay = G.phase === 'play';
     var eb = document.getElementById('endBtn'), pb = document.getElementById('playPhaseBtn');
@@ -806,7 +816,9 @@
   /* the piece the movement controls are pointed at, and how far it may still go */
   function mover(G) {
     var p = G.pending;
-    if (!p || G.active !== meIdx()) return null;   /* never your movement on another turn */
+    /* never your movement on someone else's turn — and when every seat is a computer,
+       meIdx() falls back to a seat you are only watching, so check that too */
+    if (!p || G.active !== meIdx() || isAI(G.active)) return null;
     if (p.kind === 'moveObject') {
       /* whatever is on the end of the beam: your drone, an enemy module, a rock */
       var t = Engine.objectById(p.objId);
@@ -915,9 +927,10 @@
     var mine = G.players[meIdx()].modules;
     if (selMod && !mine[selMod]) selMod = null;
     if (walking) return;
-    /* the selection only exists for the duration of a move prompt — otherwise the last piece
-       moved keeps its selection ring long after the movement is over */
-    if (!G.pending || G.pending.kind !== 'move') { selMod = null; return; }
+    /* the selection only exists for the duration of a move prompt on a seat you are playing —
+       otherwise the last piece moved keeps its ring long after the movement is over, and a
+       computer's turn would pick up a selection you never made */
+    if (!isMyTurn(G) || !G.pending || G.pending.kind !== 'move') { selMod = null; return; }
     /* pass the controls to the next module with Move left once this one is spent, so the
        whole fleet can be moved without reselecting after every module */
     if (!selMod || mine[selMod].moveLeft <= 0)
@@ -1122,10 +1135,11 @@
       /* movement state only means anything while a move prompt is open */
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
       if (mine && rec.id === selMod && p && p.kind === 'move') cls += ' sel';
-      var canAct = mine && G.phase === 'action' && !p && !o.exhausted && !!fx.activate &&
+      var canAct = mine && isMyTurn(G) && G.phase === 'action' && !p && !o.exhausted &&
+                   !!fx.activate &&
                    Engine.affordable(rec.side, o, rec.kind === 'dep' ? 'dep' : 'mod');
       if (canAct) cls += ' ready clickable';
-      if (mine && p && p.kind === 'move') cls += ' clickable';
+      if (mine && isMyTurn(G) && p && p.kind === 'move') cls += ' clickable';
     }
     d.className = cls;
     /* the board carries no text, so the name and hull live in the hover title */
@@ -1207,7 +1221,7 @@
 
   function renderHand(G) {
     var s = G.players[meIdx()], html = '';
-    var mine = G.active === meIdx() && !G.pending && !G.over;
+    var mine = isMyTurn(G) && !G.pending && !G.over;
     var canPlay = mine && G.phase === 'play';
     var myTurn = mine && G.phase === 'action';
     s.hand.forEach(function (id) {
@@ -1620,7 +1634,7 @@
       return;
     }
     /* no prompt open: clicking your own ready piece activates it */
-    if (!id || G.active !== meIdx() || G.phase !== 'action') return;
+    if (!id || !isMyTurn(G) || G.phase !== 'action') return;
     var s = G.players[meIdx()];
     if (s.modules[id]) Engine.activateModule(id);
     else if (s.deployables[id]) Engine.activateDeployable(id);
@@ -1819,7 +1833,7 @@
       e.preventDefault(); closeModPopup(); return;
     }
     var G = Engine.get();
-    if (!G || G.active !== meIdx()) return;
+    if (!isMyTurn(G)) return;
     var d = DIRS[e.key];
     if (d) { e.preventDefault(); nudge(d[0], d[1]); }
     if (e.key === 'Escape' && G.pending) { e.preventDefault(); Engine.resolve(null); }
@@ -1853,9 +1867,13 @@
     holdUntil = Date.now() + AI_TELEGRAPH_MS;
     Engine.emit();
   });
+  function menuOpen() {
+    return !document.getElementById('modePick').classList.contains('hidden');
+  }
   setInterval(function () {
     var G = Engine.get();
     if (!G || G.over) return;
+    if (menuOpen()) return;          /* the board is frozen while the roster is up */
     if (instantMoves) {
       /* run the seat's whole turn out in one tick; the guard is only there so a bug in the
          commander cannot spin the page forever */
