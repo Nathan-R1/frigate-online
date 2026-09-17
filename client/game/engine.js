@@ -19,7 +19,13 @@ var Engine = (function () {
   function onChange(fn) { listeners.push(fn); }
   function emit() { for (var i = 0; i < listeners.length; i++) listeners[i](G); }
 
-  function log(msg) { G.log.push({ turn: G.turn, side: G.active, msg: msg }); }
+  /* Log lines are coloured by side. That is the active seat almost always, but not during
+     setup, where every side deploys its Starter Cards before anyone's turn has begun —
+     `speaker` names who is acting while that is true. */
+  var speaker = null;
+  function log(msg) {
+    G.log.push({ turn: G.turn, side: speaker === null ? G.active : speaker, msg: msg });
+  }
   function uid(p) { return p + '_' + (G.seq++); }
   function key(x, y) { return x + ',' + y; }
   function findTech(n) { for (var i = 0; i < TECH_PRESETS.length; i++) if (TECH_PRESETS[i].name === n) return TECH_PRESETS[i]; return null; }
@@ -168,7 +174,11 @@ var Engine = (function () {
     /* Anything in the deck carrying the Starter Card trait is played before combat, which is
        how a ship arrives with a hull already built rather than a bare Core. */
     G.setup = true;
-    G.players.forEach(playStarterCards);
+    G.players.forEach(function (pl) {
+      speaker = pl.idx;
+      playStarterCards(pl);
+    });
+    speaker = null;
     G.setup = false;
     log(G.players.length + '-player game start.');
     startTurn();
@@ -327,7 +337,9 @@ var Engine = (function () {
   var watchers = [];
   function onAnnounce(fn) { watchers.push(fn); }
   function announce(e) { for (var i = 0; i < watchers.length; i++) watchers[i](e); }
-  function telegraph() { return watchers.length > 0; }
+  var telegraphOn = true;
+  function setTelegraph(on) { telegraphOn = !!on; }
+  function telegraph() { return telegraphOn && watchers.length > 0; }
 
   function nextLiving(from) {
     var n = G.players.length;
@@ -1201,7 +1213,7 @@ var Engine = (function () {
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
     undo: undo, canUndo: canUndo,
-    onAnnounce: onAnnounce, announce: announce, telegraph: telegraph,
+    onAnnounce: onAnnounce, announce: announce, telegraph: telegraph, setTelegraph: setTelegraph,
     hostileObjects: hostileObjects, objectById: objectById, stepObject: stepObject,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable,

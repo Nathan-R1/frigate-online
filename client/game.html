@@ -382,6 +382,12 @@
         </div>
         <div class="set-sep"></div>
         <div class="set-group">Game</div>
+        <div class="set-row"><span class="set-label">Instant moves</span>
+          <span class="set-opts" id="instantOpts">
+            <button type="button" data-instant="0">Off</button>
+            <button type="button" data-instant="1">On</button>
+          </span>
+        </div>
         <button type="button" class="set-item" id="newBtn">New Game…</button>
       </div>
     </span>
@@ -1654,16 +1660,28 @@
     var cog = document.getElementById('cogBtn');
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
+    var inst = document.getElementById('instantOpts');
     function mark() {
       [].forEach.call(opts.children, function (b) {
         b.classList.toggle('on', b.getAttribute('data-link') === connStyle);
+      });
+      [].forEach.call(inst.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
       });
     }
     function open(on) {
       menu.classList.toggle('hidden', !on);
       cog.setAttribute('aria-expanded', on ? 'true' : 'false');
     }
+    setInstant(instantMoves);      /* apply whatever was remembered */
     mark();
+    inst.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-instant]');
+      if (!b) return;
+      setInstant(b.getAttribute('data-instant') === '1');
+      mark();
+      Engine.emit();
+    });
     cog.addEventListener('click', function (e) {
       e.stopPropagation();
       open(menu.classList.contains('hidden'));
@@ -1817,6 +1835,16 @@
   var AI_TICK_MS = 380;
   var AI_TELEGRAPH_MS = 700;
   var holdUntil = 0;
+  /* Instant moves: no telegraph, no pacing — another player's whole turn resolves in one go
+     and the board shows only the result. */
+  var instantMoves = false;
+  try { instantMoves = localStorage.getItem('frigateInstant') === '1'; } catch (e) {}
+  function setInstant(on) {
+    instantMoves = !!on;
+    Engine.setTelegraph(!instantMoves);
+    if (instantMoves) { telegraphed = null; holdUntil = 0; clearRoute(); }
+    try { localStorage.setItem('frigateInstant', instantMoves ? '1' : '0'); } catch (e) {}
+  }
   Engine.onAnnounce(function (e) {
     if (e.kind !== 'move' || !e.route || e.route.length < 2) return;
     if (e.side === meIdx()) return;              /* your own moves you are making yourself */
@@ -1829,6 +1857,15 @@
   setInterval(function () {
     var G = Engine.get();
     if (!G || G.over) return;
+    if (instantMoves) {
+      /* run the seat's whole turn out in one tick; the guard is only there so a bug in the
+         commander cannot spin the page forever */
+      if (!isAI(G.active)) return;
+      var seat = G.active, guard = 0;
+      while (Engine.get().active === seat && !Engine.get().over && guard++ < 2000)
+        AICommander.tick(seat);
+      return;
+    }
     if (Date.now() < holdUntil) return;          /* still showing where they are going */
     if (telegraphed) { telegraphed = null; pathEl.style.removeProperty('--route'); clearRoute(); }
     if (isAI(G.active)) AICommander.tick(G.active);
