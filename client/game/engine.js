@@ -913,13 +913,16 @@ var Engine = (function () {
   }
 
   /* Run an activation, but only if its cost can be met in full. */
-  function activate(cost, effect, ctx, label) {
+  function activate(cost, effect, ctx, label, option) {
     var why = costShortfall(cost, ctx);
     if (why) {
-      log(label + ' cannot be activated — it ' + why + '.');
+      log(ctx.side.name + ' cannot activate ' + label + ' — it ' + why + '.');
       emit();
       return false;
     }
+    /* Announced before the ops run, so the log reads as cause then consequence: the
+       activation, then what it cost and what it did. */
+    log(ctx.side.name + ' activates ' + label + (option ? ' — ' + option : '') + '.');
     run((cost || []).concat(effect || []), ctx);
     return true;
   }
@@ -1082,7 +1085,7 @@ var Engine = (function () {
       prompt({ kind: 'choice', label: card.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
           var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, { side: s, card: card }, card.name);
+          activate(opt.cost, opt.effect, { side: s, card: card }, card.name, opt.label);
         } });
       return true;
     }
@@ -1104,7 +1107,7 @@ var Engine = (function () {
       prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
           var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, { side: s, module: m }, m.name);
+          activate(opt.cost, opt.effect, { side: s, module: m }, m.name, opt.label);
         } });
       return true;
     }
@@ -1127,7 +1130,7 @@ var Engine = (function () {
       prompt({ kind: 'choice', label: d.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
           var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, ctx, d.name);
+          activate(opt.cost, opt.effect, ctx, d.name, opt.label);
         } });
       return true;
     }
