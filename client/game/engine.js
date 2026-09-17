@@ -23,8 +23,13 @@ var Engine = (function () {
      setup, where every side deploys its Starter Cards before anyone's turn has begun —
      `speaker` names who is acting while that is true. */
   var speaker = null;
-  function log(msg) {
-    G.log.push({ turn: G.turn, side: speaker === null ? G.active : speaker, msg: msg });
+  /* A line is coloured by whoever it is about, which on someone else's turn is often not
+     the player acting: their gun fires, but it is your shield that soaks it and your passive
+     that answers. Pass the subject and the line reads in that seat's colour. */
+  function log(msg, who) {
+    var idx = who == null ? (speaker === null ? G.active : speaker)
+            : (typeof who === 'number' ? who : who.idx);
+    G.log.push({ turn: G.turn, side: idx, msg: msg });
   }
   function uid(p) { return p + '_' + (G.seq++); }
   function key(x, y) { return x + ',' + y; }
@@ -206,7 +211,7 @@ var Engine = (function () {
       var i = s.deck.indexOf(id);
       if (i >= 0) s.deck.splice(i, 1);
       s.played.push(id);
-      log(s.name + ' deploys ' + card.name + ' before combat.');
+      log(s.name + ' deploys ' + card.name + ' before combat.', s);
       run(fx(card.name, 'tech').onPlay || [], { side: s, card: card });
     });
   }
@@ -308,7 +313,7 @@ var Engine = (function () {
     tickDurations(s);
     s.moveLeft = 0;
     s.playsLeft = playCountOf(s);
-    log(s.name + ' begins turn ' + G.turn + '.');
+    log(s.name + ' begins turn ' + G.turn + '.', s);
     G.phase = 'draw';
     drawCards(s, drawCountOf(s) - s.hand.length > 0 ? drawCountOf(s) - s.hand.length : 0);
     G.phase = 'play';
@@ -320,7 +325,7 @@ var Engine = (function () {
     if (G.phase !== 'play') return false;
     var s = side();
     if (s.hand.length) {
-      log(s.name + ' discards ' + s.hand.length + ' card(s) from hand.');
+      log(s.name + ' discards ' + s.hand.length + ' card(s) from hand.', s);
       s.discard = s.discard.concat(s.hand);
       s.hand = [];
     }
@@ -357,14 +362,14 @@ var Engine = (function () {
     G.pending = null; G.queue = [];
     var s = side();
     failingModules(s).forEach(function (m) {
-      log(m.name + ' does not meet its requirement and breaks apart.');
+      log(m.name + ' does not meet its requirement and breaks apart.', s);
       destroyModule(s, m);
     });
     if (G.over) { emit(); return; }
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
     s.moveLeft = 0;
     refresh(s);
-    log(s.name + ' ends turn.');
+    log(s.name + ' ends turn.', s);
     var nxt = nextLiving(G.active);
     if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order */
     G.active = nxt;
@@ -383,7 +388,7 @@ var Engine = (function () {
       if (!s.deck.length) {
         if (!s.discard.length) break;
         s.deck = shuffle(s.discard.slice()); s.discard = [];
-        log(s.name + ' reshuffles the discard pile.');
+        log(s.name + ' reshuffles the discard pile.', s);
       }
       var id = s.deck.shift();
       if (id) s.hand.push(id);
@@ -414,10 +419,10 @@ var Engine = (function () {
     var rest = amount - absorbed;
     mod.hull -= rest;
     if (absorbed) {
-      log(targetSide.name + "'s shields absorb " + absorbed + '.');
+      log(targetSide.name + "'s shields absorb " + absorbed + '.', targetSide);
       fire(targetSide, 'onShieldDamaged', { amount: absorbed });
     }
-    if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage.');
+    if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage.', targetSide);
     if (mod.hull <= 0) destroyModule(targetSide, mod);
     dealtDamage(mod);
     checkWin();
@@ -433,10 +438,10 @@ var Engine = (function () {
   function damageDeployable(s, dep, amount) {
     if (!dep || amount <= 0) return 0;
     dep.hull -= amount;
-    log(s.name + "'s " + dep.name + ' takes ' + amount + ' damage.');
+    log(s.name + "'s " + dep.name + ' takes ' + amount + ' damage.', s);
     dealtDamage(dep);
     if (dep.hull <= 0) {
-      log(s.name + "'s " + dep.name + ' is destroyed.');
+      log(s.name + "'s " + dep.name + ' is destroyed.', s);
       vacate(dep.x, dep.y);
       delete s.deployables[dep.id];
     }
@@ -444,7 +449,7 @@ var Engine = (function () {
   }
 
   function destroyModule(s, mod) {
-    log(s.name + "'s " + mod.name + ' is destroyed.');
+    log(s.name + "'s " + mod.name + ' is destroyed.', s);
     vacate(mod.x, mod.y);
     delete s.modules[mod.id];
     checkWin();
@@ -464,7 +469,7 @@ var Engine = (function () {
           var d = s.deployables[id]; vacate(d.x, d.y); delete s.deployables[id];
         });
         s.moveLeft = 0;
-        log(s.name + ' is eliminated — their Core is destroyed.');
+        log(s.name + ' is eliminated — their Core is destroyed.', s);
       }
     });
     var teams = teamsAlive();
@@ -555,7 +560,7 @@ var Engine = (function () {
     });
     G.pending = null; G.queue = [];
     undoPoint = null;
-    log(s.name + ' cancels ' + u.label + '.');
+    log(s.name + ' cancels ' + u.label + '.', s);
     emit();
     return true;
   }
@@ -612,7 +617,7 @@ var Engine = (function () {
     var pas = o.pas, s = ctx.side;
     if (costShortfall(pas.effect, ctx)) return;     /* cannot pay its own cost: stays quiet */
     function go() {
-      log(s.name + ' passive — ' + o.name + '.');
+      log(s.name + ' passive — ' + o.name + '.', s);
       enqueue(pas.effect || [], ctx);
     }
     if (!pas.optional) { go(); return; }
@@ -626,13 +631,13 @@ var Engine = (function () {
     if (G.setup) {
       /* deploying before the game begins: berth it ourselves, nearest the Core */
       var cell = firstLegalCell(s, o.module);
-      if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' deploys ' + o.module + '.'); }
-      else log(s.name + ' has nowhere to berth ' + o.module + '.');
+      if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' deploys ' + o.module + '.', s); }
+      else log(s.name + ' has nowhere to berth ' + o.module + '.', s);
       return;
     }
     prompt({ kind: 'space', label: 'Place ' + o.module, filter: placementFilter(s, o.module),
       onResolve: function (cell) {
-        if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' builds ' + o.module + '.'); }
+        if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' builds ' + o.module + '.', s); }
       } });
   };
 
@@ -658,7 +663,7 @@ var Engine = (function () {
     var s = ctx.side;
     prompt({ kind: 'space', label: 'Deploy ' + o.deployable, filter: deployFilter(s),
       onResolve: function (cell) {
-        if (cell) { placeDeployable(s, o.deployable, cell.x, cell.y); log(s.name + ' deploys ' + o.deployable + '.'); }
+        if (cell) { placeDeployable(s, o.deployable, cell.x, cell.y); log(s.name + ' deploys ' + o.deployable + '.', s); }
       } });
   };
 
@@ -704,7 +709,7 @@ var Engine = (function () {
       if (ctx.module && m.id === ctx.module.id) return false;
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
-    if (!targets.length) { log(s.name + ' has no target in range with line of sight.'); return; }
+    if (!targets.length) { log(s.name + ' has no target in range with line of sight.', s); return; }
     var ids = targets.map(function (m) { return m.id; });
     /* An area weapon does not pick: everything it can see is already a target, so the only
        question left is whether to pull the trigger. Each one is then resolved in turn, in
@@ -752,7 +757,7 @@ var Engine = (function () {
         (from ? from.name + ' ' + at(from) : 'its hull') +
         ' targeting ' + labelOf(t) + ' ' + at(t.obj) +
         (dmg > 0 ? ' — ' + n + (n === 1 ? ' attack, ' : ' attacks, ') + dmg + ' damage each.'
-                 : '.'));
+                 : '.'), s);
     for (var i = 0; i < n; i++) {
       /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
       var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
@@ -819,11 +824,11 @@ var Engine = (function () {
 
   OPS.__grantMove = function (o, ctx) {
     var s = ctx.side, n = o.n;
-    if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.'); }
+    if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.', s); }
     s.moveBonus = 0;
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
     s.moveLeft = n;
-    log(s.name + ' gains Move ' + n + ' per module.');
+    log(s.name + ' gains Move ' + n + ' per module.', s);
     prompt({ kind: 'move', label: 'Move your modules — ' + n + ' each',
       /* Done means done: unspent Move is lost rather than banked onto the next engine */
       onResolve: function () {
@@ -836,7 +841,7 @@ var Engine = (function () {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
     function give(p) {
       p.shield = Math.min(p.shieldMax, p.shield + n);
-      log(p.name + ' gains ' + n + ' shield.');
+      log(p.name + ' gains ' + n + ' shield.', p);
     }
     if (o.target !== 'choose') { give(s); return; }
     /* "an allied ship within Sensor range from this" — measured from the module doing it, and
@@ -848,7 +853,7 @@ var Engine = (function () {
     var picks = [s].concat(alliesOf(s)).filter(function (p) {
       return Object.keys(p.modules).some(function (id) { return dist(from, p.modules[id]) <= reach; });
     });
-    if (!picks.length) { log(s.name + ' has no ship in Sensor range to shield.'); return; }
+    if (!picks.length) { log(s.name + ' has no ship in Sensor range to shield.', s); return; }
     if (picks.length === 1) { give(picks[0]); return; }
     prompt({ kind: 'choice', label: 'Shield which ship?',
       options: picks.map(function (p) { return p.name + ' — ' + p.shield + '/' + p.shieldMax; }),
@@ -865,7 +870,7 @@ var Engine = (function () {
       if (o.mayExceed) m.hullMax = Math.max(m.hullMax || 0, m.hull);
       else m.hull = Math.min(m.hull, m.hullMax || m.hull);
       log((owner || s).name + "'s " + m.name + ' gains ' + n + ' Hull (' +
-          m.hull + '/' + m.hullMax + ').');
+          m.hull + '/' + m.hullMax + ').', owner || s);
     }
     if (o.target !== 'choose') { give(s.modules[s.coreId]); return; }
 
@@ -879,7 +884,7 @@ var Engine = (function () {
         if (mine.some(function (o2) { return dist(o2, m) <= reach; })) pool.push({ m: m, p: p });
       });
     });
-    if (!pool.length) { log(s.name + ' has no module in Sensor range to reinforce.'); return; }
+    if (!pool.length) { log(s.name + ' has no module in Sensor range to reinforce.', s); return; }
     if (pool.length === 1) { give(pool[0].m, pool[0].p); return; }
     prompt({ kind: 'target', label: 'Reinforce which module?',
       targets: pool.map(function (x) { return x.m.id; }),
@@ -888,7 +893,7 @@ var Engine = (function () {
       } });
   };
 
-  OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.'); };
+  OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.', ctx.side); };
   OPS.grantPlays = function (o, ctx) { ctx.side.playsLeft += resolveCount(ctx.side, o.n, ctx); log('+' + o.n + ' play.'); };
 
   OPS.addCharge = function (o, ctx) {
@@ -922,7 +927,7 @@ var Engine = (function () {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
     function give(c) {
       c.heat = (c.heat || 0) + n;
-      log(s.name + ' adds ' + n + ' Heat to ' + c.name + ' (' + c.heat + ').');
+      log(s.name + ' adds ' + n + ' Heat to ' + c.name + ' (' + c.heat + ').', s);
     }
     if (o.target !== 'choose' && o.target !== 'allOwnCards') {
       var self = holderOf(ctx);
@@ -935,7 +940,7 @@ var Engine = (function () {
       Object.keys(s[bag]).forEach(function (id) { pool.push(s[bag][id]); });
     });
     pool = pool.filter(function (c) { return c && takesHeat(c.name); });
-    if (!pool.length) { log(s.name + ' has nothing in play that takes Heat.'); return; }
+    if (!pool.length) { log(s.name + ' has nothing in play that takes Heat.', s); return; }
     if (o.target === 'allOwnCards') { pool.forEach(give); return; }
     if (pool.length === 1) { give(pool[0]); return; }
     prompt({ kind: 'card', label: 'Add Heat to…',
@@ -1005,7 +1010,7 @@ var Engine = (function () {
       if (!src.length) return;
       if (src.length === 1) {
         var kind = takeToken(o, src[0]);
-        if (kind) log(s.name + ' removes a ' + kind + ' from ' + src[0].name + '.');
+        if (kind) log(s.name + ' removes a ' + kind + ' from ' + src[0].name + '.', s);
         step(left - 1);
         return;
       }
@@ -1016,7 +1021,7 @@ var Engine = (function () {
           src.forEach(function (c) { if (c.id === id) pick = c; });
           if (!pick) return;
           var k = takeToken(o, pick);
-          if (k) log(s.name + ' removes a ' + k + ' from ' + pick.name + '.');
+          if (k) log(s.name + ' removes a ' + k + ' from ' + pick.name + '.', s);
           step(left - 1);
         } });
     }
@@ -1039,7 +1044,7 @@ var Engine = (function () {
     if (core) near.forEach(function (r) { if (dist(core, r) < dist(core, best)) best = r; });
     vacate(best.x, best.y);
     delete G.asteroids[best.id];
-    log(s.name + ' consumes an asteroid at (' + best.x + ',' + best.y + ').');
+    log(s.name + ' consumes an asteroid at (' + best.x + ',' + best.y + ').', s);
   };
 
   /* modules this cost is allowed to exhaust */
@@ -1126,13 +1131,13 @@ var Engine = (function () {
   function activate(cost, effect, ctx, label, option) {
     var why = costShortfall(cost, ctx);
     if (why) {
-      log(ctx.side.name + ' cannot activate ' + label + ' — it ' + why + '.');
+      log(ctx.side.name + ' cannot activate ' + label + ' — it ' + why + '.', ctx.side);
       emit();
       return false;
     }
     /* Announced before the ops run, so the log reads as cause then consequence: the
        activation, then what it cost and what it did. */
-    log(ctx.side.name + ' activates ' + label + (option ? ' — ' + option : '') + '.');
+    log(ctx.side.name + ' activates ' + label + (option ? ' — ' + option : '') + '.', ctx.side);
     run((cost || []).concat(effect || []), ctx);
     return true;
   }
@@ -1172,7 +1177,7 @@ var Engine = (function () {
         var n = 0;
         spots.forEach(function (d) { if (addAsteroid(cell.x + d[0], cell.y + d[1])) n++; });
         log(s.name + ' scatters ' + n + ' asteroid' + (n === 1 ? '' : 's') +
-            ' around (' + cell.x + ',' + cell.y + ').');
+            ' around (' + cell.x + ',' + cell.y + ').', s);
       } });
   };
 
@@ -1203,7 +1208,7 @@ var Engine = (function () {
     var s = ctx.side, t = objectById(o.objId);
     if (!t) return;
     var n = o.n;
-    if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.'); }
+    if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.', s); }
     s.moveBonus = 0;
     openStepMove(t.obj, n);
   };
@@ -1223,7 +1228,7 @@ var Engine = (function () {
         vacate(mod.x, mod.y);
         mod.x = cell.x; mod.y = cell.y;
         occupy(cell.x, cell.y, { kind: 'module', owner: s.idx, id: mod.id });
-        log(s.name + ' repositions ' + mod.name + ' to (' + cell.x + ',' + cell.y + ').');
+        log(s.name + ' repositions ' + mod.name + ' to (' + cell.x + ',' + cell.y + ').', s);
       } });
   }
 
@@ -1231,7 +1236,7 @@ var Engine = (function () {
      asking; none means the ability simply has nothing to work with. */
   function withOwnModule(s, label, then) {
     var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
-    if (!mods.length) { log(s.name + ' has no module to move.'); return; }
+    if (!mods.length) { log(s.name + ' has no module to move.', s); return; }
     if (mods.length === 1) { then(mods[0]); return; }
     prompt({ kind: 'target', label: label, targets: mods.map(function (m) { return m.id; }),
       onResolve: function (id) {
@@ -1336,7 +1341,7 @@ var Engine = (function () {
     var card = s.cards[cardId];
     s.hand.splice(i, 1); s.played.push(cardId);
     s.playsLeft--;
-    log(s.name + ' plays ' + card.name + '.');
+    log(s.name + ' plays ' + card.name + '.', s);
     var e = fx(card.name, 'tech');
     run(e.onPlay || [], { side: s, card: card });
     return true;
