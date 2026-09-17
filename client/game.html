@@ -268,6 +268,11 @@
   .hcard.inplay { border-color:var(--amber); }
   .hcard.inplay.spent { border-color:var(--line); opacity:.55; }
   .hcard.inplay.spent .hn { color:var(--ink-dim); }
+  /* a card that works by itself: no button, but it is in play and says so */
+  .passive-tag { flex:1; text-align:center; font-family:var(--mono);
+    font-size:clamp(6.5px, 7cqh, 11px); letter-spacing:.12em; text-transform:uppercase;
+    color:var(--amber); border:1px dashed var(--brown-dim); border-radius:4px;
+    padding:clamp(2px, 3.5cqh, 6px) 0; }
   /* a card this prompt may take. Being exhausted does not stop it being chosen, so the spent
      dimming is lifted for the duration — otherwise a choosable card looks like a refused one.
      The selectors carry the extra classes because .inplay.spent would otherwise out-specify. */
@@ -1319,8 +1324,10 @@
     s.played.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       var e = Engine.fx(c.name, 'tech');
-      if (!e.activate) return;
-      var cReady = !c.exhausted && Engine.affordable(s, c, 'tech');
+      /* A card with nothing to activate still sits in play doing its work — it needs showing,
+         or a played Heat Sinks simply vanishes. It has no button and is never "unusable". */
+      var passiveOnly = !e.activate;
+      var cReady = passiveOnly || (!c.exhausted && Engine.affordable(s, c, 'tech'));
       html += '<div class="hcard inplay' + (cReady ? '' : ' spent') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
@@ -1328,9 +1335,11 @@
         /* only charges and heat are worth a line; an empty one just leaves a gap */
         ((c.charges || c.heat) ? '<div class="hmeta">' + tokenPips(c) + '</div>' : '') +
         '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
-        '<div class="hb"><button data-act="' + id + '"' +
-        (myTurn && cReady ? '' : ' disabled') +
-        '>Activate</button></div></div>';
+        (passiveOnly
+          ? '<div class="hb"><span class="passive-tag">In play</span></div>'
+          : '<div class="hb"><button data-act="' + id + '"' +
+            (myTurn && cReady ? '' : ' disabled') + '>Activate</button></div>') +
+        '</div>';
     });
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');

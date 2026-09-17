@@ -800,7 +800,42 @@ var Engine = (function () {
     var c = holderOf(ctx);
     if (c) c.charges = Math.max(0, (c.charges || 0) - resolveCount(ctx.side, o.n, ctx));
   };
-  OPS.addHeat = function (o, ctx) { var c = holderOf(ctx); if (c) c.heat = (c.heat || 0) + resolveCount(ctx.side, o.n, ctx); };
+  /* A card can bank heat when its preset declares a heat capacity, the way charges:'0' marks
+     a card that takes charges. No field, or an empty one, means it cannot hold heat at all. */
+  function takesHeat(name) {
+    var t = findTech(name) || findMod(name);
+    if (!t) return false;
+    var h = t.heat;
+    if (h === undefined || h === null || h === '') return false;
+    return !isNaN(parseInt(h, 10));
+  }
+
+  OPS.addHeat = function (o, ctx) {
+    var s = ctx.side, n = resolveCount(s, o.n, ctx);
+    function give(c) {
+      c.heat = (c.heat || 0) + n;
+      log(s.name + ' adds ' + n + ' Heat to ' + c.name + ' (' + c.heat + ').');
+    }
+    if (o.target !== 'choose' && o.target !== 'allOwnCards') {
+      var self = holderOf(ctx);
+      if (self) give(self);
+      return;
+    }
+    /* everything of yours that can hold heat: cards in play, and modules and drones too */
+    var pool = s.played.map(function (id) { return s.cards[id]; });
+    ['modules', 'deployables'].forEach(function (bag) {
+      Object.keys(s[bag]).forEach(function (id) { pool.push(s[bag][id]); });
+    });
+    pool = pool.filter(function (c) { return c && takesHeat(c.name); });
+    if (!pool.length) { log(s.name + ' has nothing in play that takes Heat.'); return; }
+    if (o.target === 'allOwnCards') { pool.forEach(give); return; }
+    if (pool.length === 1) { give(pool[0]); return; }
+    prompt({ kind: 'card', label: 'Add Heat to…',
+      cards: pool.map(function (c) { return c.id; }),
+      onResolve: function (id) {
+        pool.forEach(function (c) { if (c.id === id) give(c); });
+      } });
+  };
   OPS.spendHeat = function (o, ctx) { var c = holderOf(ctx); if (c) { ctx.heatSpent = Math.min(c.heat || 0, resolveCount(ctx.side, o.n, ctx)); c.heat -= ctx.heatSpent; } };
   OPS.spendAllHeat = function (o, ctx) { var c = holderOf(ctx); if (c) { ctx.heatSpent = c.heat || 0; c.heat = 0; } };
 
