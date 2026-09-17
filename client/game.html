@@ -299,6 +299,10 @@
     filter:drop-shadow(0 0 3px var(--pc)); }
   .mp-name { font-family:var(--disp); font-size:14px; letter-spacing:.04em; color:var(--ink);
     text-transform:uppercase; }
+  /* whose it is belongs with the name, not among the stats */
+  .mp-owner { font-family:var(--mono); font-size:10px; letter-spacing:.08em; padding:2px 7px;
+    border-radius:4px; border:1px solid var(--pc, var(--line)); color:var(--pc, var(--ink-mid)); }
+  .mp-owner:empty { display:none; }
   /* boxed tags, as the sheet builder draws them: an icon and a word per box */
   .mp-meta { display:flex; flex-wrap:wrap; gap:6px;
     font-family:var(--mono); font-size:10px; letter-spacing:.08em; }
@@ -433,7 +437,7 @@
 <div class="mp-back hidden" id="modPop"><div class="mp-box" role="dialog" aria-modal="true"
      aria-labelledby="modPopName">
   <button type="button" class="mp-close" id="modPopClose" title="Close">&#10005;</button>
-  <div class="mp-head"><span class="ci" id="modPopIcon"></span><span class="mp-name" id="modPopName"></span></div>
+  <div class="mp-head"><span class="ci" id="modPopIcon"></span><span class="mp-name" id="modPopName"></span><span class="mp-owner" id="modPopOwner"></span></div>
   <div class="mp-meta" id="modPopMeta"></div>
   <div class="mp-desc" id="modPopDesc"></div>
 </div></div>
@@ -726,6 +730,14 @@
   var lastRecs = [];
   function recById(id) {
     for (var i = 0; i < lastRecs.length; i++) if (lastRecs[i].id === id) return lastRecs[i];
+    return null;
+  }
+  /* the first piece of yours with this name, so a card can point at the thing it describes */
+  function pieceNamed(name) {
+    for (var i = 0; i < lastRecs.length; i++) {
+      var r = lastRecs[i];
+      if (r.si === meIdx() && r.o.name === name) return r;
+    }
     return null;
   }
 
@@ -1400,10 +1412,7 @@
   function openTechPopup(name, card) {
     var t = Engine.findTech(name);
     if (!t) return;
-    var icon = document.getElementById('modPopIcon');
-    icon.style.removeProperty('--pc');
-    icon.innerHTML = '';
-    document.getElementById('modPopName').textContent = t.name;
+    popHead(t.name, '', null, '');
     var meta = [];
     if (t.tt) meta.push({ text: (TYPE_ICONS[t.tt] || '⚔') + ' ' + cap(t.tt), cls: 't-cyan',
                           tip: cap(t.tt) + ' technology' });
@@ -1425,19 +1434,32 @@
     if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
     document.getElementById('modPopDesc').innerHTML =
       lines.length ? lines.map(withModPips).join('<br>') : 'No text.';
-    document.getElementById('modPop').classList.remove('hidden');
+    showPopup(null);
   }
 
   /* A rock belongs to nobody, so there is nothing to withhold. */
+  /* The header: silhouette, name, and an owner tag in that seat's colour. A piece that
+     belongs to nobody gets no tag. */
+  function popHead(name, iconHtml, colour, owner) {
+    var icon = document.getElementById('modPopIcon');
+    if (colour) icon.style.setProperty('--pc', colour); else icon.style.removeProperty('--pc');
+    icon.innerHTML = iconHtml || '';
+    document.getElementById('modPopName').textContent = name;
+    var tag = document.getElementById('modPopOwner');
+    tag.textContent = owner || '';
+    if (colour) tag.style.setProperty('--pc', colour); else tag.style.removeProperty('--pc');
+  }
+  /* where it is, so you can go and find it */
+  function atChip(o) {
+    return { text: 'at ' + o.x + ',' + o.y, cls: '', tip: 'Position on the board' };
+  }
+
   function openAsteroidPopup(rec) {
     var o = rec.o, max = o.hullMax || o.hull;
-    var icon = document.getElementById('modPopIcon');
-    icon.style.setProperty('--pc', '#6a7077');
-    icon.innerHTML = GamePieces.markup(rec.shape, '#6a7077', GamePieces.hash(rec.id));
-    document.getElementById('modPopName').textContent = 'Asteroid';
+    popHead('Asteroid', GamePieces.markup(rec.shape, '#6a7077', GamePieces.hash(rec.id)), '#6a7077', '');
     document.getElementById('modPopMeta').innerHTML = chipsHtml([
       { text: HULL_ICON + o.hull + ' / ' + max, cls: 't-hull', tip: 'Hull remaining' },
-      { text: 'at ' + o.x + ',' + o.y, cls: '', tip: 'Position' },
+      atChip(o),
       rec.shape === 'debris' ? { text: 'Breaking up', cls: 't-amber',
                                  tip: 'Down to its last hull point' } : null
     ].filter(Boolean));
@@ -1445,7 +1467,7 @@
       'Terrain. It blocks movement and line of sight, and can be shot away — ' + max +
       ' hull when whole.' +
       (rec.shape === 'debris' ? '\nOne more hit and it is gone.' : '');
-    document.getElementById('modPop').classList.remove('hidden');
+    showPopup(rec);
   }
 
   /* What you may know about someone else's module: the silhouette already tells you its class,
@@ -1454,35 +1476,33 @@
     var isDep = rec.kind === 'dep';
     var m = Engine.findMod(rec.o.name) || {};
     var col = SEAT_HEX[rec.si % 4];
-    var icon = document.getElementById('modPopIcon');
-    icon.style.setProperty('--pc', col);
-    icon.innerHTML = GamePieces.markup(rec.shape, col);
-    document.getElementById('modPopName').textContent = 'Unknown ' + (isDep ? 'Deployable' : 'Module');
+    popHead('Unknown ' + (isDep ? 'Deployable' : 'Module'),
+            GamePieces.markup(rec.shape, col), col, rec.side.name);
     var meta = [
       { text: (isDep ? DEPLOYABLE_ICON : MODULE_ICON) + (isDep ? 'Deployable' : 'Module'),
         cls: isDep ? 't-amber' : 't-cyan', tip: isDep ? 'Deployable' : 'Module' }
     ];
     if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
                           tip: 'Its silhouette gives away this much' });
-    meta.push({ text: esc(rec.side.name), cls: '', tip: 'Owner' });
+    meta.push(atChip(rec.o));
     document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
     document.getElementById('modPopDesc').innerHTML =
       '<span class="redacted">████████ ████ ███████</span><br>' +
       '<span class="redacted">███████ ██ ████████ █████</span><br>' +
       '<span style="color:var(--ink-dim)">No scan data. You can see what shape it is, ' +
       'and nothing more.</span>';
-    document.getElementById('modPop').classList.remove('hidden');
+    showPopup(rec);
   }
 
-  function openModPopup(name) {
+  /* `rec` is the piece on the board this is about, when there is one: it supplies the owner
+     tag, the live hull, where it stands, and the highlight while the box is open. */
+  function openModPopup(name, rec) {
     var m = Engine.findMod(name);
     if (!m) return;
     var isDep = m.type === 'deployable';
-    var col = SEAT_HEX[meIdx() % 4];
-    var icon = document.getElementById('modPopIcon');
-    icon.style.setProperty('--pc', col);
-    icon.innerHTML = GamePieces.markup(GamePieces.shapeOf(m.name, false), col);
-    document.getElementById('modPopName').textContent = m.name;
+    var col = rec ? SEAT_HEX[rec.si % 4] : SEAT_HEX[meIdx() % 4];
+    popHead(m.name, GamePieces.markup(rec ? rec.shape : GamePieces.shapeOf(m.name, false), col),
+            col, rec ? rec.side.name : '');
     /* an icon and its value per box, the way the sheet draws them; the title says which
        number you are looking at, since a bare 12 beside an arrow is not self-evident */
     var meta = [
@@ -1491,12 +1511,15 @@
     ];
     if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
                           tip: cap(m.tt) + ' technology' });
-    if (num(m.hull) > 0) meta.push({ text: HULL_ICON + esc(m.hull), cls: 't-hull', tip: 'Hull HP' });
+    if (rec) meta.push({ text: HULL_ICON + rec.o.hull + ' / ' + (rec.o.hullMax || rec.o.hull),
+                         cls: 't-hull', tip: 'Hull remaining' });
+    else if (num(m.hull) > 0) meta.push({ text: HULL_ICON + esc(m.hull), cls: 't-hull', tip: 'Hull HP' });
     if (num(m.speed) > 0) meta.push({ text: SPEED_ICON + esc(m.speed), cls: '', tip: 'Speed' });
     if (num(m.duration) > 0) meta.push({ text: DURATION_ICON + esc(m.duration), cls: '', tip: 'Duration' });
     if (num(m.charges) > 0) meta.push({ text: CHARGES_ICON + esc(m.charges), cls: 't-charge',
                                         tip: 'Charges it starts with' });
     if (m.traits) meta.push({ text: esc(m.traits), cls: '', tip: 'Traits' });
+    if (rec) meta.push(atChip(rec.o));
     document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
     var lines = [];
     if (m.req) lines.push('Requires: ' + m.req);
@@ -1504,9 +1527,17 @@
     if (m.passive) lines.push('Passive: ' + m.passive);
     if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
     document.getElementById('modPopDesc').textContent = lines.join('\n') || 'No text.';
-    document.getElementById('modPop').classList.remove('hidden');
+    showPopup(rec);
   }
-  function closeModPopup() { document.getElementById('modPop').classList.add('hidden'); }
+  /* A popup about a piece keeps that piece lit, so you can see what you are reading about. */
+  function showPopup(rec) {
+    document.getElementById('modPop').classList.remove('hidden');
+    if (rec && rec.id !== foundId) { foundId = rec.id; Engine.emit(); }
+  }
+  function closeModPopup() {
+    document.getElementById('modPop').classList.add('hidden');
+    if (foundId) { foundId = null; Engine.emit(); }
+  }
   function cap(x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : ''; }
   function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
 
@@ -1722,7 +1753,7 @@
     if (rec && (rec.kind === 'mod' || rec.kind === 'dep')) {
       var theirs = rec.side.team !== G.players[meIdx()].team;
       if (e.ctrlKey || e.metaKey) {
-        if (theirs) openUnknownPopup(rec); else openModPopup(rec.o.name);
+        if (theirs) openUnknownPopup(rec); else openModPopup(rec.o.name, rec);
         return;
       }
       /* a plain click on someone else's piece does nothing else useful, unless it is the
@@ -1776,7 +1807,7 @@
     if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); return; }
     var head = e.target.closest('.hn[data-tech], .hn[data-mod]');
     if (head) {
-      if (head.hasAttribute('data-mod')) openModPopup(head.getAttribute('data-mod'));
+      if (head.hasAttribute('data-mod')) openModPopup(head.getAttribute('data-mod'), pieceNamed(head.getAttribute('data-mod')));
       else {
         var cid = head.getAttribute('data-card'), st = Engine.get().players[meIdx()];
         openTechPopup(head.getAttribute('data-tech'), cid ? st.cards[cid] : null);
