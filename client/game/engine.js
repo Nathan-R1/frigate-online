@@ -1533,6 +1533,81 @@ var Engine = (function () {
   }
   var stepDeployable = stepObject;
 
+  /* ================= debug tools =================
+     A hand reached into the board for testing. These answer to no rule — no cost, no range,
+     no turn order — so nothing here is reachable unless the page has debug switched on. Each
+     one still does the bookkeeping properly: a piece that moves vacates the square it left,
+     and a card that is trashed leaves whatever pile it was in. */
+  var DEBUG = {
+    /* put any piece on any empty square */
+    place: function (objId, x, y) {
+      var t = objectById(objId);
+      if (!t || !inBounds(x, y)) return false;
+      var there = cellAt(x, y);
+      if (there && there.id !== objId) return false;
+      vacate(t.obj.x, t.obj.y);
+      t.obj.x = x; t.obj.y = y;
+      occupy(x, y, { kind: t.kind === 'asteroid' ? 'asteroid' : t.kind,
+                     owner: t.owner ? t.owner.idx : undefined, id: objId });
+      log('debug: ' + labelOf(t) + ' moved to (' + x + ',' + y + ').', t.owner || undefined);
+      emit();
+      return true;
+    },
+    /* take any piece off the board */
+    remove: function (objId) {
+      var t = objectById(objId);
+      if (!t) return false;
+      vacate(t.obj.x, t.obj.y);
+      if (t.kind === 'asteroid') delete G.asteroids[objId];
+      else if (t.kind === 'deployable') delete t.owner.deployables[objId];
+      else delete t.owner.modules[objId];
+      log('debug: ' + labelOf(t) + ' removed.', t.owner || undefined);
+      checkWin();
+      emit();
+      return true;
+    },
+    /* conjure a card into a pile — the hand by default, so it can be used at once */
+    addCard: function (sideIdx, name, pile) {
+      var s = G.players[sideIdx];
+      if (!s || !findTech(name)) return null;
+      var id = addCardToDeck(s, name);
+      if (!id) return null;
+      if (pile !== 'deck') {
+        s.deck.splice(s.deck.indexOf(id), 1);
+        (s[pile] || s.hand).push(id);
+      }
+      log('debug: ' + s.name + ' is given ' + name + '.', s);
+      emit();
+      return id;
+    },
+    /* flip anything that can be spent: a card, a module or a deployable */
+    exhaust: function (sideIdx, id, on) {
+      var s = G.players[sideIdx];
+      var o = s && (s.cards[id] || s.modules[id] || s.deployables[id]);
+      if (!o) return false;
+      o.exhausted = on === undefined ? !o.exhausted : !!on;
+      log('debug: ' + o.name + (o.exhausted ? ' exhausted.' : ' refreshed.'), s);
+      emit();
+      return true;
+    },
+    /* move a card to another pile, wherever it is now */
+    toPile: function (sideIdx, id, pile) {
+      var s = G.players[sideIdx];
+      if (!s || !s.cards[id] || !s[pile]) return false;
+      ['hand', 'deck', 'discard', 'trash', 'played'].forEach(function (k) {
+        var i = s[k].indexOf(id); if (i >= 0) s[k].splice(i, 1);
+      });
+      s[pile].push(id);
+      log('debug: ' + s.cards[id].name + ' sent to ' + pile + '.', s);
+      emit();
+      return true;
+    },
+    /* every card that could be conjured */
+    cardNames: function () {
+      return TECH_PRESETS.map(function (t) { return t.name; }).sort();
+    }
+  };
+
   return {
     RULES: RULES,
     newGame: newGame, get: function () { return G; }, onChange: onChange, emit: emit,
@@ -1553,6 +1628,7 @@ var Engine = (function () {
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
-    findTech: findTech, findMod: findMod, fx: fx, checkWin: checkWin
+    findTech: findTech, findMod: findMod, fx: fx, checkWin: checkWin,
+    debug: DEBUG
   };
 })();
