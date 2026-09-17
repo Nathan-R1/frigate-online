@@ -585,24 +585,41 @@ var Engine = (function () {
     return out;
   }
 
-  /* A passive fires once per holder. An optional one is skipped silently when its own cost
-     cannot be met — an After Burner with no heat should not keep asking. */
+  /* Passives go on the queue rather than running inline. An optional one has to ask before
+     it acts, and asking parks the queue — so whatever triggered it must be able to wait for
+     the answer, which only queued work can do. */
   function fire(s, trigger, payload) {
     if (!s || G.over) return;
+    var items = [];
     passiveHolders(s).forEach(function (h) {
       h.passives.forEach(function (pas) {
         if (pas.trigger !== trigger) return;
         var ctx = {};
         for (var k in h.ctx) ctx[k] = h.ctx[k];
         for (var k2 in (payload || {})) ctx[k2] = payload[k2];
-        if (pas.optional && costShortfall(pas.effect, ctx)) return;
-        run(pas.effect || [], ctx);
+        items.push({ op: { op: '__passive', pas: pas, name: h.obj.name }, ctx: ctx });
       });
     });
+    if (items.length) G.queue = items.concat(G.queue);
   }
 
   /* ---- op implementations ---- */
   var OPS = {};
+
+  /* One passive, resolved. Optional ones ask first; either way the effects are queued rather
+     than run, so anything they prompt for happens in order. */
+  OPS.__passive = function (o, ctx) {
+    var pas = o.pas, s = ctx.side;
+    if (costShortfall(pas.effect, ctx)) return;     /* cannot pay its own cost: stays quiet */
+    function go() {
+      log(s.name + ' passive — ' + o.name + '.');
+      enqueue(pas.effect || [], ctx);
+    }
+    if (!pas.optional) { go(); return; }
+    prompt({ kind: 'choice', label: 'Activate passive — ' + o.name + '?',
+      options: ['Yes', 'No'],
+      onResolve: function (i) { if (i === 0) go(); } });
+  };
 
   OPS.createModule = function (o, ctx) {
     var s = ctx.side;
@@ -688,57 +705,77 @@ var Engine = (function () {
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
     if (!targets.length) { log(s.name + ' has no target in range with line of sight.'); return; }
-    prompt({ kind: 'target', label: 'Choose a target', targets: targets.map(function (m) { return m.id; }),
+    var ids = targets.map(function (m) { return m.id; });
+    /* An area weapon does not pick: everything it can see is already a target, so the only
+       question left is whether to pull the trigger. Each one is then resolved in turn, in
+       full — its own rolls, its own riders — before the next is touched. */
+    if (o.aoe) {
+      prompt({ kind: 'confirm', label: 'Confirm targets', targets: ids,
+        envelope: firingEnvelope(origins, reach),
+        onResolve: function () {
+          enqueue(ids.map(function (id) { return { op: '__shot', shot: o, targetId: id }; }), ctx);
+        } });
+      return;
+    }
+    prompt({ kind: 'target', label: 'Choose a target', targets: ids,
       envelope: firingEnvelope(origins, reach),
-      onResolve: function (targetId) {
-        var t = objectById(targetId);
-        if (!t) return;
-        /* name the piece that actually fires: the origin nearest the target that can see it */
-        var from = null, fd = 1e9;
-        origins.forEach(function (or) {
-          var d = dist(or, t.obj);
-          if (d <= reach && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
-        });
-        var n = resolveCount(s, o.attacks, ctx);
-        var dmg = resolveCount(s, o.dmg, ctx);
-        var hit = false;
-        /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
-           nobody is trying to slip the beam, so it simply lands. */
-        var friendly = !!t.owner && t.owner.team === s.team;
-        /* The dice are about to be cast, so the activation can no longer be taken back. A
-           rider's prompt may still be cancelled, but that cancels only the rider — the cost
-           stays paid and the card stays exhausted. */
-        clearUndo();
-        /* a zero-damage beam is not an attack, and reads oddly as one when it grabs your own hull */
-        log(s.name + (dmg > 0 ? ' attacks with ' : ' locks on with ') +
-            (from ? from.name + ' ' + at(from) : 'its hull') +
-            ' targeting ' + labelOf(t) + ' ' + at(t.obj) +
-            (dmg > 0 ? ' — ' + n + (n === 1 ? ' attack, ' : ' attacks, ') + dmg + ' damage each.'
-                     : '.'));
-        for (var i = 0; i < n; i++) {
-          /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
-          var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
-                : o.check ? check(s, o.check, RULES.dc) : attackRoll();
-          if (c.hit) {
-            log('  ' + c.text + ' — hit.');
-            if (dmg > 0) {
-              if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
-              else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
-              else damageModule(t.owner, t.obj, dmg);
-            }
-            /* riders such as a tractor beam's shove run once, on the first hit that lands.
-               Queued rather than run, because we are inside the prompt being resolved. */
-            if (o.onSuccess && !hit) {
-              hit = true;
-              var sub = {}; for (var k in ctx) sub[k] = ctx[k];
-              sub.target = objectById(targetId);
-              enqueue(o.onSuccess, sub);
-            }
-          } else log('  ' + c.text + ' — miss.');
-          if (!objectById(targetId)) break;
-        }
-      } });
+      onResolve: function (targetId) { shoot(o, ctx, targetId); } });
   };
+
+  OPS.__shot = function (o, ctx) { shoot(o.shot, ctx, o.targetId); };
+
+  /* One target, start to finish. */
+  function shoot(o, ctx, targetId) {
+    var s = ctx.side;
+    var t = objectById(targetId);
+    if (!t) return;
+    var origins = attackOrigins(s, o, ctx);
+    var reach = resolveRange(s, o.range);
+    /* name the piece that actually fires: the origin nearest the target that can see it */
+    var from = null, fd = 1e9;
+    origins.forEach(function (or) {
+      var d = dist(or, t.obj);
+      if (d <= reach && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
+    });
+    var n = resolveCount(s, o.attacks, ctx);
+    var dmg = resolveCount(s, o.dmg, ctx);
+    var hit = false;
+    /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
+       nobody is trying to slip the beam, so it simply lands. */
+    var friendly = !!t.owner && t.owner.team === s.team;
+    /* The dice are about to be cast, so the activation can no longer be taken back. A
+       rider's prompt may still be cancelled, but that cancels only the rider — the cost
+       stays paid and the card stays exhausted. */
+    clearUndo();
+    /* a zero-damage beam is not an attack, and reads oddly as one when it grabs your own hull */
+    log(s.name + (dmg > 0 ? ' attacks with ' : ' locks on with ') +
+        (from ? from.name + ' ' + at(from) : 'its hull') +
+        ' targeting ' + labelOf(t) + ' ' + at(t.obj) +
+        (dmg > 0 ? ' — ' + n + (n === 1 ? ' attack, ' : ' attacks, ') + dmg + ' damage each.'
+                 : '.'));
+    for (var i = 0; i < n; i++) {
+      /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
+      var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
+            : o.check ? check(s, o.check, RULES.dc) : attackRoll();
+      if (c.hit) {
+        log('  ' + c.text + ' — hit.');
+        if (dmg > 0) {
+          if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
+          else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
+          else damageModule(t.owner, t.obj, dmg);
+        }
+        /* riders such as a tractor beam's shove run once, on the first hit that lands.
+           Queued rather than run, because we are inside the prompt being resolved. */
+        if (o.onSuccess && !hit) {
+          hit = true;
+          var sub = {}; for (var k in ctx) sub[k] = ctx[k];
+          sub.target = objectById(targetId);
+          enqueue(o.onSuccess, sub);
+        }
+      } else log('  ' + c.text + ' — miss.');
+      if (!objectById(targetId)) break;
+    }
+  }
 
   /* Every square this shot can see: in range of some origin, with a clear line to it. Worked
      out once when the prompt opens so the board can shade it without re-tracing lines on each
@@ -774,7 +811,14 @@ var Engine = (function () {
        multiplying by the module count here would apply the same factor twice. */
     var n = (o.from === 'stat' && o.stat === 'speed') ? speedOf(s) : resolveCount(s, o.n, ctx);
     s.moveBonus = 0;
+    /* queue the grant, then the passives in front of it: an optional one may stop to ask,
+       and its answer has to be in before the Move is handed out */
+    enqueue([{ op: '__grantMove', n: n }], ctx);
     fire(s, 'onMove', { moveBonus: true });
+  };
+
+  OPS.__grantMove = function (o, ctx) {
+    var s = ctx.side, n = o.n;
     if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.'); }
     s.moveBonus = 0;
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
@@ -1139,12 +1183,30 @@ var Engine = (function () {
   };
   /* Push whatever the shot caught. The prompt is the same one a deployable's own move uses,
      so the board already knows how to draw the route and walk it. */
-  /* Walk a piece under its own power, `n` squares at a time. */
-  function promptStepMove(obj, n) {
+  /* Walk a piece under its own power, `n` squares at a time. Moving a piece of your own is a
+     Move like any other, so the passives that answer onMove get their say first and their
+     bonus is added to the allowance — the prompt is queued behind them. */
+  function promptStepMove(obj, n, ctx) {
     if (n <= 0) return;
+    var s = ctx && ctx.side;
+    var ours = s && (s.modules[obj.id] || s.deployables[obj.id]);
+    if (!ours) { openStepMove(obj, n); return; }
+    s.moveBonus = 0;
+    enqueue([{ op: '__stepMove', objId: obj.id, n: n }], ctx);
+    fire(s, 'onMove', { moveBonus: true });
+  }
+  function openStepMove(obj, n) {
     prompt({ kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
              objId: obj.id, left: n, onResolve: function () {} });
   }
+  OPS.__stepMove = function (o, ctx) {
+    var s = ctx.side, t = objectById(o.objId);
+    if (!t) return;
+    var n = o.n;
+    if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.'); }
+    s.moveBonus = 0;
+    openStepMove(t.obj, n);
+  };
 
   /* Lift a module and set it down somewhere else in one go — no route, no Move spent. The
      destination must be empty and beside a module of yours other than the one being lifted. */
@@ -1184,20 +1246,19 @@ var Engine = (function () {
       var n = resolveCount(s, o.n, ctx);
       withOwnModule(s, 'Which module?', function (m) {
         if (o.placement === 'adjacentToOwnModule') promptRelocate(s, m);
-        else promptStepMove(m, n);
+        else promptStepMove(m, n, ctx);
       });
       return;
     }
     var t = (o.what === 'target') ? ctx.target : (ctx.deployable ? objectById(ctx.deployable.id) : null);
     if (!t) return;
-    promptStepMove(t.obj, resolveCount(s, o.n, ctx));
+    promptStepMove(t.obj, resolveCount(s, o.n, ctx), ctx);
   };
 
   OPS.moveSelf = function (o, ctx) {
     var d = ctx.deployable; if (!d) return;
     var n = resolveCount(ctx.side, o.n, ctx);
-    prompt({ kind: 'moveObject', label: 'Move ' + d.name + ' up to ' + n, objId: d.id, left: n,
-             onResolve: function () {} });
+    promptStepMove(d, n, ctx);
   };
   /* every remaining op is declared in card-effects.js but not yet simulated; it logs
      rather than throwing so a card is always playable and the gap is visible. */

@@ -320,6 +320,9 @@ var AICommander = (function () {
   function answer(s, st, p) {
     if (p.kind === 'choice') return chooseOption(s, st, p);
     if (p.kind === 'target') return bestTarget(s, st, p.targets);
+    /* an area weapon offers no choice of target, only whether to fire — and it was activated
+       on purpose, so it fires */
+    if (p.kind === 'confirm') return true;
     if (p.kind === 'move') { manoeuvre(s, st); return null; }
     if (p.kind === 'moveObject') return null;
     if (p.kind === 'space') {
@@ -331,6 +334,8 @@ var AICommander = (function () {
   /* "add a charge" vs "spend it". Bank during prep; once engaged, spend. In RECOVER the whole
      point is to turn charges back into shields, so spend as soon as the bank can pay. */
   function chooseOption(s, st, p) {
+    /* An optional passive is free value it has already been checked it can afford — take it. */
+    if (/^Activate passive/.test(p.label || '')) return 0;
     var charging = -1;
     for (var i = 0; i < p.options.length; i++) if (/charge/i.test(p.options[i])) { charging = i; break; }
     if (charging < 0) return 0;

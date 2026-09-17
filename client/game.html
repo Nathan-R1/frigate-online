@@ -24,7 +24,8 @@
   .btn-ico { width:13px; height:13px; flex:none; display:block; }
   .g-btn.ghost { border-color:var(--line-bright); color:var(--ink-mid); }
   /* one colour per seat, so up to four ships stay distinguishable on the board */
-  :root { --p0:#4fd8c9; --p1:#e8762e; --p2:#e0a93f; --p3:#9a7ce0; }
+  :root { --p0:#4fd8c9; --p1:#e8762e; --p2:#e0a93f; --p3:#9a7ce0;
+          --pass-green:#46d176; }
   #barRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .side-bar { display:flex; align-items:center; gap:9px; padding:4px 10px;
               border:1px solid var(--sc, var(--line)); color:var(--ink);
@@ -103,8 +104,11 @@
   .piece.moving .move-corner { opacity:1; animation:move-corner-pulse 1.6s ease-in-out infinite; }
   .piece.moving .move-corner.mc-tr, .piece.moving .move-corner.mc-bl { animation-delay:.8s; }
   /* a legal target for the shot being resolved */
-  .piece.targetable { outline:2px solid var(--amber); outline-offset:-2px;
-    box-shadow:0 0 10px rgba(232,169,74,.5); border-radius:6px; cursor:pointer; }
+  .piece.targetable, .piece.marked { outline:2px solid var(--amber); outline-offset:-2px;
+    box-shadow:0 0 10px rgba(232,169,74,.5); border-radius:6px; }
+  .piece.targetable { cursor:pointer; }
+  /* an area weapon has already picked: these are not choices, so they do not invite a click */
+  .piece.marked { cursor:default; }
   /* ready to activate */
   .piece.ready .module-svg { filter:drop-shadow(0 0 5px var(--pc)) drop-shadow(0 0 13px var(--pc)); }
 
@@ -268,6 +272,12 @@
   .hcard.inplay { border-color:var(--amber); }
   .hcard.inplay.spent { border-color:var(--line); opacity:.55; }
   .hcard.inplay.spent .hn { color:var(--ink-dim); }
+  /* A second ring outside the border: this one has a passive that is currently watching.
+     It goes when the card is exhausted or its cost can no longer be met, because a passive
+     that cannot fire is not doing anything. */
+  /* drawn inside the amber border rather than around it, so "in play" stays the outer ring
+     and "has a live passive" the inner one */
+  .hcard.watching { outline:2px solid var(--pass-green); outline-offset:-3px; }
   /* a card that works by itself: no button, but it is in play and says so */
   .passive-tag { flex:1; text-align:center; font-family:var(--mono);
     font-size:clamp(6.5px, 7cqh, 11px); letter-spacing:.12em; text-transform:uppercase;
@@ -276,11 +286,14 @@
   /* a card this prompt may take. Being exhausted does not stop it being chosen, so the spent
      dimming is lifted for the duration — otherwise a choosable card looks like a refused one.
      The selectors carry the extra classes because .inplay.spent would otherwise out-specify. */
-  .hcard.pickable { border-color:var(--amber); box-shadow:0 0 12px rgba(232,169,74,.45);
-                    cursor:pointer; }
+  /* An option is always in focus, whatever state it was in; its borders are left alone. */
+  .hcard.pickable { cursor:pointer; }
   .hcard.pickable, .hcard.inplay.spent.pickable { opacity:1; }
   .hcard.inplay.spent.pickable .hn { color:var(--ink); }
   .hcard.pickable:hover { background:rgba(232,169,74,.12); }
+  /* A refusal shows nothing at all: no borders, out of focus, whatever it was before. */
+  .hcard.unpickable { border-color:transparent !important; outline:none !important;
+                      box-shadow:none !important; }
   /* refused is refused, spent or not — without the extra class .inplay.spent would win and
      leave an exhausted, unchoosable card looking brighter than a ready one */
   .hcard.unpickable, .hcard.inplay.spent.unpickable { opacity:.3; }
@@ -1006,7 +1019,7 @@
       p.pattern.forEach(function (d) { shape[(hoverCell.x + d[0]) + ',' + (hoverCell.y + d[1])] = true; });
     /* the same tint carries two meanings, both "where this can reach": squares the selected
        piece can move to, and squares the shot being aimed can see */
-    var reach = (p && p.kind === 'target') ? p.envelope : reachSet(G);
+    var reach = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.envelope : reachSet(G);
     var kids = cellsEl.children;
     for (var i = 0; i < kids.length; i++) {
       var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
@@ -1198,8 +1211,8 @@
     d.style.left = (o.x * CELL) + 'px';
     d.style.top  = (o.y * CELL) + 'px';
     var cls = 'piece ' + rec.kind;
-    var targetIds = (p && p.kind === 'target') ? p.targets : [];
-    if (targetIds.indexOf(rec.id) >= 0) cls += ' targetable';
+    var targetIds = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.targets : [];
+    if (targetIds.indexOf(rec.id) >= 0) cls += (p.kind === 'confirm' ? ' marked' : ' targetable');
     if (rec.id === foundId) cls += ' found';
     /* the piece on the end of a tractor beam may be anything at all, including a rock */
     if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving clickable';
@@ -1299,6 +1312,21 @@
     });
   }
 
+  /* Is this piece's passive actually live? Exhaustion does not stop a passive — the engine
+     fires them regardless — so the green ring is independent of the yellow one. A passive is
+     dormant only when every one it has is optional and cannot pay its own cost. */
+  function livePassive(s, obj, kind) {
+    var e = Engine.fx(obj.name, kind === 'tech' ? 'tech' : 'mod');
+    if (!e.passive || !e.passive.length) return false;
+    var ctx = kind === 'tech' ? { side: s, card: obj }
+            : kind === 'dep' ? { side: s, module: obj, deployable: obj }
+            : { side: s, module: obj };
+    return e.passive.some(function (pas) {
+      if (!pas.optional) return true;
+      return !Engine.costShortfall(pas.effect, ctx);
+    });
+  }
+
   /* A card-picking prompt marks what may be chosen and greys out the rest, the way a target
      prompt outlines pieces on the board. */
   function pickClass(G, id) {
@@ -1327,8 +1355,9 @@
       /* A card with nothing to activate still sits in play doing its work — it needs showing,
          or a played Heat Sinks simply vanishes. It has no button and is never "unusable". */
       var passiveOnly = !e.activate;
-      var cReady = passiveOnly || (!c.exhausted && Engine.affordable(s, c, 'tech'));
-      html += '<div class="hcard inplay' + (cReady ? '' : ' spent') + pickClass(G, id) +
+      var cReady = !c.exhausted && (passiveOnly || Engine.affordable(s, c, 'tech'));
+      html += '<div class="hcard inplay' + (cReady ? '' : ' spent') +
+        (livePassive(s, c, 'tech') ? ' watching' : '') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
         '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
@@ -1343,31 +1372,35 @@
     });
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
-      if (!e.activate) return;
-      var dReady = !d.exhausted && Engine.affordable(s, d, 'dep');
-      html += '<div class="hcard inplay' + (dReady ? '' : ' spent') + pickClass(G, id) +
+      if (!e.activate && !e.passive) return;      /* nothing to show and nothing to do */
+      var dReady = !d.exhausted && (!e.activate || Engine.affordable(s, d, 'dep'));
+      html += '<div class="hcard inplay' + (dReady ? '' : ' spent') +
+        (livePassive(s, d, 'dep') ? ' watching' : '') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
         pieceIcon(d.name, false) + esc(d.name) + '</div>' +
         '<div class="hmeta">deployable ' + hullPip(d) + tokenPips(d) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
-        '<div class="hb"><button data-dact="' + id + '"' +
-        (myTurn && dReady ? '' : ' disabled') +
-        '>Activate</button></div></div>';
+        (e.activate
+          ? '<div class="hb"><button data-dact="' + id + '"' +
+            (myTurn && dReady ? '' : ' disabled') + '>Activate</button></div>'
+          : '<div class="hb"><span class="passive-tag">In play</span></div>') + '</div>';
     });
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
-      if (!e.activate) return;
-      var mReady = !m.exhausted && Engine.affordable(s, m, 'mod');
-      html += '<div class="hcard inplay' + (mReady ? '' : ' spent') + pickClass(G, id) +
+      if (!e.activate && !e.passive) return;
+      var mReady = !m.exhausted && (!e.activate || Engine.affordable(s, m, 'mod'));
+      html += '<div class="hcard inplay' + (mReady ? '' : ' spent') +
+        (livePassive(s, m, 'mod') ? ' watching' : '') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
         pieceIcon(m.name, id === s.coreId) + esc(m.name) + '</div>' +
         '<div class="hmeta">' + hullPip(m) + tokenPips(m) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
-        '<div class="hb"><button data-mact="' + id + '"' +
-        (myTurn && mReady ? '' : ' disabled') +
-        '>Activate</button></div></div>';
+        (e.activate
+          ? '<div class="hb"><button data-mact="' + id + '"' +
+            (myTurn && mReady ? '' : ' disabled') + '>Activate</button></div>'
+          : '<div class="hb"><span class="passive-tag">In play</span></div>') + '</div>';
     });
     handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';
   }
@@ -1424,7 +1457,8 @@
       last = end;
       re.lastIndex = end;
     }
-    return out + esc(line.slice(last));
+    /* a card whose text holds more than one effect writes them on their own lines */
+    return (out + esc(line.slice(last))).replace(/\n/g, '<br>');
   }
 
   /* charges and heat sit on modules and deployables as readily as on cards, so they are
@@ -1645,6 +1679,15 @@
     else if (p.kind === 'card')
       h += '<div style="font-size:11px;color:var(--ink-dim)">Click one of the highlighted cards ' +
            'below.</div><div style="margin-top:6px">' +
+           (Engine.canUndo() ? cancelBtn('Cancel — take it back')
+                             : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
+           '</div>';
+    else if (p.kind === 'confirm')
+      h += '<div style="font-size:11px;color:var(--ink-dim)">Every outlined piece is in the ' +
+           'blast. They are resolved one at a time.</div>' +
+           '<div style="margin-top:6px">' +
+           '<button class="g-btn" data-confirm="1">Fire — ' + p.targets.length +
+           (p.targets.length === 1 ? ' target' : ' targets') + '</button>' +
            (Engine.canUndo() ? cancelBtn('Cancel — take it back')
                              : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
            '</div>';
@@ -1887,6 +1930,7 @@
   });
   promptEl.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.confirm) return Engine.resolve(true);
     if (b.dataset.choice !== undefined) Engine.resolve(+b.dataset.choice);
     if (b.dataset.mv) { var v = b.dataset.mv.split(','); nudge(+v[0], +v[1]); return; }
     if (b.dataset.cancel) { selMod = null; hoverCell = null; clearRoute(); Engine.undo(); return; }
