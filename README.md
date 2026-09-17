@@ -107,6 +107,7 @@ one — the game itself is safe in Postgres.
 | `PORT` | what to listen on (Render sets this) |
 | `DATABASE_URL` | Postgres connection string; unset means files |
 | `PGSSL` | `off` to disable TLS, `on` to force it; sensible default either way |
+| `FRIGATE_ORIGIN` | origins allowed to call the API from another page, comma separated. Unset means only localhost and private-network addresses — which is what you want when the page is served by this same server |
 | `FRIGATE_AI_TICK` | ms between computer actions (default 380) |
 | `FRIGATE_FLUSH` | ms before a settled game is written down (default 500) |
 | `FRIGATE_EVICT` | ms before an unwatched room leaves memory (default 10 min) |

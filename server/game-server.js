@@ -402,14 +402,48 @@ var MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; chars
              '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
              '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
-/* The client is often served by something else, so every API answer is readable cross-origin. */
-var CORS = { 'Access-Control-Allow-Origin': '*',
-             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-             'Access-Control-Allow-Headers': 'Content-Type' };
-function withCors(h) {
+/* ---------- who may call this from another origin ----------
+   Normally nobody needs to: the page is served by this same server, and a same-origin request
+   sends no Origin header and needs no permission. Cross-origin access exists for the case
+   where the page is served from somewhere else — a second dev server, a static host — and that
+   is worth allowing on purpose rather than to the whole internet.
+
+   FRIGATE_ORIGIN lists the origins allowed, comma separated. With nothing set, only local and
+   private-network addresses are allowed, so a laptop and a phone on the same wifi still work
+   while a public deployment answers nobody it was not told about. */
+var ALLOWED = (process.env.FRIGATE_ORIGIN || '').split(',')
+  .map(function (o) { return o.trim().replace(/\/$/, ''); })
+  .filter(Boolean);
+
+function isPrivateOrigin(origin) {
+  var m = /^https?:\/\/([^:/]+)/.exec(origin);
+  if (!m) return false;
+  var host = m[1];
+  if (host === 'localhost' || host === '::1' || host === '[::1]') return true;
+  if (/^127\./.test(host)) return true;
+  if (/^10\./.test(host)) return true;
+  if (/^192\.168\./.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  return false;
+}
+
+function corsHeaders(req) {
+  var origin = req && req.headers && req.headers.origin;
+  /* no Origin means same-origin, or a tool like curl: nothing to grant */
+  if (!origin) return {};
+  var ok = ALLOWED.length ? ALLOWED.indexOf(origin) >= 0 : isPrivateOrigin(origin);
+  if (!ok) return { 'Vary': 'Origin' };        /* no allow header: the browser blocks the read */
+  return { 'Access-Control-Allow-Origin': origin,
+           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+           'Access-Control-Allow-Headers': 'Content-Type',
+           'Vary': 'Origin' };
+}
+
+function withCors(h, req) {
   var out = {};
   Object.keys(h).forEach(function (k) { out[k] = h[k]; });
-  Object.keys(CORS).forEach(function (k) { out[k] = CORS[k]; });
+  var c = corsHeaders(req);
+  Object.keys(c).forEach(function (k) { out[k] = c[k]; });
   return out;
 }
 
@@ -417,7 +451,7 @@ function sendJson(res, code, obj) {
   var body = JSON.stringify(obj);
   res.writeHead(code, withCors({ 'Content-Type': 'application/json; charset=utf-8',
                                  'Cache-Control': 'no-store',
-                                 'Content-Length': Buffer.byteLength(body) }));
+                                 'Content-Length': Buffer.byteLength(body) }, res.req));
   res.end(body);
 }
 
@@ -459,7 +493,7 @@ var server = http.createServer(function (req, res) {
   }
   var route = qi >= 0 ? u.slice(0, qi) : u;
 
-  if (req.method === 'OPTIONS') { res.writeHead(204, withCors({})); res.end(); return; }
+  if (req.method === 'OPTIONS') { res.writeHead(204, withCors({}, req)); res.end(); return; }
 
   if (route === '/healthz') {
     return sendJson(res, 200, { ok: true, store: store.kind, rules: RULES_VERSION,
@@ -473,7 +507,7 @@ var server = http.createServer(function (req, res) {
       var seat = seatOf(room, qs.token);
       res.writeHead(200, withCors({ 'Content-Type': 'text/event-stream; charset=utf-8',
                                     'Cache-Control': 'no-cache', 'Connection': 'keep-alive',
-                                    'X-Accel-Buffering': 'no' }));
+                                    'X-Accel-Buffering': 'no' }, req));
       var sub = { res: res, seat: seat };
       room.subs.push(sub);
       if (seat) seat.live++;
