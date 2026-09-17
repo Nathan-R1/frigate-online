@@ -805,18 +805,41 @@ var Engine = (function () {
       return (c.charges || 0) > 0 || (c.heat || 0) > 0;
     });
   }
+  /* take one token off this holder, charges first unless the op names heat */
+  function takeToken(o, c) {
+    if ((c.charges || 0) > 0 && o.token !== 'heat') { c.charges--; return 'charge'; }
+    if ((c.heat || 0) > 0 && o.token !== 'charge') { c.heat--; return 'heat'; }
+    return null;
+  }
+
   OPS.spendToken = function (o, ctx) {
-    var n = resolveCount(ctx.side, o.n, ctx);
-    var src = tokenSources(ctx.side, o);
-    for (var i = 0; i < src.length && n > 0; i++) {
-      var c = src[i];
-      while (n > 0 && ((c.charges || 0) > 0 || (c.heat || 0) > 0)) {
-        if ((c.charges || 0) > 0 && o.token !== 'heat') c.charges--;
-        else if ((c.heat || 0) > 0 && o.token !== 'charge') c.heat--;
-        else break;
-        n--;
+    var s = ctx.side, n = resolveCount(s, o.n, ctx);
+    if (n <= 0) return;
+
+    /* Whose token comes off is the player's call when there is more than one candidate —
+       spending the last charge on a weapon to move a module is a real decision. */
+    function step(left) {
+      if (left <= 0) return;
+      var src = tokenSources(s, o);
+      if (!src.length) return;
+      if (src.length === 1) {
+        var kind = takeToken(o, src[0]);
+        if (kind) log(s.name + ' removes a ' + kind + ' from ' + src[0].name + '.');
+        step(left - 1);
+        return;
       }
+      prompt({ kind: 'card', label: 'Take a token from…',
+        cards: src.map(function (c) { return c.id; }),
+        onResolve: function (id) {
+          var pick = null;
+          src.forEach(function (c) { if (c.id === id) pick = c; });
+          if (!pick) return;
+          var k = takeToken(o, pick);
+          if (k) log(s.name + ' removes a ' + k + ' from ' + pick.name + '.');
+          step(left - 1);
+        } });
     }
+    step(n);
   };
 
   /* rocks within reach that an ability may eat */

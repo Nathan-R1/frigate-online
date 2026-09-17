@@ -266,6 +266,17 @@
   .hcard.inplay { border-color:var(--amber); }
   .hcard.inplay.spent { border-color:var(--line); opacity:.55; }
   .hcard.inplay.spent .hn { color:var(--ink-dim); }
+  /* a card this prompt may take. Being exhausted does not stop it being chosen, so the spent
+     dimming is lifted for the duration — otherwise a choosable card looks like a refused one.
+     The selectors carry the extra classes because .inplay.spent would otherwise out-specify. */
+  .hcard.pickable { border-color:var(--amber); box-shadow:0 0 12px rgba(232,169,74,.45);
+                    cursor:pointer; }
+  .hcard.pickable, .hcard.inplay.spent.pickable { opacity:1; }
+  .hcard.inplay.spent.pickable .hn { color:var(--ink); }
+  .hcard.pickable:hover { background:rgba(232,169,74,.12); }
+  /* refused is refused, spent or not — without the extra class .inplay.spent would win and
+     leave an exhausted, unchoosable card looking brighter than a ready one */
+  .hcard.unpickable, .hcard.inplay.spent.unpickable { opacity:.3; }
   .hcard .hmeta { font-family:var(--mono); font-size:clamp(6.5px, 6.5cqh, 11px);
                   color:var(--amber); flex:none;
                   display:flex; align-items:center; gap:5px; }
@@ -1281,6 +1292,14 @@
     });
   }
 
+  /* A card-picking prompt marks what may be chosen and greys out the rest, the way a target
+     prompt outlines pieces on the board. */
+  function pickClass(G, id) {
+    var p = G.pending;
+    if (!p || p.kind !== 'card') return '';
+    return p.cards.indexOf(id) >= 0 ? ' pickable' : ' unpickable';
+  }
+
   function renderHand(G) {
     var s = G.players[meIdx()], html = '';
     var mine = isMyTurn(G) && !G.pending && !G.over;
@@ -1288,7 +1307,8 @@
     var myTurn = mine && G.phase === 'action';
     s.hand.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
-      html += '<div class="hcard"><div class="hn" data-tech="' + esc(c.name) +
+      html += '<div class="hcard' + pickClass(G, id) + '" data-card="' + id + '">' +
+        '<div class="hn" data-tech="' + esc(c.name) +
         '" data-card="' + id + '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
         '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-play="' + id + '"' +
@@ -1298,7 +1318,8 @@
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       var e = Engine.fx(c.name, 'tech');
       if (!e.activate) return;
-      html += '<div class="hcard inplay' + (c.exhausted ? ' spent' : '') + '">' +
+      html += '<div class="hcard inplay' + (c.exhausted ? ' spent' : '') + pickClass(G, id) +
+        '" data-card="' + id + '">' +
         '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
         '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
         /* only charges and heat are worth a line; an empty one just leaves a gap */
@@ -1311,7 +1332,8 @@
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay' + (d.exhausted ? ' spent' : '') + '">' +
+      html += '<div class="hcard inplay' + (d.exhausted ? ' spent' : '') + pickClass(G, id) +
+        '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
         pieceIcon(d.name, false) + esc(d.name) + '</div>' +
         '<div class="hmeta">deployable ' + hullPip(d) + tokenPips(d) + '</div>' +
@@ -1323,7 +1345,8 @@
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
       if (!e.activate) return;
-      html += '<div class="hcard inplay' + (m.exhausted ? ' spent' : '') + '">' +
+      html += '<div class="hcard inplay' + (m.exhausted ? ' spent' : '') + pickClass(G, id) +
+        '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
         pieceIcon(m.name, id === s.coreId) + esc(m.name) + '</div>' +
         '<div class="hmeta">' + hullPip(m) + tokenPips(m) + '</div>' +
@@ -1605,6 +1628,12 @@
       h += '<div style="font-size:11px;color:var(--ink-dim)">Click a highlighted cell.</div>' +
            '<div style="margin-top:6px">' +
            '<button class="g-btn ghost" data-done="1">Skip</button>' + cancelBtn() + '</div>';
+    else if (p.kind === 'card')
+      h += '<div style="font-size:11px;color:var(--ink-dim)">Click one of the highlighted cards ' +
+           'below.</div><div style="margin-top:6px">' +
+           (Engine.canUndo() ? cancelBtn('Cancel — take it back')
+                             : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
+           '</div>';
     else if (p.kind === 'target')
       h += '<div style="font-size:11px;color:var(--ink-dim)">Shaded squares are in this ' +
            'weapon\'s line of fire. Click an outlined target.</div>' +
@@ -1800,6 +1829,13 @@
     else if (s.deployables[id]) Engine.activateDeployable(id);
   });
   handEl.addEventListener('click', function (e) {
+    /* a card-picking prompt takes priority: the click answers it rather than playing anything */
+    var G0 = Engine.get();
+    if (G0 && G0.pending && G0.pending.kind === 'card') {
+      var pick = e.target.closest('.hcard.pickable');
+      if (pick) { Engine.resolve(pick.getAttribute('data-card')); }
+      return;
+    }
     /* ctrl-click a card to point out its piece on the board */
     if (e.ctrlKey || e.metaKey) {
       var card = e.target.closest('.hcard');
