@@ -754,8 +754,35 @@ var Engine = (function () {
 
   OPS.gainHull = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
-    var m = o.target === 'core' ? s.modules[s.coreId] : null;
-    if (m) { m.hull += n; if (o.mayExceed) m.hullMax = Math.max(m.hullMax, m.hull); log(s.name + ' gains ' + n + ' Hull.'); }
+    /* Reinforcement past the rated maximum raises the maximum with it, so the extra hull is
+       permanent rather than something a later repair would clamp away. */
+    function give(m, owner) {
+      if (!m) return;
+      m.hull += n;
+      if (o.mayExceed) m.hullMax = Math.max(m.hullMax || 0, m.hull);
+      else m.hull = Math.min(m.hull, m.hullMax || m.hull);
+      log((owner || s).name + "'s " + m.name + ' gains ' + n + ' Hull (' +
+          m.hull + '/' + m.hullMax + ').');
+    }
+    if (o.target !== 'choose') { give(s.modules[s.coreId]); return; }
+
+    /* "any Module within Sensor range" — yours and your allies', measured from your own hull */
+    var reach = sensorsOf(s);
+    var mine = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    var pool = [];
+    [s].concat(alliesOf(s)).forEach(function (p) {
+      Object.keys(p.modules).forEach(function (id) {
+        var m = p.modules[id];
+        if (mine.some(function (o2) { return dist(o2, m) <= reach; })) pool.push({ m: m, p: p });
+      });
+    });
+    if (!pool.length) { log(s.name + ' has no module in Sensor range to reinforce.'); return; }
+    if (pool.length === 1) { give(pool[0].m, pool[0].p); return; }
+    prompt({ kind: 'target', label: 'Reinforce which module?',
+      targets: pool.map(function (x) { return x.m.id; }),
+      onResolve: function (id) {
+        pool.forEach(function (x) { if (x.m.id === id) give(x.m, x.p); });
+      } });
   };
 
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.'); };
