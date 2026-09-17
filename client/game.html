@@ -24,7 +24,7 @@
   .btn-ico { width:13px; height:13px; flex:none; display:block; }
   .g-btn.ghost { border-color:var(--line-bright); color:var(--ink-mid); }
   /* one colour per seat, so up to four ships stay distinguishable on the board */
-  :root { --p0:#4fd8c9; --p1:#d2544e; --p2:#e0a93f; --p3:#9a7ce0; }
+  :root { --p0:#4fd8c9; --p1:#e8762e; --p2:#e0a93f; --p3:#9a7ce0; }
   #barRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .side-bar { display:flex; align-items:center; gap:9px; padding:4px 10px;
               border:1px solid var(--sc, var(--line)); color:var(--ink);
@@ -135,6 +135,11 @@
   @media (prefers-reduced-motion: reduce) {
     .piece *, .piece { animation:none !important; }
   }
+  /* Low graphics, as the tabletop board does it: every CSS animation and transition off.
+     The SMIL side is handled in pieces.js, which stops building the moving parts at all. */
+  html.gfx-low *,
+  html.gfx-low *::before,
+  html.gfx-low *::after { animation:none !important; transition:none !important; }
 
   /* ===== move phase =====
      The route preview, the beacon, the landing ping and the blocked flash are the tabletop
@@ -373,6 +378,12 @@
               aria-haspopup="true" aria-expanded="false">⚙</button>
       <div class="settings-menu hidden" id="settingsMenu" role="menu">
         <div class="set-group">Graphics</div>
+        <div class="set-row"><span class="set-label">Detail</span>
+          <span class="set-opts" id="gfxOpts">
+            <button type="button" data-gfx="high">High</button>
+            <button type="button" data-gfx="low">Low</button>
+          </span>
+        </div>
         <div class="set-row"><span class="set-label">Links</span>
           <span class="set-opts" id="linkOpts">
             <button type="button" data-link="glow">Glow</button>
@@ -456,7 +467,7 @@
   var selMod = null;   /* which of my modules the move controls drive */
   /* one colour per seat. The SVG shapes need real hex to derive their fills and detail
      lines, so these are the source of truth and --p0..--p3 in the stylesheet mirror them. */
-  var SEAT_HEX = ['#4fd8c9', '#d2544e', '#e0a93f', '#9a7ce0'];
+  var SEAT_HEX = ['#4fd8c9', '#e8762e', '#e0a93f', '#9a7ce0'];
   var BAR_HULL_ICON = '<svg class="sb-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
     '<path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4' +
     'c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" ' +
@@ -875,7 +886,7 @@
 
   /* one-shot flourishes: a ring where a piece lands, a red flash where it cannot go */
   function ping(x, y) {
-    if (!fxEl) return;
+    if (!fxEl || lowGfx) return;
     var d = document.createElement('div');
     d.className = 'ping';
     d.style.left = (x * CELL + CELL / 2) + 'px';
@@ -884,7 +895,7 @@
     setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 900);
   }
   function blockFlash(x, y) {
-    if (!fxEl) return;
+    if (!fxEl || lowGfx) return;
     var d = document.createElement('div');
     d.className = 'blockflash';
     d.style.left = (x * CELL) + 'px'; d.style.top = (y * CELL) + 'px';
@@ -984,6 +995,22 @@
      Ported from client/board.html: struts drawn between orthogonally adjacent modules of the
      same side, so a hull reads as one ship rather than loose pieces. Deployables are free
      craft, not hull, so they are not joined. */
+  /* Low graphics: no CSS animation, no SMIL, no pings or blocked flashes. A piece is then a
+     still silhouette, which is the point — it is there for slow machines and for anyone who
+     finds the motion distracting. */
+  var lowGfx = false;
+  try { lowGfx = localStorage.getItem('frigateGfxLow') === '1'; } catch (e) {}
+  function setLowGfx(on) {
+    lowGfx = !!on;
+    document.documentElement.classList.toggle('gfx-low', lowGfx);
+    GamePieces.setLowGfx(lowGfx);
+    try { localStorage.setItem('frigateGfxLow', lowGfx ? '1' : '0'); } catch (e) {}
+    /* the moving parts are baked in when a piece is built, so everything on the board has to
+       be built again for the change to show */
+    if (piecesEl) piecesEl.innerHTML = '';
+    connSig = null;
+  }
+
   var CONN_STYLES = ['glow', 'mech', 'off'];
   var CONN_NAMES = { glow: 'Glow', mech: 'Mech', off: 'Off' };
   var connStyle = 'glow';
@@ -1674,6 +1701,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
+    var gfx = document.getElementById('gfxOpts');
     function mark() {
       [].forEach.call(opts.children, function (b) {
         b.classList.toggle('on', b.getAttribute('data-link') === connStyle);
@@ -1681,13 +1709,24 @@
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
       });
+      [].forEach.call(gfx.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-gfx') === 'low') === lowGfx);
+      });
     }
     function open(on) {
       menu.classList.toggle('hidden', !on);
       cog.setAttribute('aria-expanded', on ? 'true' : 'false');
     }
     setInstant(instantMoves);      /* apply whatever was remembered */
+    setLowGfx(lowGfx);
     mark();
+    gfx.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-gfx]');
+      if (!b) return;
+      setLowGfx(b.getAttribute('data-gfx') === 'low');
+      mark();
+      Engine.emit();
+    });
     inst.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-instant]');
       if (!b) return;
