@@ -257,6 +257,7 @@ var Engine = (function () {
     if (!a || amount <= 0) return 0;
     a.hull -= amount;
     log('Asteroid takes ' + amount + ' damage.');
+    dealtDamage(a);
     if (a.hull <= 0) { log('Asteroid is destroyed.'); vacate(a.x, a.y); delete G.asteroids[a.id]; }
     return amount;
   }
@@ -412,11 +413,20 @@ var Engine = (function () {
     targetSide.shield -= absorbed;
     var rest = amount - absorbed;
     mod.hull -= rest;
-    if (absorbed) log(targetSide.name + "'s shields absorb " + absorbed + '.');
+    if (absorbed) {
+      log(targetSide.name + "'s shields absorb " + absorbed + '.');
+      fire(targetSide, 'onShieldDamaged', { amount: absorbed });
+    }
     if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage.');
     if (mod.hull <= 0) destroyModule(targetSide, mod);
+    dealtDamage(mod);
     checkWin();
     return rest;
+  }
+
+  /* Whoever is acting has just landed damage on something; cards that count hits care. */
+  function dealtDamage(target) {
+    fire(side(), 'onDealDamage', { victim: target && target.id });
   }
 
   /* deployables sit outside the shield envelope, so damage lands straight on their hull */
@@ -424,6 +434,7 @@ var Engine = (function () {
     if (!dep || amount <= 0) return 0;
     dep.hull -= amount;
     log(s.name + "'s " + dep.name + ' takes ' + amount + ' damage.');
+    dealtDamage(dep);
     if (dep.hull <= 0) {
       log(s.name + "'s " + dep.name + ' is destroyed.');
       vacate(dep.x, dep.y);
@@ -547,6 +558,47 @@ var Engine = (function () {
     log(s.name + ' cancels ' + u.label + '.');
     emit();
     return true;
+  }
+
+  /* ================= passive triggers =================
+     Cards, modules and deployables may declare passives that fire on an event. This walks
+     everything a side has in play, matches the trigger, and runs the effect with that card
+     as the context — so a passive spends its own heat and banks its own charges, not the
+     ones belonging to whatever caused the event.
+
+     Only non-interrupting events are dispatched here. Triggers that have to stop an action
+     mid-resolution — onDamaged negating a hit, onTargeted dodging a shot — need the resolver
+     to offer them a window, and are not wired yet. */
+  function passiveHolders(s) {
+    var out = [];
+    s.played.forEach(function (id) {
+      var c = s.cards[id], e = c && fx(c.name, 'tech');
+      if (e && e.passive) out.push({ obj: c, passives: e.passive, ctx: { side: s, card: c } });
+    });
+    ['modules', 'deployables'].forEach(function (bag) {
+      Object.keys(s[bag]).forEach(function (id) {
+        var m = s[bag][id], e = fx(m.name, 'mod');
+        if (e && e.passive) out.push({ obj: m, passives: e.passive,
+          ctx: bag === 'modules' ? { side: s, module: m } : { side: s, module: m, deployable: m } });
+      });
+    });
+    return out;
+  }
+
+  /* A passive fires once per holder. An optional one is skipped silently when its own cost
+     cannot be met — an After Burner with no heat should not keep asking. */
+  function fire(s, trigger, payload) {
+    if (!s || G.over) return;
+    passiveHolders(s).forEach(function (h) {
+      h.passives.forEach(function (pas) {
+        if (pas.trigger !== trigger) return;
+        var ctx = {};
+        for (var k in h.ctx) ctx[k] = h.ctx[k];
+        for (var k2 in (payload || {})) ctx[k2] = payload[k2];
+        if (pas.optional && costShortfall(pas.effect, ctx)) return;
+        run(pas.effect || [], ctx);
+      });
+    });
   }
 
   /* ---- op implementations ---- */
@@ -715,9 +767,16 @@ var Engine = (function () {
 
   OPS.gainMove = function (o, ctx) {
     var s = ctx.side;
+    /* A passive answering onMove adds to the grant rather than starting its own — otherwise
+       an After Burner would open a second move prompt inside the first. */
+    if (ctx.moveBonus) { s.moveBonus = (s.moveBonus || 0) + resolveCount(s, o.n, ctx); return; }
     /* Move N is N for EACH module. "gain N Move for each module" is therefore just N —
        multiplying by the module count here would apply the same factor twice. */
     var n = (o.from === 'stat' && o.stat === 'speed') ? speedOf(s) : resolveCount(s, o.n, ctx);
+    s.moveBonus = 0;
+    fire(s, 'onMove', { moveBonus: true });
+    if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.'); }
+    s.moveBonus = 0;
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
     s.moveLeft = n;
     log(s.name + ' gains Move ' + n + ' per module.');
@@ -790,7 +849,12 @@ var Engine = (function () {
 
   OPS.addCharge = function (o, ctx) {
     var c = holderOf(ctx);
-    if (c) c.charges = (c.charges || 0) + resolveCount(ctx.side, o.n, ctx);
+    if (!c) return;
+    /* "reset if you dmg a new Object": the count is a lock on one target, not a tally */
+    if (o.resetOnNewTarget && ctx.victim !== undefined) {
+      if (c.lockedOn !== ctx.victim) { c.charges = 0; c.lockedOn = ctx.victim; }
+    }
+    c.charges = (c.charges || 0) + resolveCount(ctx.side, o.n, ctx);
   };
   /* charges, heat and tokens sit on whatever is being activated — a card, a module like the
      Repulsor Unit, or a deployable */
@@ -839,7 +903,18 @@ var Engine = (function () {
   OPS.spendHeat = function (o, ctx) { var c = holderOf(ctx); if (c) { ctx.heatSpent = Math.min(c.heat || 0, resolveCount(ctx.side, o.n, ctx)); c.heat -= ctx.heatSpent; } };
   OPS.spendAllHeat = function (o, ctx) { var c = holderOf(ctx); if (c) { ctx.heatSpent = c.heat || 0; c.heat = 0; } };
 
-  OPS.exhaustSelf = function (o, ctx) { if (ctx.card) ctx.card.exhausted = true; if (ctx.module) ctx.module.exhausted = true; };
+  /* Exhausting a Movement Module is an event some cards bank heat off, so it goes through
+     one place rather than being set in three. */
+  function exhaustPiece(s, m) {
+    if (!m || m.exhausted) return;
+    m.exhausted = true;
+    if (isMovementModule(m)) fire(s, 'onExhaustMovementModule', { source: m });
+  }
+
+  OPS.exhaustSelf = function (o, ctx) {
+    if (ctx.card) ctx.card.exhausted = true;
+    if (ctx.module) exhaustPiece(ctx.side, ctx.module);
+  };
   OPS.trashSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'trash'); };
   OPS.discardSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'discard'); };
 
@@ -936,7 +1011,7 @@ var Engine = (function () {
   OPS.exhaustOther = function (o, ctx) {
     var s = ctx.side, want = o.n === 'all' ? 99 : num(o.n, 1), done = 0;
     var pool = exhaustPool(s, o, ctx);
-    pool.slice(0, want).forEach(function (m) { m.exhausted = true; done++; });
+    pool.slice(0, want).forEach(function (m) { exhaustPiece(s, m); done++; });
     ctx.exhaustedCount = done;
   };
 
