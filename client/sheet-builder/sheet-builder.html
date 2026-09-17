@@ -1333,7 +1333,8 @@
       last = end;
       re.lastIndex = end;
     }
-    return out + escapeHtml(line.slice(last));
+    /* a card whose text holds more than one effect writes them on their own lines */
+    return (out + escapeHtml(line.slice(last))).replace(/\n/g, '<br>');
   }
 
   function techDesc(t) {
@@ -1354,7 +1355,7 @@
     if (m.passive) lines.push('Passive: ' + m.passive);
     if (m.onactivate) lines.push('On Activate: ' + m.onactivate);
     if (!lines.length) return 'No text.';
-    return lines.map(escapeHtml).join('<br>');
+    return lines.map(function (l) { return escapeHtml(l).replace(/\n/g, '<br>'); }).join('<br>');
   }
 
   /* the popup sits outside #winOptions, so re-rendering the step does not close it */

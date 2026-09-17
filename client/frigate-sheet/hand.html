@@ -111,7 +111,7 @@
       (d.traits ? '<div class="hc-traits">' + escapeHtml(d.traits) + '</div>' : '') +
       '<div class="hc-secs">' +
         (d.onbuild ? '<div class="hc-sec"><b>On Play</b>' + escapeHtml(d.onbuild) + '</div>' : '') +
-        (d.passive ? '<div class="hc-sec"><b>Passive</b>' + escapeHtml(d.passive) + '</div>' : '') +
+        (d.passive ? '<div class="hc-sec"><b>Passive</b>' + escapeHtml(d.passive).replace(/\n/g, '<br>') + '</div>' : '') +
         (d.onactivate ? '<div class="hc-sec"><b>On Activate</b>' + escapeHtml(d.onactivate) + '</div>' : '') +
       '</div>' +
       '<div class="hc-foot">' +
