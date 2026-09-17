@@ -542,6 +542,7 @@ var Engine = (function () {
   }
   function clearUndo() { undoPoint = null; }
   function canUndo() {
+    if (G && G.replica) return !!G.canUndo;
     return !!undoPoint && undoPoint.active === G.active && undoPoint.turn === G.turn;
   }
 
@@ -1533,6 +1534,79 @@ var Engine = (function () {
   }
   var stepDeployable = stepObject;
 
+  /* ================= serialising for a replica =================
+     A networked game runs these rules on the server and mirrors the result into every
+     browser. The browser still loads this same file, but as a replica: it renders and answers
+     questions about the state, and never advances it. Two things stop a state from surviving
+     the trip, and both are handled here.
+
+     Closures. A prompt carries onResolve and sometimes a filter predicate, neither of which
+     survives JSON. The filter is the only one the far side needs, so it is flattened into the
+     list of squares it accepts and rebuilt on arrival.
+
+     Hidden information. A viewer is told everything about the board, because the board is in
+     front of everyone, and everything about their own cards. Of anybody else's cards they are
+     told only what is already face up: what is in play, discarded or trashed. A hand and a
+     deck arrive as the right number of blanks, so counts read correctly and nothing else
+     leaks. Redacting here rather than at the transport keeps the rule with the rules. */
+  function promptData() {
+    var p = G.pending;
+    if (!p) return null;
+    var out = { kind: p.kind, label: p.label };
+    ['options', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards'].forEach(function (k) {
+      if (p[k] !== undefined) out[k] = p[k];
+    });
+    if (typeof p.filter === 'function') {
+      out.cells = [];
+      for (var y = 0; y < RULES.boardSize; y++)
+        for (var x = 0; x < RULES.boardSize; x++)
+          if (p.filter(x, y)) out.cells.push([x, y]);
+    }
+    return out;
+  }
+
+  var PUBLIC_PILES = ['played', 'discard', 'trash'];
+  function snapshot(viewer) {
+    if (!G) return null;
+    var out = { replica: true, turn: G.turn, active: G.active, phase: G.phase, seq: G.seq,
+                over: G.over, cells: copy(G.cells), asteroids: copy(G.asteroids),
+                log: G.log.slice(-200), pending: promptData(), canUndo: canUndo(),
+                players: [] };
+    G.players.forEach(function (s, i) {
+      var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead,
+                     shield: s.shield, shieldMax: s.shieldMax, skills: s.skills, stats: s.stats,
+                     coreId: s.coreId, modules: s.modules, deployables: s.deployables,
+                     playsLeft: s.playsLeft, moveBonus: s.moveBonus });
+      if (i === viewer) {
+        p.cards = copy(s.cards);
+        ['hand', 'deck'].concat(PUBLIC_PILES).forEach(function (k) { p[k] = s[k].slice(); });
+      } else {
+        p.cards = {};
+        PUBLIC_PILES.forEach(function (k) {
+          p[k] = s[k].slice();
+          s[k].forEach(function (id) { if (s.cards[id]) p.cards[id] = copy(s.cards[id]); });
+        });
+        /* the right number of blanks: a count is public, a name is not */
+        p.hand = s.hand.map(function (_, n) { return 'hidden:' + i + ':h' + n; });
+        p.deck = s.deck.map(function (_, n) { return 'hidden:' + i + ':d' + n; });
+      }
+      out.players.push(p);
+    });
+    return out;
+  }
+
+  /* Adopt a snapshot as the live state. Everything that reads the game keeps working; only
+     the calls that change it are meaningless here, and the client routes those to the server. */
+  function setState(s) {
+    G = s;
+    if (G && G.pending && G.pending.cells) {
+      var ok = {};
+      G.pending.cells.forEach(function (c) { ok[c[0] + ',' + c[1]] = true; });
+      G.pending.filter = function (x, y) { return ok[x + ',' + y] === true; };
+    }
+    emit();
+  }
+
   /* ================= debug tools =================
      A hand reached into the board for testing. These answer to no rule — no cost, no range,
      no turn order — so nothing here is reachable unless the page has debug switched on. Each
@@ -1629,6 +1703,7 @@ var Engine = (function () {
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
     findTech: findTech, findMod: findMod, fx: fx, checkWin: checkWin,
+    snapshot: snapshot, setState: setState,
     debug: DEBUG
   };
 })();

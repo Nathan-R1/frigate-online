@@ -370,6 +370,20 @@
   /* the piece picked up by a debug drag */
   .piece.held { outline:2px dashed var(--amber); outline-offset:2px; }
   .hcard.dbg-hover { outline:1px dashed var(--ink-dim); outline-offset:-2px; }
+  /* somebody else's hand, seen from a seat that is not theirs */
+  .hcard.facedown { border-style:dashed; opacity:.6; }
+  /* online lobby */
+  .lb-seat { display:flex; align-items:center; gap:10px; padding:8px 10px; margin:4px 0;
+    border:1px solid var(--line); border-radius:8px; }
+  .lb-seat.mine { border-color:var(--amber); }
+  .lb-dot { width:10px; height:10px; border-radius:50%; flex:none; }
+  .lb-name { flex:1; text-align:left; font-size:13px; }
+  .lb-who { font-family:var(--mono); font-size:11px; color:var(--ink-dim); }
+  .lb-seat.mine .lb-who { color:var(--amber); }
+  .net-badge { position:fixed; left:10px; bottom:10px; z-index:80; font-family:var(--mono);
+    font-size:11px; padding:4px 9px; border-radius:6px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink-dim); }
+  .net-badge.warn { border-color:var(--red); color:var(--red); }
   .redacted { color:var(--line-bright); letter-spacing:-1px; user-select:none; }
   /* the piece a card in the hand was ctrl-clicked to find */
   .piece.found { outline:3px solid var(--amber); outline-offset:2px; border-radius:6px;
@@ -518,6 +532,7 @@
   <div class="dbg-list" id="cardPopList"></div>
 </div></div>
 <div class="dist-readout hidden" id="distReadout"></div>
+<div class="net-badge hidden" id="netBadge"></div>
 <div class="g-over hidden" id="modePick"><div class="box">
   <h2>New Game</h2>
   <div class="rost-count" id="rostCount">
@@ -530,7 +545,40 @@
      Put at least two seats on different teams.</p>
   <p class="rost-note">Seats sharing a team win and lose together. Give everyone their own
      team for a free-for-all — the game ends when only one team still has a Core.</p>
-  <p style="margin:16px 0 0"><button type="button" class="g-btn" id="startBtn">Start</button></p>
+  <p style="margin:16px 0 0">
+    <button type="button" class="g-btn" id="startBtn">Start</button>
+    <button type="button" class="g-btn ghost" id="hostBtn" style="margin-left:8px">Host online…</button>
+    <button type="button" class="g-btn ghost" id="joinBtn" style="margin-left:8px">Join a game…</button>
+  </p>
+  <p class="rost-note hidden" id="netErr" style="color:var(--red)"></p>
+  <p class="rost-note">Hosting puts this table on the server and gives you a code. Everyone
+     else opens the same address, enters the code and takes a seat. Seats set to Computer are
+     played by the computer; a seat set to Local player is held for a person, and if it empties
+     the game waits until somebody takes it.</p>
+</div></div>
+<div class="g-over hidden" id="roomPick"><div class="box">
+  <h2>Join a game</h2>
+  <p class="rost-note">Enter the six-character code the host gave you.</p>
+  <p><input type="text" id="roomCode" class="dbg-search" maxlength="6" autocomplete="off"
+            spellcheck="false" placeholder="ABC123"
+            style="text-transform:uppercase;text-align:center;letter-spacing:.25em;font-size:18px"></p>
+  <p id="roomErr" class="rost-note" style="color:var(--red);min-height:1em"></p>
+  <p style="margin:16px 0 0">
+    <button type="button" class="g-btn" id="roomGo">Look for it</button>
+    <button type="button" class="g-btn ghost" id="roomBack" style="margin-left:8px">Back</button>
+  </p>
+</div></div>
+<div class="g-over hidden" id="lobbyPick"><div class="box">
+  <h2>Room <span id="lobbyCode" style="font-family:var(--mono);color:var(--amber)"></span></h2>
+  <p class="rost-note">Anyone with the code can take a free seat. Leave the tab open to keep
+     yours — a seat with nobody watching it is given up after a minute, and the game then waits
+     for somebody to take it. Reloading puts you back in the seat you had.</p>
+  <div id="lobbySeats"></div>
+  <p id="lobbyErr" class="rost-note" style="color:var(--red);min-height:1em"></p>
+  <p style="margin:16px 0 0">
+    <button type="button" class="g-btn" id="lobbyStart">Start the game</button>
+    <button type="button" class="g-btn ghost" id="lobbyLeave" style="margin-left:8px">Leave</button>
+  </p>
 </div></div>
 <div class="g-over hidden" id="overlay"><div class="box">
   <h2 id="overTitle">—</h2><button type="button" class="g-btn" onclick="location.reload()">Play again</button>
@@ -546,6 +594,7 @@
 <script src="game/ai/ai-placement.js"></script>
 <script src="game/ai/ai-doctrine.js"></script>
 <script src="game/ai/ai-commander.js"></script>
+<script src="game/net.js"></script>
 <script>
 (function () {
   'use strict';
@@ -646,27 +695,52 @@
   /* whichever local seat the controls and hand currently belong to */
   var VIEW = 0;
 
-  function isAI(i) { return !!(SEATED[i] && SEATED[i].ai); }
+  /* Online the roster is the server's, so every question about a seat is answered from the
+     state it pushes rather than from the local one. A seat whose player has gone is flagged
+     as a computer there too, which is what lets the board grey out and then come back. */
+  function online() { return typeof Net !== 'undefined' && Net.online(); }
+  function isAI(i) {
+    if (online()) { var G = Engine.get(); return !!(G && G.players[i] && G.players[i].ai); }
+    return !!(SEATED[i] && SEATED[i].ai);
+  }
   function localSeats() {
+    if (online()) { var me = Net.seat(); return me === null ? [] : [me]; }
     return SEATED.map(function (x, i) { return i; }).filter(function (i) { return !isAI(i); });
   }
   /* Control belongs to the active seat while it is a local one; when the computer is
      thinking we keep showing the last human seat so its hand does not vanish. */
   function meIdx() {
     var G = Engine.get();
+    /* online there is exactly one seat you could possibly be, whoever's turn it is; a
+       spectator watches from the active seat's side of the table but holds no cards */
+    if (online()) {
+      var me = Net.seat();
+      if (me !== null && G && G.players[me]) return me;
+      return G ? G.active : 0;
+    }
     if (G && !isAI(G.active)) return G.active;
     return VIEW;
   }
   function sideName(i) {
+    if (online()) {
+      var G = Engine.get();
+      return (G && G.players[i]) ? G.players[i].name : 'Player ' + (i + 1);
+    }
     var sh = sheetOf(i);
     var base = (sh && sh.shipName) ? sh.shipName : 'Player ' + (i + 1);
     return base + (isAI(i) ? ' (AI)' : '');
   }
-  function teamOf(i) { return SEATED[i] ? SEATED[i].team : i; }
+  function teamOf(i) {
+    if (online()) { var G = Engine.get(); return (G && G.players[i]) ? G.players[i].team : i; }
+    return SEATED[i] ? SEATED[i].team : i;
+  }
   /* May you act right now? Only when the active seat is one you are actually playing. With an
      all-computer roster meIdx() falls back to a seat you are merely watching, so seat equality
      alone is not enough. */
-  function isMyTurn(G) { return !!G && G.active === meIdx() && !isAI(G.active); }
+  function isMyTurn(G) {
+    if (online()) return !!G && Net.seat() !== null && G.active === Net.seat() && !isAI(G.active);
+    return !!G && G.active === meIdx() && !isAI(G.active);
+  }
   var gridEl = document.getElementById('grid');
   var handEl = document.getElementById('hand');
   var logEl  = document.getElementById('logPanel');
@@ -1401,8 +1475,13 @@
     var mine = isMyTurn(G) && !G.pending && !G.over;
     var canPlay = mine && G.phase === 'play';
     var myTurn = mine && G.phase === 'action';
+    /* Watching rather than playing, the hand on screen belongs to somebody else, and their
+       cards were never sent — only the count. Face-down backs are the honest thing to draw. */
+    var hidden = 0;
     s.hand.forEach(function (id) {
-      var c = s.cards[id], t = Engine.findTech(c.name) || {};
+      var c = s.cards[id];
+      if (!c) { hidden++; return; }
+      var t = Engine.findTech(c.name) || {};
       html += '<div class="hcard' + pickClass(G, id) + '" data-card="' + id + '">' +
         '<div class="hn" data-tech="' + esc(c.name) +
         '" data-card="' + id + '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
@@ -1463,6 +1542,14 @@
             (myTurn && mReady ? '' : ' disabled') + '>Activate</button></div>'
           : '<div class="hb"><span class="passive-tag">In play</span></div>') + '</div>';
     });
+    if (hidden) {
+      html = '<div class="hcard facedown" title="' + hidden +
+             ' card' + (hidden === 1 ? '' : 's') + ' you cannot see">' +
+             '<div class="hn" style="color:var(--ink-dim)">Hidden</div>' +
+             '<div class="ht" style="text-align:center;font-size:20px;font-family:var(--mono)">' +
+             hidden + '</div>' +
+             '<div class="hb"><span class="passive-tag">in hand</span></div></div>' + html;
+    }
     handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';
   }
   /* the piece's own silhouette, in your colour, so a card is easy to match to the board */
@@ -1699,12 +1786,38 @@
     var p = G.pending;
     /* A prompt always belongs to whoever is active, so on another player's turn there is
        nothing here for you to answer — not even while they are moving. */
-    if (G.active !== meIdx()) {
+    /* Watching rather than playing, you are never the one being asked, whatever seat the page
+       is looking through — meIdx() falls back to the active one so the board reads the right
+       way round, and that must not be mistaken for holding it. */
+    var watching = online() && Net.seat() === null;
+    if (watching || G.active !== meIdx()) {
+      /* Online a seat can simply be empty: its player left and nobody has taken it. Nothing
+         plays it in their place, so the game stops here until somebody does. */
+      var lob = online() && Net.lobby();
+      if (lob && lob.waitingFor === G.active) {
+        promptEl.innerHTML =
+          '<div class="p-label">Waiting for ' + esc(G.players[G.active].name) + '</div>' +
+          '<div style="font-size:11px;color:var(--ink-dim)">That seat is empty. The game goes ' +
+          'on as soon as somebody takes it.</div>' +
+          (Net.seat() === null
+            ? '<div style="margin-top:6px"><button class="g-btn" data-sit="' + G.active +
+              '">Take this seat</button></div>'
+            : '');
+        return;
+      }
+      var free = watching && lob ? lob.seats.filter(function (st) { return st.empty; }) : [];
       promptEl.innerHTML = '<div class="p-label">' + esc(G.players[G.active].name) + "'s turn" + '</div>' +
         (isAI(G.active)
           ? '<div style="font-size:10.5px;color:var(--ink-dim);font-family:var(--mono)">' +
             esc(AICommander.describe(G.active)) + '</div>'
-          : '<div style="font-size:11px;color:var(--ink-dim)">Pass the screen over.</div>');
+          : '<div style="font-size:11px;color:var(--ink-dim)">' +
+            (watching ? 'You are watching this game.'
+                      : online() ? 'Waiting for them to play.' : 'Pass the screen over.') + '</div>') +
+        (free.length
+          ? '<div style="margin-top:6px">' + free.map(function (st) {
+              return '<button class="g-btn ghost" style="margin:2px" data-sit="' + st.idx +
+                     '">Take ' + esc(st.name) + '</button>'; }).join('') + '</div>'
+          : '');
       return;
     }
     if (!p) {
@@ -1871,6 +1984,16 @@
     if (!mv || !route || walking) return;
     var pend = G.pending, isDep = pend.kind === 'moveObject';
     var id = isDep ? pend.objId : selMod;
+    /* Online the server walks it. Sending the whole route in one intent keeps the rules in
+       one place: each square is still judged on its own, and the walk stops where they say. */
+    if (online()) {
+      var steps = [];
+      for (var k = 1; k < route.length; k++)
+        steps.push([route[k].x - route[k - 1].x, route[k].y - route[k - 1].y]);
+      if (steps.length) Engine.sendRoute(id, steps);
+      clearRoute();
+      return;
+    }
     walking = true;
     try {
       for (var i = 1; i < route.length; i++) {
@@ -2025,6 +2148,7 @@
   });
   promptEl.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.sit) return Net.claim(+b.dataset.sit);
     if (b.dataset.confirm) return Engine.resolve(true);
     if (b.dataset.choice !== undefined) Engine.resolve(+b.dataset.choice);
     if (b.dataset.mv) { var v = b.dataset.mv.split(','); nudge(+v[0], +v[1]); return; }
@@ -2220,6 +2344,149 @@
   });
   document.getElementById('startBtn').addEventListener('click', function () { start(); });
 
+  /* ---------- online play ----------
+     The host puts this table on the server and hands out the code; everyone else opens the
+     same address, types it in and takes a seat. From the moment a game is dealt the page is a
+     replica: it draws what the server sends and asks the server for everything else. */
+  (function () {
+    var modePick = document.getElementById('modePick');
+    var roomPick = document.getElementById('roomPick');
+    var lobbyPick = document.getElementById('lobbyPick');
+    var badge = document.getElementById('netBadge');
+    var codeBox = document.getElementById('roomCode');
+
+    function show(el) {
+      [modePick, roomPick, lobbyPick].forEach(function (x) { x.classList.add('hidden'); });
+      if (el) el.classList.remove('hidden');
+    }
+    function say(id, msg) { document.getElementById(id).textContent = msg || ''; }
+    /* An online button that cannot reach a server has to say so where it was pressed, not
+       only in the corner: the usual reason is that the server simply is not running. */
+    function netTrouble(msg) {
+      var el = document.getElementById('netErr');
+      el.textContent = msg || '';
+      el.classList.toggle('hidden', !msg);
+      setBadge(msg || '', !!msg);
+    }
+    function setBadge(text, warn) {
+      badge.classList.toggle('hidden', !text);
+      badge.classList.toggle('warn', !!warn);
+      badge.textContent = text || '';
+    }
+
+    function seatRow(seat, lobby) {
+      var mine = Net.seat() === seat.idx;
+      var who = seat.kind === 'computer' ? 'computer'
+              : mine ? 'you'
+              : seat.taken ? (seat.watching ? 'taken' : 'taken — not watching')
+              : seat.away ? 'empty — waiting for a player' : 'free';
+      var canTake = !mine && !seat.taken && seat.kind !== 'computer';
+      return '<div class="lb-seat' + (mine ? ' mine' : '') + '">' +
+        '<span class="lb-dot" style="background:' + SEAT_HEX[seat.idx % 4] + '"></span>' +
+        '<span class="lb-name">' + esc(seat.name) +
+          ' <span style="color:var(--ink-dim)">Team ' + TEAM_LETTER[seat.team] + '</span></span>' +
+        '<span class="lb-who">' + esc(who) + '</span>' +
+        (canTake ? '<button type="button" class="g-btn ghost" data-take="' + seat.idx +
+                   '" style="padding:3px 9px;font-size:11px">Take it</button>' : '') +
+        '</div>';
+    }
+
+    Net.onError(function (msg) { setBadge(msg, true); say('lobbyErr', msg); });
+
+    Net.onLobby(function (lobby) {
+      if (!lobby) return;
+      document.getElementById('lobbyCode').textContent = lobby.room;
+      document.getElementById('lobbySeats').innerHTML =
+        lobby.seats.map(function (st) { return seatRow(st, lobby); }).join('');
+      document.getElementById('lobbyStart').disabled = !!lobby.started || Net.seat() === null;
+      if (lobby.started) {
+        show(null);
+        var me = Net.seat();
+        var empties = lobby.seats.filter(function (st) { return st.empty; });
+        setBadge('Room ' + lobby.room + ' — ' +
+                 (me === null ? 'watching' : 'seat ' + (me + 1) + ', ' + lobby.seats[me].name) +
+                 (empties.length ? ' — ' + empties.map(function (st) { return st.name; }).join(', ') +
+                                   (empties.length === 1 ? ' has left' : ' have left') : ''),
+                 empties.length > 0);
+      } else {
+        show(lobbyPick);
+        setBadge('Room ' + lobby.room + ' — waiting to start');
+      }
+    });
+
+    document.getElementById('lobbySeats').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-take]');
+      if (!b) return;
+      say('lobbyErr', '');
+      Net.claim(+b.getAttribute('data-take')).catch(function (err) { say('lobbyErr', err.message); });
+    });
+
+    document.getElementById('hostBtn').addEventListener('click', function () {
+      /* The roster on screen becomes the table: its decks, teams and computer seats. It has
+         to be committed first, the same way starting a local game commits it, because a seat's
+         name is built from what it is — and until then that still reads from the last game. */
+      SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
+      var seats = SEATS.map(function (seat, i) {
+        var cfg = seatConfig(i, seat);
+        return { name: cfg.name, team: cfg.team, kind: seat.ai ? 'computer' : 'human',
+                 deck: cfg.deck, modules: cfg.modules, skills: cfg.skills };
+      });
+      say('lobbyErr', '');
+      netTrouble('');
+      Net.create(seats)
+        .then(function () {
+          var first = seats.map(function (s, i) { return i; })
+            .filter(function (i) { return seats[i].kind === 'human'; })[0];
+          return first === undefined ? null : Net.claim(first);
+        })
+        .catch(function (err) { netTrouble(err.message); });
+    });
+
+    document.getElementById('joinBtn').addEventListener('click', function () {
+      netTrouble('');
+      say('roomErr', '');
+      codeBox.value = '';
+      show(roomPick);
+      codeBox.focus();
+    });
+    document.getElementById('roomBack').addEventListener('click', function () { show(modePick); });
+    function lookUp() {
+      var code = (codeBox.value || '').trim().toUpperCase();
+      if (code.length !== 6) { say('roomErr', 'A code is six characters.'); return; }
+      say('roomErr', 'looking…');
+      Net.look(code)
+        .then(function () { return Net.resume(code); })
+        .then(function () { say('roomErr', ''); Net.connect(); })
+        .catch(function (err) { say('roomErr', err.message); });
+    }
+    document.getElementById('roomGo').addEventListener('click', lookUp);
+    codeBox.addEventListener('keydown', function (e) { if (e.key === 'Enter') lookUp(); });
+
+    document.getElementById('lobbyStart').addEventListener('click', function () {
+      say('lobbyErr', '');
+      Net.start().catch(function (err) { say('lobbyErr', err.message); });
+    });
+    document.getElementById('lobbyLeave').addEventListener('click', function () {
+      Net.release().then(function () { Net.disconnect(); show(modePick); setBadge(''); });
+    });
+
+    /* A room in the address bar joins it straight away, so a host can paste a link. Failing
+       that, a browser that was in a game goes back to it: reloading is how you reclaim a seat,
+       and it should not cost you the room code to do it. */
+    function rejoin(code, loud) {
+      return Net.look(code)
+        .then(function () { return Net.resume(code); })
+        .then(function () { Net.connect(); })
+        .catch(function (err) {
+          Net.forgetRoom();
+          if (loud) setBadge(err.message, true);
+        });
+    }
+    var inUrl = (location.search.match(/[?&]room=([A-Za-z0-9]{6})/) || [])[1];
+    if (inUrl) rejoin(inUrl.toUpperCase(), true);
+    else if (Net.lastRoom() && Net.hadSeatIn(Net.lastRoom())) rejoin(Net.lastRoom(), false);
+  })();
+
   /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
   function nudge(dx, dy) {
     var G = Engine.get(), p = G.pending, s = G.players[meIdx()];
@@ -2391,6 +2658,9 @@
     var G = Engine.get();
     if (!G || G.over) return;
     if (menuOpen()) return;          /* the board is frozen while the roster is up */
+    /* online the computer plays on the server, where the real game is; a second commander
+       running here would be arguing with it about a state it does not own */
+    if (online()) return;
     if (instantMoves) {
       /* run the seat's whole turn out in one tick; the guard is only there so a bug in the
          commander cannot spin the page forever */
