@@ -312,6 +312,12 @@
     background:rgba(156,63,102,.12); }
   .mp-meta .ticon { width:11px; height:11px; flex:none; display:block; }
   .mp-desc { color:var(--ink-mid); font-size:12.5px; line-height:1.55; white-space:pre-line; }
+  .redacted { color:var(--line-bright); letter-spacing:-1px; user-select:none; }
+  /* the piece a card in the hand was ctrl-clicked to find */
+  .piece.found { outline:3px solid var(--amber); outline-offset:2px; border-radius:6px;
+                 box-shadow:0 0 16px rgba(232,169,74,.8); animation:found-pulse 1s ease-in-out infinite; }
+  @keyframes found-pulse { 0%,100% { outline-color:var(--amber); }
+                           50% { outline-color:rgba(232,169,74,.25); } }
   /* settings cog and its menu, in the shape the tabletop board uses */
   .settings-wrap { position:relative; display:flex; align-items:center; }
   .settings-cog { font-size:14px; line-height:1; padding:6px 10px; }
@@ -715,6 +721,13 @@
   /* shapes of yours that hold more than one kind of piece, counted separately for hull and
      for deployables */
   var ambiguous = { mod: {}, dep: {} };
+  /* the piece a card in the hand asked us to point out; cleared by the next click */
+  var foundId = null;
+  var lastRecs = [];
+  function recById(id) {
+    for (var i = 0; i < lastRecs.length; i++) if (lastRecs[i].id === id) return lastRecs[i];
+    return null;
+  }
 
   /* ---------- view: pan and zoom ----------
      Ported from client/board.html. The grid is one transformed layer, so panning and zooming
@@ -1152,6 +1165,7 @@
     var cls = 'piece ' + rec.kind;
     var targetIds = (p && p.kind === 'target') ? p.targets : [];
     if (targetIds.indexOf(rec.id) >= 0) cls += ' targetable';
+    if (rec.id === foundId) cls += ' found';
     /* the piece on the end of a tractor beam may be anything at all, including a rock */
     if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving clickable';
     if (rec.kind === 'mod' || rec.kind === 'dep') {
@@ -1170,9 +1184,12 @@
     }
     d.className = cls;
     /* the board carries no text, so the name and hull live in the hover title */
+    var yours = rec.side && rec.side.team === G.players[meIdx()].team;
     d.title = rec.kind === 'ast' ? 'Asteroid — hull ' + o.hull
             : rec.kind === 'anom' ? 'Anomaly'
-            : rec.side.name + ' — ' + o.name + ' — hull ' + o.hull + '/' + (o.hullMax || o.hull);
+            : yours ? rec.side.name + ' — ' + o.name + ' — hull ' + o.hull + '/' + (o.hullMax || o.hull)
+            /* someone else's: the shape is public, the rest is not */
+            : rec.side.name + ' — Unknown ' + (rec.kind === 'dep' ? 'Deployable' : 'Module');
     var tg = d.querySelector('.pc-tag');
     var bucket = rec.kind === 'dep' ? ambiguous.dep : rec.kind === 'mod' ? ambiguous.mod : null;
     var tag = (rec.si === meIdx() && bucket && bucket[rec.shape]) ? shortName(o.name) : '';
@@ -1220,6 +1237,7 @@
 
   function paintPieces(G) {
     var recs = boardObjects(G);
+    lastRecs = recs;
     ambiguous = ambiguousShapes(G);
     /* drop nodes whose object is gone, then place the rest in order, reusing what is there */
     var want = {};
@@ -1407,6 +1425,52 @@
     if (t.onactivate) lines.push('On Activate: ' + t.onactivate);
     document.getElementById('modPopDesc').innerHTML =
       lines.length ? lines.map(withModPips).join('<br>') : 'No text.';
+    document.getElementById('modPop').classList.remove('hidden');
+  }
+
+  /* A rock belongs to nobody, so there is nothing to withhold. */
+  function openAsteroidPopup(rec) {
+    var o = rec.o, max = o.hullMax || o.hull;
+    var icon = document.getElementById('modPopIcon');
+    icon.style.setProperty('--pc', '#6a7077');
+    icon.innerHTML = GamePieces.markup(rec.shape, '#6a7077', GamePieces.hash(rec.id));
+    document.getElementById('modPopName').textContent = 'Asteroid';
+    document.getElementById('modPopMeta').innerHTML = chipsHtml([
+      { text: HULL_ICON + o.hull + ' / ' + max, cls: 't-hull', tip: 'Hull remaining' },
+      { text: 'at ' + o.x + ',' + o.y, cls: '', tip: 'Position' },
+      rec.shape === 'debris' ? { text: 'Breaking up', cls: 't-amber',
+                                 tip: 'Down to its last hull point' } : null
+    ].filter(Boolean));
+    document.getElementById('modPopDesc').textContent =
+      'Terrain. It blocks movement and line of sight, and can be shot away — ' + max +
+      ' hull when whole.' +
+      (rec.shape === 'debris' ? '\nOne more hit and it is gone.' : '');
+    document.getElementById('modPop').classList.remove('hidden');
+  }
+
+  /* What you may know about someone else's module: the silhouette already tells you its class,
+     and nothing else is yours to read. */
+  function openUnknownPopup(rec) {
+    var isDep = rec.kind === 'dep';
+    var m = Engine.findMod(rec.o.name) || {};
+    var col = SEAT_HEX[rec.si % 4];
+    var icon = document.getElementById('modPopIcon');
+    icon.style.setProperty('--pc', col);
+    icon.innerHTML = GamePieces.markup(rec.shape, col);
+    document.getElementById('modPopName').textContent = 'Unknown ' + (isDep ? 'Deployable' : 'Module');
+    var meta = [
+      { text: (isDep ? DEPLOYABLE_ICON : MODULE_ICON) + (isDep ? 'Deployable' : 'Module'),
+        cls: isDep ? 't-amber' : 't-cyan', tip: isDep ? 'Deployable' : 'Module' }
+    ];
+    if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
+                          tip: 'Its silhouette gives away this much' });
+    meta.push({ text: esc(rec.side.name), cls: '', tip: 'Owner' });
+    document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
+    document.getElementById('modPopDesc').innerHTML =
+      '<span class="redacted">████████ ████ ███████</span><br>' +
+      '<span class="redacted">███████ ██ ████████ █████</span><br>' +
+      '<span style="color:var(--ink-dim)">No scan data. You can see what shape it is, ' +
+      'and nothing more.</span>';
     document.getElementById('modPop').classList.remove('hidden');
   }
 
@@ -1645,6 +1709,29 @@
     var cell = cellFromEvent(e);
     var id = cell ? objIdAt(G, cell.x, cell.y) : null;
     if (!id) { var el = e.target.closest('.piece'); if (el) id = el.getAttribute('data-obj'); }
+    if (foundId) { foundId = null; Engine.emit(); }        /* any click clears the marker */
+
+    /* Ctrl-click inspects a piece instead of acting on it, and a piece that is not yours
+       reads as redacted however it was clicked. */
+    var rec = id ? recById(id) : null;
+    var targetable = rec && p && p.kind === 'target' && p.targets.indexOf(id) >= 0;
+    if (rec && rec.kind === 'ast') {
+      /* unless you are being asked to shoot it, a click on a rock just tells you about it */
+      if ((e.ctrlKey || e.metaKey) || !targetable) { openAsteroidPopup(rec); return; }
+    }
+    if (rec && (rec.kind === 'mod' || rec.kind === 'dep')) {
+      var theirs = rec.side.team !== G.players[meIdx()].team;
+      if (e.ctrlKey || e.metaKey) {
+        if (theirs) openUnknownPopup(rec); else openModPopup(rec.o.name);
+        return;
+      }
+      /* a plain click on someone else's piece does nothing else useful, unless it is the
+         target you are being asked to pick */
+      if (theirs && !targetable) {
+        openUnknownPopup(rec);
+        return;
+      }
+    }
     if (p) {
       if (p.kind === 'target' && id && p.targets.indexOf(id) >= 0) return Engine.resolve(id);
       /* during a move prompt, clicking one of your modules picks which one the controls drive */
@@ -1667,6 +1754,24 @@
     else if (s.deployables[id]) Engine.activateDeployable(id);
   });
   handEl.addEventListener('click', function (e) {
+    /* ctrl-click a card to point out its piece on the board */
+    if (e.ctrlKey || e.metaKey) {
+      var card = e.target.closest('.hcard');
+      var head = card && card.querySelector('.hn[data-mod]');
+      if (head) {
+        e.preventDefault();
+        var s2 = Engine.get().players[meIdx()], want = head.getAttribute('data-mod'), hit = null;
+        ['modules', 'deployables'].forEach(function (bag) {
+          Object.keys(s2[bag]).forEach(function (id) {
+            if (!hit && s2[bag][id].name === want) hit = id;
+          });
+        });
+        foundId = hit;
+        Engine.emit();
+        return;
+      }
+    }
+    if (foundId) { foundId = null; Engine.emit(); }
     var pip = e.target.closest('.mod-info');
     if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); return; }
     var head = e.target.closest('.hn[data-tech], .hn[data-mod]');
@@ -1870,6 +1975,14 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && !document.getElementById('modPop').classList.contains('hidden')) {
       e.preventDefault(); closeModPopup(); return;
+    }
+    /* Ctrl+Space presses whichever phase button is currently offered */
+    if (e.ctrlKey && (e.code === 'Space' || e.key === ' ')) {
+      var live = [document.getElementById('playPhaseBtn'), document.getElementById('endBtn')]
+        .filter(function (b) { return !b.classList.contains('hidden') && !b.disabled; })[0];
+      e.preventDefault();
+      if (live) live.click();
+      return;
     }
     var G = Engine.get();
     if (!isMyTurn(G)) return;
