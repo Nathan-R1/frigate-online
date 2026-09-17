@@ -21,3 +21,7 @@ services:
         sync: false          # set in the dashboard, never committed
       - key: NODE_VERSION
         value: "20"
+      # Only needed if the page is served from somewhere other than this service. Left unset,
+      # the API answers same-origin requests and local addresses, and nobody else.
+      # - key: FRIGATE_ORIGIN
+      #   value: https://frigate-online.onrender.com
