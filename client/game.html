@@ -112,8 +112,9 @@
   .pc-badge { position:absolute; font-family:var(--mono); font-weight:700; font-size:9px;
     line-height:1; padding:1.5px 3px; border-radius:3px; pointer-events:none;
     background:rgba(10,16,24,.88); border:1px solid #26374a; }
-  .pc-charge { top:-3px; right:-3px; color:var(--icon-cyan); border-color:rgba(79,216,201,.5);
-    text-shadow:0 0 6px rgba(79,216,201,.5); }
+  .pc-charge { top:-3px; right:-3px; color:var(--icon-charged); border-color:rgba(156,63,102,.6);
+    display:inline-flex; align-items:center; gap:2px; }
+  .pc-charge .ticon { width:8px; height:8px; flex:none; display:block; }
   .pc-move { bottom:-4px; left:50%; transform:translateX(-50%); color:#9cc0ff;
     border-color:rgba(91,148,240,.55); text-shadow:0 0 6px rgba(91,148,240,.5); }
   .pc-tag { top:-3px; left:-3px; font-size:8px; letter-spacing:.02em; color:var(--pc);
@@ -269,6 +270,8 @@
                   color:var(--amber); flex:none;
                   display:flex; align-items:center; gap:5px; }
   .hcard .hullpip { display:inline-flex; align-items:center; gap:3px; color:var(--icon-hull); }
+  .hcard .tokpip { display:inline-flex; align-items:center; gap:3px; color:var(--icon-charged); }
+  .hcard .tokpip .ticon { width:1.1em; height:1.1em; flex:none; display:block; }
   .hcard .hullpip .ticon { width:1.1em; height:1.1em; flex:none; display:block; }
   .g-over { position:fixed; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center;
             justify-content:center; z-index:50; }
@@ -301,7 +304,9 @@
     text-transform:uppercase; }
   /* whose it is belongs with the name, not among the stats */
   .mp-owner { font-family:var(--mono); font-size:10px; letter-spacing:.08em; padding:2px 7px;
-    border-radius:4px; border:1px solid var(--pc, var(--line)); color:var(--pc, var(--ink-mid)); }
+    border-radius:4px; border:1px solid var(--pc, var(--line)); color:var(--pc, var(--ink-mid));
+    display:inline-flex; align-items:center; gap:5px; }
+  .mp-owner .ticon { width:11px; height:11px; flex:none; display:block; }
   .mp-owner:empty { display:none; }
   /* boxed tags, as the sheet builder draws them: an icon and a word per box */
   .mp-meta { display:flex; flex-wrap:wrap; gap:6px;
@@ -1209,7 +1214,7 @@
     tg.style.display = tag ? '' : 'none';
     var ch = d.querySelector('.pc-charge'), mv = d.querySelector('.pc-move');
     var charges = o.charges || 0;
-    ch.textContent = charges ? '⚡' + charges : '';
+    ch.innerHTML = charges ? CHARGES_ICON + charges : '';
     ch.style.display = charges ? '' : 'none';
     /* Move remaining is only shown while you are actually moving pieces */
     var showMv = p && p.kind === 'move' && rec.si === meIdx() && o.moveLeft > 0;
@@ -1297,8 +1302,7 @@
         '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
         '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
         /* only charges and heat are worth a line; an empty one just leaves a gap */
-        ((c.charges || c.heat) ? '<div class="hmeta">' +
-          (c.charges ? '⚡' + c.charges + ' ' : '') + (c.heat ? '🔥' + c.heat : '') + '</div>' : '') +
+        ((c.charges || c.heat) ? '<div class="hmeta">' + tokenPips(c) + '</div>' : '') +
         '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
         '<div class="hb"><button data-act="' + id + '"' +
         (myTurn && !c.exhausted && Engine.affordable(s, c, 'tech') ? '' : ' disabled') +
@@ -1310,7 +1314,7 @@
       html += '<div class="hcard inplay' + (d.exhausted ? ' spent' : '') + '">' +
         '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
         pieceIcon(d.name, false) + esc(d.name) + '</div>' +
-        '<div class="hmeta">deployable ' + hullPip(d) + '</div>' +
+        '<div class="hmeta">deployable ' + hullPip(d) + tokenPips(d) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-dact="' + id + '"' +
         (myTurn && !d.exhausted && Engine.affordable(s, d, 'dep') ? '' : ' disabled') +
@@ -1322,7 +1326,7 @@
       html += '<div class="hcard inplay' + (m.exhausted ? ' spent' : '') + '">' +
         '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
         pieceIcon(m.name, id === s.coreId) + esc(m.name) + '</div>' +
-        '<div class="hmeta">' + hullPip(m) + '</div>' +
+        '<div class="hmeta">' + hullPip(m) + tokenPips(m) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         '<div class="hb"><button data-mact="' + id + '"' +
         (myTurn && !m.exhausted && Engine.affordable(s, m, 'mod') ? '' : ' disabled') +
@@ -1386,6 +1390,13 @@
     return out + esc(line.slice(last));
   }
 
+  /* charges and heat sit on modules and deployables as readily as on cards, so they are
+     shown the same way wherever they turn up */
+  function tokenPips(o) {
+    return (o.charges ? '<span class="tokpip" title="Charges">' + CHARGES_ICON + o.charges + '</span>' : '') +
+           (o.heat ? '<span class="tokpip" title="Heat">🔥' + o.heat + '</span>' : '');
+  }
+
   /* hull as the heart icon and the number, with the full figure on hover once it is damaged */
   function hullPip(o) {
     var max = o.hullMax || o.hull;
@@ -1440,13 +1451,14 @@
   /* A rock belongs to nobody, so there is nothing to withhold. */
   /* The header: silhouette, name, and an owner tag in that seat's colour. A piece that
      belongs to nobody gets no tag. */
-  function popHead(name, iconHtml, colour, owner) {
+  function popHead(name, iconHtml, colour, owner, kindIcon) {
     var icon = document.getElementById('modPopIcon');
     if (colour) icon.style.setProperty('--pc', colour); else icon.style.removeProperty('--pc');
     icon.innerHTML = iconHtml || '';
     document.getElementById('modPopName').textContent = name;
     var tag = document.getElementById('modPopOwner');
-    tag.textContent = owner || '';
+    /* whether it is hull or a drone rides with the owner, rather than as a chip of its own */
+    tag.innerHTML = owner ? (kindIcon || '') + esc(owner) : '';
     if (colour) tag.style.setProperty('--pc', colour); else tag.style.removeProperty('--pc');
   }
   /* where it is, so you can go and find it */
@@ -1477,11 +1489,9 @@
     var m = Engine.findMod(rec.o.name) || {};
     var col = SEAT_HEX[rec.si % 4];
     popHead('Unknown ' + (isDep ? 'Deployable' : 'Module'),
-            GamePieces.markup(rec.shape, col), col, rec.side.name);
-    var meta = [
-      { text: (isDep ? DEPLOYABLE_ICON : MODULE_ICON) + (isDep ? 'Deployable' : 'Module'),
-        cls: isDep ? 't-amber' : 't-cyan', tip: isDep ? 'Deployable' : 'Module' }
-    ];
+            GamePieces.markup(rec.shape, col), col, rec.side.name,
+            isDep ? DEPLOYABLE_ICON : MODULE_ICON);
+    var meta = [];
     if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
                           tip: 'Its silhouette gives away this much' });
     meta.push(atChip(rec.o));
@@ -1502,13 +1512,10 @@
     var isDep = m.type === 'deployable';
     var col = rec ? SEAT_HEX[rec.si % 4] : SEAT_HEX[meIdx() % 4];
     popHead(m.name, GamePieces.markup(rec ? rec.shape : GamePieces.shapeOf(m.name, false), col),
-            col, rec ? rec.side.name : '');
+            col, rec ? rec.side.name : '', isDep ? DEPLOYABLE_ICON : MODULE_ICON);
     /* an icon and its value per box, the way the sheet draws them; the title says which
        number you are looking at, since a bare 12 beside an arrow is not self-evident */
-    var meta = [
-      { text: (isDep ? DEPLOYABLE_ICON : MODULE_ICON) + (isDep ? 'Deployable' : 'Module'),
-        cls: isDep ? 't-amber' : 't-cyan', tip: isDep ? 'Deployable' : 'Module' }
-    ];
+    var meta = [];
     if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
                           tip: cap(m.tt) + ' technology' });
     if (rec) meta.push({ text: HULL_ICON + rec.o.hull + ' / ' + (rec.o.hullMax || rec.o.hull),
@@ -1516,8 +1523,16 @@
     else if (num(m.hull) > 0) meta.push({ text: HULL_ICON + esc(m.hull), cls: 't-hull', tip: 'Hull HP' });
     if (num(m.speed) > 0) meta.push({ text: SPEED_ICON + esc(m.speed), cls: '', tip: 'Speed' });
     if (num(m.duration) > 0) meta.push({ text: DURATION_ICON + esc(m.duration), cls: '', tip: 'Duration' });
-    if (num(m.charges) > 0) meta.push({ text: CHARGES_ICON + esc(m.charges), cls: 't-charge',
-                                        tip: 'Charges it starts with' });
+    /* the live figure on the piece, as a tech card shows its own; the preset's number only
+       when there is no piece to read */
+    if (rec && (rec.o.charges || rec.o.heat)) {
+      if (rec.o.charges) meta.push({ text: CHARGES_ICON + rec.o.charges, cls: 't-charge',
+                                     tip: 'Charges on it now' });
+      if (rec.o.heat) meta.push({ text: '🔥' + rec.o.heat, cls: 't-amber', tip: 'Heat on it now' });
+    } else if (!rec && num(m.charges) > 0) {
+      meta.push({ text: CHARGES_ICON + esc(m.charges), cls: 't-charge',
+                  tip: 'Charges it starts with' });
+    }
     if (m.traits) meta.push({ text: esc(m.traits), cls: '', tip: 'Traits' });
     if (rec) meta.push(atChip(rec.o));
     document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
