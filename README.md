@@ -1,41 +1,63 @@
 # frigate-online
 
-A lightweight browser-based tabletop battle map. Place coloured piece/flip-token images on a shared grid, move them around, and mark them with counters — all synced between players over the internet in near real time.
+A browser game of fleet combat on a square grid. Build a ship out of modules and tech cards,
+then fight it — against the computer on one screen, or against other people over the network.
 
-## What it is
+## What is here
 
-- **`client/board.html`** — the frontend (markup + JS). Pan/zoom the board, click to create, drag to move, right-click to mark a piece exhausted, hit Delete to remove a selected piece/chip, middle-click to ping a cell. Pieces start in your chosen colour.
-- **`client/board.css`** — styles for the frontend.
-- **`client/frigate-sheet/`** — the Starship Dossier player sheet (embedded in the side panel). A copy of `frigate-sheet/frigate.html` + its css/presets.
-- **`client/pieces/images/`** — drop PNGs here; they appear automatically in the create menu and on the server-hosted board.
-- **`server/board.php`** — the tiny shared-state server. Persists the board to `server/board-state.json` and serves the piece catalog. Actions (`create`, `move`, `counter`, `exhaust`, `ping`, `resize`, `delete`) are serialised with `flock` and saved atomically.
-- **`run.sh`** — starts a local PHP dev server so you can test alone or with friends.
+| | |
+| --- | --- |
+| **`client/game.html`** | The game. Board, hand, log, settings, the new-game roster, and online play. |
+| **`client/game/engine.js`** | The rules. Pure state and rules, no DOM: turn order, movement, line of sight, damage, the effect queue that drives every card. |
+| **`client/game/ai/`** | The computer player — knowledge, pathing, placement, doctrine, and the commander that ties them together. |
+| **`client/game/pieces.js`** | The silhouettes drawn on the board, one shape per module class. |
+| **`client/game/net.js`** | The browser's half of online play: sends intents, receives state. |
+| **`client/sheet-builder/sheet-builder.html`** | The ship builder. Pick a hull, spend points on crew skills, choose modules and a deck. Builds hand back to the game. |
+| **`client/frigate-sheet/presets/`** | The card and module data, shared by the game and the builder. This is the source of truth for what a card does. |
+| **`server/game-server.js`** | The authoritative server for online play. Runs the same `engine.js` the browser does. |
+| **`tools/validate-effects.js`** | Checks every preset has behaviour and every op is reachable. |
 
-Because the state lives on the server, any number of browsers pointed at the same server see the same board — that's the multiplayer part.
+## Playing on one screen
 
-## Run locally
+Open `client/game.html` — it needs no server at all. Set up the roster, choose Local player or
+Computer for each seat, and start. Everything runs in the browser.
 
-Requires PHP (any 8.x) with `php-cli`.
+## Playing online
 
 ```bash
-./run.sh
+./run-online.sh
 ```
 
-Then open **http://localhost:8000/client/board.html** in your browser.
+Then open **http://localhost:8080/client/game.html**. Press **Host online…** on the new-game
+screen; you get a six-character room code. Everyone else opens the same address, presses
+**Join a game…**, enters the code and takes a seat.
 
-- To test multiplayer, open the same URL in two browser windows/tabs (pick a different colour in each) and refresh.
-- To pick a different port: `PORT=9000 ./run.sh`
-- Stop the server: `kill $(pgrep -f "php -S.*:8000")` (use your port if changed)
-- Server log: `/tmp/frigate-server.log`
+- Others on your network use `http://<your-ip>:8080/client/game.html` — the script prints it.
+- The page finds the server by itself, so it also works served from somewhere else; add
+  `?server=http://host:8080` if it needs telling.
+- A different port: `PORT=9000 ./run-online.sh`
+- Server log: `/tmp/frigate-online.log`
 
-## Serve on the internet
+### How online play works
 
-Upload `server/board.php` (and the `client/` folder, keeping the `client/pieces/images` layout) to any PHP host; the whole folder can just be dropped behind a web server. The board state file is created automatically in `server/` on first write.
+The server is the only place the game advances. A browser sends an *intent* — play this card,
+answer this prompt, end my turn — and never state. The server runs the rules, refuses anything
+they forbid, and pushes the result to every watcher over an event stream. Each watcher gets
+their own view: the board is public, your own cards are yours, and everyone else's hand and
+deck arrive as the right number of blanks.
 
-## API
+A seat is held for as long as that browser is watching it. Sixty seconds after the last
+connection for a seat closes, it empties and anybody can take it — the game waits until
+somebody does. Reloading puts you back in the seat you had.
 
-| Request | Effect |
-| --- | --- |
-| `GET /server/board.php?get` | Full board state as JSON |
-| `GET /server/board.php?pieces` | Catalog of PNGs in `client/pieces/images` |
-| `POST /server/board.php` | One action or `batch` of actions: `resize`, `create`, `move`, `counter`, `exhaust`, `ping`, `delete` |
+Seats set to **Computer** in the roster are played by the computer, on the server.
+
+## Checks
+
+```bash
+node tools/validate-effects.js
+```
+
+## Requirements
+
+Node (any 20+) for online play. Single-screen play needs only a browser.

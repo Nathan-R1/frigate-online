@@ -634,7 +634,7 @@
     { key: 'generator', title: 'Generator', options: GENERATOR_OPTIONS, classOptions: CLASS_GENERATORS }
   ];
 
-  /* matches the values a fresh frigate.html sheet starts with */
+  /* the values a sheet starts with before anything is spent */
   var SHEET_DEFAULTS = {
     dcHex: '7',
     stats: {
@@ -2532,11 +2532,11 @@ function skillsOptions() {
     return 'normal';
   }
 
-  /* the builder is same-origin with the board, so handing a build over in-game is a localStorage
-     write plus a navigation. It goes on its own key rather than frigate.html's autosave key,
-     which any open board tab overwrites as it unloads. */
+  /* the builder is same-origin with the game, so handing a build over is a localStorage write
+     plus a navigation. It goes on its own key so that nothing else the game stores can be
+     overwritten by a build that was only being tried out. */
   var SHEET_HANDOFF_KEY = 'frigatePendingSheet';
-  var BOARD_URL = '../board.html';
+  var GAME_URL = '../game.html';
 
   /* ===== editing a seat in the game's new-game roster =====
      The game parks a request here and sends the browser over. We adopt that seat's saved
@@ -2598,7 +2598,7 @@ function skillsOptions() {
     }
     if (window.opener && !window.opener.closed) { window.close(); return; }
     if (document.referrer) { window.history.back(); return; }
-    window.location.href = BOARD_URL;
+    window.location.href = GAME_URL;
   }
   window.closeBuilder = closeBuilder;
 
@@ -2615,7 +2615,7 @@ function skillsOptions() {
       alert('Could not load the sheet in-game: this browser is not allowing local storage.');
       return;
     }
-    window.location.href = BOARD_URL;
+    window.location.href = GAME_URL;
   }
   function exportSheet() {
     var data = buildSheet();

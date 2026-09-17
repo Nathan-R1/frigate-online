@@ -50,7 +50,7 @@
   .g-board.dragging { cursor:grabbing; }
   .grid { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
   .cells, .pieces, .links { position:absolute; inset:0; }
-  /* hull connectors, ported from client/board.css */
+  /* hull connectors */
   .links { pointer-events:none; }
   .conn-base { animation:conn-march 2.4s linear infinite; }
   @keyframes conn-march { from { stroke-dashoffset:24; } to { stroke-dashoffset:0; } }
@@ -148,7 +148,7 @@
 
   /* ===== move phase =====
      The route preview, the beacon, the landing ping and the blocked flash are the tabletop
-     board's movement graphics (client/board.css), scaled to this board's smaller cell. */
+     tabletop map's movement graphics, scaled to this board's smaller cell. */
   .pathlayer { position:absolute; inset:0; pointer-events:none; z-index:3; }
   .move-path { position:absolute; left:0; top:0; overflow:visible;
     filter:drop-shadow(0 0 5px rgba(79,216,201,.6)); }
@@ -661,6 +661,19 @@
       return { team: (typeof x.team === 'number') ? x.team : i, ai: !!x.ai };
     });
   })();
+  /* A build finished in the builder outside the seat round-trip — "Load in-game?" after an
+     export — arrives on its own key. It belongs to whoever is sitting first: the roster is
+     where it can then be moved, edited or thrown away like any other. */
+  (function adoptPendingSheet() {
+    var SHEET_HANDOFF_KEY = 'frigatePendingSheet';
+    var sheet = readStore(SHEET_HANDOFF_KEY, null);
+    if (!sheet || typeof sheet !== 'object') return;
+    try { localStorage.removeItem(SHEET_HANDOFF_KEY); } catch (e) {}
+    var seat = 0;
+    for (var i = 0; i < SEATS.length; i++) if (!SEATS[i].ai) { seat = i; break; }
+    seatSheets[seat] = { sheet: sheet, choices: null };
+    writeStore(GAME_SEATS_KEY, seatSheets);
+  })();
 
   function sheetOf(i) { return (seatSheets[i] && seatSheets[i].sheet) || null; }
 
@@ -922,7 +935,7 @@
   }
 
   /* ---------- view: pan and zoom ----------
-     Ported from client/board.html. The grid is one transformed layer, so panning and zooming
+     The grid is one transformed layer, so panning and zooming
      move everything on it together and nothing has to be re-laid-out. */
   var VIEW_KEY = 'frigateGameView';
   var MIN_ZOOM = 0.35, MAX_ZOOM = 3;
@@ -1197,7 +1210,7 @@
   }
 
   /* ---------- hull connectors ----------
-     Ported from client/board.html: struts drawn between orthogonally adjacent modules of the
+     Struts drawn between orthogonally adjacent modules of the
      same side, so a hull reads as one ship rather than loose pieces. Deployables are free
      craft, not hull, so they are not joined. */
   /* Low graphics: no CSS animation, no SMIL, no pings or blocked flashes. A piece is then a

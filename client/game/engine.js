@@ -38,7 +38,7 @@ var Engine = (function () {
   function fx(name, kind) { return (CARD_EFFECTS[kind] || {})[name] || {}; }
   function num(v, d) { var n = parseInt(v, 10); return isNaN(n) ? (d || 0) : n; }
 
-  /* ---- derived stats, mirroring frigate.html ---- */
+  /* ---- derived stats, mirroring the sheet builder ---- */
   function skill(s, n) { return Math.max(0, num(s.skills[n], 0)); }
   function speedOf(s) { return Math.max(1, skill(s, 'Navigation')); }
   function sensorsOf(s) { return 2 * skill(s, 'Sensors'); }
@@ -48,7 +48,7 @@ var Engine = (function () {
   function capacityCapOf(s) { return skill(s, 'Leadership'); }
 
   /* ---- geometry: square grid, chebyshev distance (diagonals cost 1) ---- */
-  /* Manhattan throughout, matching board.html's distance readout. A diagonal neighbour is
+  /* Manhattan throughout, as the tabletop map measured it. A diagonal neighbour is
      2 away, so "adjacent" means orthogonal and "2 spaces from Core" clears the orthogonals. */
   function dist(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
   var stepDist = dist;
@@ -59,7 +59,7 @@ var Engine = (function () {
   function inBounds(x, y) { return x >= 0 && y >= 0 && x < RULES.boardSize && y < RULES.boardSize; }
 
   /* ---- line of sight: centre to centre; any occupied square in between blocks.
-     Ported from board.html lineBlocked(), with every occupant counting as a blocker. ---- */
+     Every occupant counts as a blocker, your own hull included. ---- */
   function lineBlocked(sx, sy, tx, ty) {
     var x0 = sx + 0.5, y0 = sy + 0.5, x1 = tx + 0.5, y1 = ty + 0.5;
     var dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
