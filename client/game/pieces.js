@@ -33,13 +33,20 @@ var GamePieces = (function () {
     for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
     return (h >>> 0) / 4294967296;
   }
+  /* Low-graphics mode: the SMIL rotates and pulses are simply not built, so a piece has no
+     moving parts at all. The CSS side kills the keyframe animations via html.gfx-low. */
+  var lowGfx = false;
+  function setLowGfx(on) { lowGfx = !!on; }
+
   function addRotate(node, dur, reverse) {
+    if (lowGfx) return;
     node.appendChild(svgEl('animateTransform', {
       attributeName: 'transform', type: 'rotate',
       from: reverse ? '360' : '0', to: reverse ? '0' : '360',
       dur: dur, repeatCount: 'indefinite' }));
   }
   function addPing(node) {
+    if (lowGfx) return;
     node.appendChild(svgEl('animateTransform', {
       attributeName: 'transform', type: 'scale', values: '.45;1.12', dur: '2.8s',
       repeatCount: 'indefinite', calcMode: 'spline', keySplines: '0.2 0 0.6 1' }));
@@ -153,6 +160,24 @@ var GamePieces = (function () {
         rx: (3 + hashStr('e' + i + seed) * 3).toFixed(1),
         ry: (2 + hashStr('f' + i + seed) * 2).toFixed(1), fill: 'rgba(0,0,0,.3)' }));
     }
+    /* A minority of rocks carry a pair of small companions on opposite sides, in the same
+       spun group as the body so they orbit with it. The rock's own outline reaches 31, so
+       they are placed clear of it rather than at board.html's 17-25, which here would bury
+       them in the silhouette. The svg overflows its cell, which is what lets them float. */
+    if (hashStr('oaf' + seed) < 0.3) {
+      var a1 = hashStr('oa' + seed) * Math.PI * 2;
+      var a2 = a1 + Math.PI + (hashStr('ob' + seed) - 0.5) * 1.6;
+      var r1 = 36 + hashStr('oc' + seed) * 8;
+      var r2 = 36 + hashStr('od' + seed) * 8;
+      g.appendChild(svgEl('circle', {
+        cx: (Math.cos(a1) * r1).toFixed(1), cy: (Math.sin(a1) * r1).toFixed(1),
+        r: (3.5 + hashStr('oe' + seed) * 2).toFixed(1),
+        fill: '#565c63', stroke: '#3f444a', 'stroke-width': 1.5 }));
+      g.appendChild(svgEl('circle', {
+        cx: (Math.cos(a2) * r2).toFixed(1), cy: (Math.sin(a2) * r2).toFixed(1),
+        r: (2.5 + hashStr('of' + seed) * 2).toFixed(1),
+        fill: '#5b6168', stroke: '#3f444a', 'stroke-width': 1.4 }));
+    }
     svg.appendChild(g);
   }
 
@@ -222,5 +247,6 @@ var GamePieces = (function () {
     return svg.outerHTML;
   }
 
-  return { build: build, markup: markup, shapeOf: shapeOf, hash: hashStr, shade: shade };
+  return { build: build, markup: markup, shapeOf: shapeOf, hash: hashStr, shade: shade,
+           setLowGfx: setLowGfx };
 })();
