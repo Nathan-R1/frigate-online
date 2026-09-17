@@ -1,4 +1,4 @@
-/* Shared by frigate.html and the sheet builder so a skill reads the same in both.
+/* Shared by the sheet builder and the game so a skill reads the same in both.
    {SCIENCE} and {SENSORS} are substituted with the crew's live values where supported. */
 var SKILL_DESCRIPTIONS = {
     'Cyber': 'Cyber is added to Draw (min. 0)',

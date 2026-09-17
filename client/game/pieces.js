@@ -1,7 +1,7 @@
 /* Board piece graphics.
 
    The silhouettes, the slow rotations and the blinking lights are lifted from the tabletop
-   board (client/board.html) so the two views read the same way. A piece carries no text: its
+   tabletop battle map this game grew out of, so a piece carries no text: its
    shape says what class of module it is, and everything else — selection, exhaustion, a
    broken connection, movement left — is a class or a floating badge.
 
@@ -162,7 +162,7 @@ var GamePieces = (function () {
     }
     /* A minority of rocks carry a pair of small companions on opposite sides, in the same
        spun group as the body so they orbit with it. The rock's own outline reaches 31, so
-       they are placed clear of it rather than at board.html's 17-25, which here would bury
+       they are placed clear of it rather than at the old map's 17-25, which here would bury
        them in the silhouette. The svg overflows its cell, which is what lets them float. */
     if (hashStr('oaf' + seed) < 0.3) {
       var a1 = hashStr('oa' + seed) * Math.PI * 2;

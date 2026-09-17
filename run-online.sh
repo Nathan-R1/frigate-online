@@ -3,7 +3,7 @@
 #
 # It serves the client as well, so this is the only thing that needs to be running: open
 # http://localhost:8080/client/game.html, press "Host online…", and give the code to whoever
-# else is playing. run.sh stays as it is — that is the PHP battle map, a different thing.
+# else is playing. Single-screen play needs no server at all: just open client/game.html.
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
