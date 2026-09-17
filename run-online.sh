@@ -57,8 +57,9 @@ start_it() {
     exit 0
   fi
 
-  # How long a seat is held once nobody is watching it. It counts absence, not thinking time.
-  export FRIGATE_SEAT_TTL="${FRIGATE_SEAT_TTL:-60000}"
+  # Where games are kept. Unset, they go to server/data as files — no database to run.
+  # Point DATABASE_URL at Postgres (Supabase, or anything else) and they go there instead.
+  [ -n "${DATABASE_URL:-}" ] && echo "  store: postgres" || echo "  store: files (server/data)"
 
   nohup node "$APP_DIR/server/game-server.js" "$PORT" >"$LOG" 2>&1 &
   local pid=$!

@@ -189,6 +189,13 @@ var Net = (function () {
     });
   }
 
+  /* The leader empties somebody else's chair. The server is the one that decides whether you
+     are the leader; this only asks. */
+  function kick(seatIdx) {
+    return api('/api/kick', { room: ST.room, token: ST.token, seat: seatIdx })
+      .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
+  }
+
   function start() {
     return api('/api/start', { room: ST.room, token: ST.token }).then(function (j) {
       ST.lobby = j.lobby; fireLobby(); return j.lobby;
@@ -209,6 +216,13 @@ var Net = (function () {
       ST.rev = msg.rev;
       ST.lobby = msg.lobby;
       if (msg.seat !== null && msg.seat !== undefined) ST.seat = msg.seat;
+      else if (ST.token) {
+        /* We believed we held a seat and the server says otherwise — it was given up here or
+           freed by the leader. Become a watcher rather than pretending. */
+        ST.token = null; ST.seat = null;
+        forget(ST.room);
+        fireError('your seat was freed — you are watching now');
+      }
       if (msg.state) {
         if (!ST.online) install();
         Engine.setState(msg.state);
@@ -265,7 +279,11 @@ var Net = (function () {
     room: function () { return ST.room; },
     seat: function () { return ST.token ? ST.seat : null; },
     lobby: function () { return ST.lobby; },
-    create: create, look: look, claim: claim, resume: resume, release: release,
+    create: create, look: look, claim: claim, resume: resume, release: release, kick: kick,
+    /* are you the one who sat down first, and so the one who can free a seat? */
+    isLeader: function () {
+      return !!(ST.lobby && ST.seat !== null && ST.token && ST.lobby.leader === ST.seat);
+    },
     lastRoom: lastRoom, forgetRoom: forgetRoom, hadSeatIn: function (room) {
       var had = recall(room); return !!(had && had.token);
     },

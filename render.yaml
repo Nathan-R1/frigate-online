@@ -1,0 +1,23 @@
+# Render blueprint — one web service, serving the client and the API from one origin.
+#
+# Create the service from this file, then set DATABASE_URL in the dashboard to the Supabase
+# connection string (Connect > Session pooler, the IPv4 one on port 5432). Nothing secret
+# belongs in this file.
+#
+# Keep this at ONE instance. The live game is held in the process between settled points, so
+# two instances would each believe they own a room. Durability is already handled — the game
+# is written to Postgres, and a restart or deploy picks it straight back up.
+services:
+  - type: web
+    name: frigate-online
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # set in the dashboard, never committed
+      - key: NODE_VERSION
+        value: "20"

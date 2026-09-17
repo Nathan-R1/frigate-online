@@ -1,0 +1,15 @@
+{
+  "name": "frigate-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fleet combat on a square grid — the game, its rules, and the server that keeps them.",
+  "main": "server/game-server.js",
+  "scripts": {
+    "start": "node server/game-server.js",
+    "check": "node tools/validate-effects.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "engines": { "node": ">=18" }
+}
