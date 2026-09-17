@@ -731,8 +731,25 @@ var Engine = (function () {
 
   OPS.gainShield = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
-    s.shield = Math.min(s.shieldMax, s.shield + n);
-    log(s.name + ' gains ' + n + ' shield.');
+    function give(p) {
+      p.shield = Math.min(p.shieldMax, p.shield + n);
+      log(p.name + ' gains ' + n + ' shield.');
+    }
+    if (o.target !== 'choose') { give(s); return; }
+    /* "an allied ship within Sensor range from this" — measured from the module doing it, and
+       your own ship counts, since you are on your own team. A ship is in range when any of
+       its modules is. */
+    var from = ctx.module || ctx.deployable || s.modules[s.coreId];
+    if (!from) { give(s); return; }
+    var reach = sensorsOf(s);
+    var picks = [s].concat(alliesOf(s)).filter(function (p) {
+      return Object.keys(p.modules).some(function (id) { return dist(from, p.modules[id]) <= reach; });
+    });
+    if (!picks.length) { log(s.name + ' has no ship in Sensor range to shield.'); return; }
+    if (picks.length === 1) { give(picks[0]); return; }
+    prompt({ kind: 'choice', label: 'Shield which ship?',
+      options: picks.map(function (p) { return p.name + ' — ' + p.shield + '/' + p.shieldMax; }),
+      onResolve: function (i) { if (picks[i]) give(picks[i]); } });
   };
 
   OPS.gainHull = function (o, ctx) {
@@ -744,7 +761,10 @@ var Engine = (function () {
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.'); };
   OPS.grantPlays = function (o, ctx) { ctx.side.playsLeft += resolveCount(ctx.side, o.n, ctx); log('+' + o.n + ' play.'); };
 
-  OPS.addCharge = function (o, ctx) { var c = ctx.card; if (c) { c.charges += resolveCount(ctx.side, o.n, ctx); } };
+  OPS.addCharge = function (o, ctx) {
+    var c = holderOf(ctx);
+    if (c) c.charges = (c.charges || 0) + resolveCount(ctx.side, o.n, ctx);
+  };
   /* charges, heat and tokens sit on whatever is being activated — a card, a module like the
      Repulsor Unit, or a deployable */
   function holderOf(ctx) { return ctx.card || ctx.module || ctx.deployable || null; }
@@ -992,7 +1012,7 @@ var Engine = (function () {
   function resolveCount(s, v, ctx) {
     if (typeof v === 'number') return v;
     if (v === 'heatSpent') return ctx.heatSpent || 0;
-    if (v === 'charges') return ctx.card ? ctx.card.charges : 0;
+    if (v === 'charges') { var h = holderOf(ctx); return h ? (h.charges || 0) : 0; }
     if (v === '2xEngineering') return 2 * skill(s, 'Engineering');
     if (v === '2d6') return roll6() + roll6();
     if (v === 'upTo4') return Math.min(4, ctx.card ? ctx.card.heat : 0);
