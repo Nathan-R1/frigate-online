@@ -643,15 +643,14 @@
     if (G.over) document.getElementById('overTitle').textContent = overText(G);
   }
 
+  /* Name the winner. A personal verdict tells you nothing you did not already know, and in a
+     three or four player game it does not even say who took it. */
   function overText(G) {
     var w = G.over.winners || [];
     if (!w.length) return 'Everyone is destroyed';
-    var mine = w.filter(function (i) { return !isAI(i); });
-    /* a single human in the game gets the personal verdict; otherwise name the winners */
-    if (localSeats().length === 1)
-      return mine.length ? 'You win' : 'You lose';
-    return w.map(function (i) { return sideName(i); }).join(' and ') +
-           (w.length > 1 ? ' win' : ' wins');
+    var names = w.map(function (i) { return G.players[i].name; });
+    if (names.length === 1) return names[0] + ' wins';
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win';
   }
 
   function bar(s, G) {
