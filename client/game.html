@@ -761,8 +761,14 @@
   /* shapes of yours that hold more than one kind of piece, counted separately for hull and
      for deployables */
   var ambiguous = { mod: {}, dep: {} };
-  /* the piece a card in the hand asked us to point out; cleared by the next click */
-  var foundId = null;
+  /* the pieces a card in the hand asked us to point out; cleared by the next click */
+  var foundIds = [];
+  function setFound(ids) {
+    ids = ids || [];
+    if (ids.join() === foundIds.join()) return;
+    foundIds = ids; Engine.emit();
+  }
+  function clearFound() { if (foundIds.length) { foundIds = []; Engine.emit(); } }
   var lastRecs = [];
   function recById(id) {
     for (var i = 0; i < lastRecs.length; i++) if (lastRecs[i].id === id) return lastRecs[i];
@@ -775,6 +781,20 @@
       if (r.si === meIdx() && r.o.name === name) return r;
     }
     return null;
+  }
+  /* What a card in the bar points at. A built module or deployable has a card of its own,
+     keyed by that very piece, so three copies of one card are three separate pieces — looking
+     the name up instead always found the first of them. Anything else points at every piece
+     of that name, because singling one out at random would be a lie. */
+  function piecesForCard(cardEl, name) {
+    var s = Engine.get().players[meIdx()];
+    var cid = cardEl && cardEl.getAttribute('data-card');
+    if (cid && (s.modules[cid] || s.deployables[cid])) return [cid];
+    var out = [];
+    ['modules', 'deployables'].forEach(function (bag) {
+      Object.keys(s[bag]).forEach(function (id) { if (s[bag][id].name === name) out.push(id); });
+    });
+    return out;
   }
 
   /* ---------- view: pan and zoom ----------
@@ -1213,7 +1233,7 @@
     var cls = 'piece ' + rec.kind;
     var targetIds = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.targets : [];
     if (targetIds.indexOf(rec.id) >= 0) cls += (p.kind === 'confirm' ? ' marked' : ' targetable');
-    if (rec.id === foundId) cls += ' found';
+    if (foundIds.indexOf(rec.id) >= 0) cls += ' found';
     /* the piece on the end of a tractor beam may be anything at all, including a rock */
     if (p && p.kind === 'moveObject' && p.objId === rec.id) cls += ' sel moving clickable';
     if (rec.kind === 'mod' || rec.kind === 'dep') {
@@ -1618,11 +1638,11 @@
   /* A popup about a piece keeps that piece lit, so you can see what you are reading about. */
   function showPopup(rec) {
     document.getElementById('modPop').classList.remove('hidden');
-    if (rec && rec.id !== foundId) { foundId = rec.id; Engine.emit(); }
+    if (rec) setFound([rec.id]);
   }
   function closeModPopup() {
     document.getElementById('modPop').classList.add('hidden');
-    if (foundId) { foundId = null; Engine.emit(); }
+    clearFound();
   }
   function cap(x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : ''; }
   function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
@@ -1841,7 +1861,7 @@
     var cell = cellFromEvent(e);
     var id = cell ? objIdAt(G, cell.x, cell.y) : null;
     if (!id) { var el = e.target.closest('.piece'); if (el) id = el.getAttribute('data-obj'); }
-    if (foundId) { foundId = null; Engine.emit(); }        /* any click clears the marker */
+    clearFound();                                         /* any click clears the marker */
 
     /* Ctrl-click inspects a piece instead of acting on it, and a piece that is not yours
        reads as redacted however it was clicked. */
@@ -1899,23 +1919,20 @@
       var head = card && card.querySelector('.hn[data-mod]');
       if (head) {
         e.preventDefault();
-        var s2 = Engine.get().players[meIdx()], want = head.getAttribute('data-mod'), hit = null;
-        ['modules', 'deployables'].forEach(function (bag) {
-          Object.keys(s2[bag]).forEach(function (id) {
-            if (!hit && s2[bag][id].name === want) hit = id;
-          });
-        });
-        foundId = hit;
-        Engine.emit();
+        setFound(piecesForCard(card, head.getAttribute('data-mod')));
         return;
       }
     }
-    if (foundId) { foundId = null; Engine.emit(); }
+    clearFound();
     var pip = e.target.closest('.mod-info');
     if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); return; }
     var head = e.target.closest('.hn[data-tech], .hn[data-mod]');
     if (head) {
-      if (head.hasAttribute('data-mod')) openModPopup(head.getAttribute('data-mod'), pieceNamed(head.getAttribute('data-mod')));
+      if (head.hasAttribute('data-mod')) {
+        var mn = head.getAttribute('data-mod');
+        var own = piecesForCard(head.closest('.hcard'), mn);
+        openModPopup(mn, (own.length === 1 && recById(own[0])) || pieceNamed(mn));
+      }
       else {
         var cid = head.getAttribute('data-card'), st = Engine.get().players[meIdx()];
         openTechPopup(head.getAttribute('data-tech'), cid ? st.cards[cid] : null);
