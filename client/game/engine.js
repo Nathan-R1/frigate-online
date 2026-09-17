@@ -791,8 +791,14 @@ var Engine = (function () {
   };
 
   /* the pool a "remove a token from any of your cards" cost may draw on */
+  /* Anything of yours carrying a charge or a heat token: cards in play, and the modules and
+     deployables that hold them too — a Repulsor Unit's charges are as much yours as a card's. */
   function tokenSources(s, o) {
-    return s.played.map(function (id) { return s.cards[id]; }).filter(function (c) {
+    var pool = s.played.map(function (id) { return s.cards[id]; });
+    ['modules', 'deployables'].forEach(function (bag) {
+      Object.keys(s[bag]).forEach(function (id) { pool.push(s[bag][id]); });
+    });
+    return pool.filter(function (c) {
       if (!c) return false;
       if (o.token === 'charge') return (c.charges || 0) > 0;
       if (o.token === 'heat') return (c.heat || 0) > 0;
@@ -973,13 +979,58 @@ var Engine = (function () {
   };
   /* Push whatever the shot caught. The prompt is the same one a deployable's own move uses,
      so the board already knows how to draw the route and walk it. */
+  /* Walk a piece under its own power, `n` squares at a time. */
+  function promptStepMove(obj, n) {
+    if (n <= 0) return;
+    prompt({ kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
+             objId: obj.id, left: n, onResolve: function () {} });
+  }
+
+  /* Lift a module and set it down somewhere else in one go — no route, no Move spent. The
+     destination must be empty and beside a module of yours other than the one being lifted. */
+  function promptRelocate(s, mod) {
+    var others = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+      .filter(function (m) { return m.id !== mod.id; });
+    prompt({ kind: 'space', label: 'Set ' + mod.name + ' down',
+      filter: function (x, y) {
+        if (!inBounds(x, y) || cellAt(x, y)) return false;
+        return others.some(function (m) { return adjacent({ x: x, y: y }, m); });
+      },
+      onResolve: function (cell) {
+        if (!cell) return;
+        vacate(mod.x, mod.y);
+        mod.x = cell.x; mod.y = cell.y;
+        occupy(cell.x, cell.y, { kind: 'module', owner: s.idx, id: mod.id });
+        log(s.name + ' repositions ' + mod.name + ' to (' + cell.x + ',' + cell.y + ').');
+      } });
+  }
+
+  /* Ask which of your modules this is about, then hand it to `then`. One candidate needs no
+     asking; none means the ability simply has nothing to work with. */
+  function withOwnModule(s, label, then) {
+    var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    if (!mods.length) { log(s.name + ' has no module to move.'); return; }
+    if (mods.length === 1) { then(mods[0]); return; }
+    prompt({ kind: 'target', label: label, targets: mods.map(function (m) { return m.id; }),
+      onResolve: function (id) {
+        var m = s.modules[id];
+        if (m) then(m);
+      } });
+  }
+
   OPS.moveObject = function (o, ctx) {
+    var s = ctx.side;
+    if (o.what === 'ownModule') {
+      var n = resolveCount(s, o.n, ctx);
+      withOwnModule(s, 'Which module?', function (m) {
+        if (o.placement === 'adjacentToOwnModule') promptRelocate(s, m);
+        else promptStepMove(m, n);
+      });
+      return;
+    }
     var t = (o.what === 'target') ? ctx.target : (ctx.deployable ? objectById(ctx.deployable.id) : null);
     if (!t) return;
-    var n = resolveCount(ctx.side, o.n, ctx);
-    if (n <= 0) return;
-    prompt({ kind: 'moveObject', label: 'Move ' + t.obj.name + ' up to ' + n,
-             objId: t.obj.id, left: n, onResolve: function () {} });
+    promptStepMove(t.obj, resolveCount(s, o.n, ctx));
   };
 
   OPS.moveSelf = function (o, ctx) {
