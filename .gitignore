@@ -20,3 +20,8 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+# Dependencies
+node_modules/
+
+# Local game storage (the file store); Postgres is used when DATABASE_URL is set
+server/data/

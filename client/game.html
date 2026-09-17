@@ -493,6 +493,7 @@
             <button type="button" data-debug="1">On</button>
           </span>
         </div>
+        <button type="button" class="set-item hidden" id="kickBtn">Kick a player…</button>
         <button type="button" class="set-item" id="keysBtn">Debug keybinds…</button>
         <button type="button" class="set-item" id="newBtn">New Game…</button>
       </div>
@@ -532,6 +533,15 @@
   <div class="mp-head"><span class="mp-name" id="keysPopName">Debug keybinds</span></div>
   <div class="mp-meta"><span class="chip" id="keysPopState"></span></div>
   <div class="keybinds" id="keysPopList"></div>
+</div></div>
+<div class="mp-back hidden" id="kickPop"><div class="mp-box" role="dialog" aria-modal="true"
+     aria-labelledby="kickPopName">
+  <button type="button" class="mp-close" id="kickPopClose" title="Close">&#10005;</button>
+  <div class="mp-head"><span class="mp-name" id="kickPopName">Kick a player</span></div>
+  <p class="rost-note">You sat down first, so the seats are yours to clear. Freeing a seat does
+     not remove that player from the room — they keep watching, and can take any free seat.</p>
+  <div id="kickSeats"></div>
+  <p id="kickErr" class="rost-note" style="color:var(--red);min-height:1em"></p>
 </div></div>
 <div class="mp-back hidden" id="cardPop"><div class="mp-box" role="dialog" aria-modal="true"
      aria-labelledby="cardPopName">
@@ -580,9 +590,9 @@
 </div></div>
 <div class="g-over hidden" id="lobbyPick"><div class="box">
   <h2>Room <span id="lobbyCode" style="font-family:var(--mono);color:var(--amber)"></span></h2>
-  <p class="rost-note">Anyone with the code can take a free seat. Leave the tab open to keep
-     yours — a seat with nobody watching it is given up after a minute, and the game then waits
-     for somebody to take it. Reloading puts you back in the seat you had.</p>
+  <p class="rost-note">Anyone with the code can take a free seat. A seat stays yours until you
+     leave it — close the tab, come back tomorrow, and it is still there. Games are saved, so
+     the server restarting does not end one.</p>
   <div id="lobbySeats"></div>
   <p id="lobbyErr" class="rost-note" style="color:var(--red);min-height:1em"></p>
   <p style="margin:16px 0 0">
@@ -2262,6 +2272,9 @@
   })();
   (function () {
     var keys = document.getElementById('keysPop'), card = document.getElementById('cardPop');
+    var kick = document.getElementById('kickPop');
+    document.getElementById('kickPopClose').addEventListener('click', function () { kick.classList.add('hidden'); });
+    kick.addEventListener('click', function (e) { if (e.target === kick) kick.classList.add('hidden'); });
     document.getElementById('keysPopClose').addEventListener('click', function () { keys.classList.add('hidden'); });
     document.getElementById('cardPopClose').addEventListener('click', function () { card.classList.add('hidden'); });
     [keys, card].forEach(function (el) {
@@ -2408,12 +2421,37 @@
       block.classList.toggle('hidden', !html);
     }
 
+    /* Only the leader is offered the kick list, and only online. Everyone else never sees it. */
+    function markLeader(lobby) {
+      var btn = document.getElementById('kickBtn');
+      btn.classList.toggle('hidden', !(lobby && Net.isLeader()));
+      if (!document.getElementById('kickPop').classList.contains('hidden')) drawKickList();
+    }
+
+    function drawKickList() {
+      var lobby = Net.lobby(), me = Net.seat();
+      var rows = (lobby ? lobby.seats : []).filter(function (st) {
+        return st.kind === 'human' && st.taken && st.idx !== me;
+      });
+      document.getElementById('kickSeats').innerHTML = rows.length
+        ? rows.map(function (st) {
+            return '<div class="lb-seat">' +
+              '<span class="lb-dot" style="background:' + SEAT_HEX[st.idx % 4] + '"></span>' +
+              '<span class="lb-name">' + esc(st.name) + '</span>' +
+              '<span class="lb-who">' + (st.watching ? 'here' : 'not watching') + '</span>' +
+              '<button type="button" class="g-btn ghost" data-kick="' + st.idx +
+              '" style="padding:3px 9px;font-size:11px">Free this seat</button></div>';
+          }).join('')
+        : '<p class="rost-note">Nobody else is sitting down.</p>';
+    }
+
     function seatRow(seat, lobby) {
       var mine = Net.seat() === seat.idx;
       var who = seat.kind === 'computer' ? 'computer'
               : mine ? 'you'
               : seat.taken ? (seat.watching ? 'taken' : 'taken — not watching')
               : seat.away ? 'empty — waiting for a player' : 'free';
+      if (lobby && lobby.leader === seat.idx) who += ' · leader';
       var canTake = !mine && !seat.taken && seat.kind !== 'computer';
       return '<div class="lb-seat' + (mine ? ' mine' : '') + '">' +
         '<span class="lb-dot" style="background:' + SEAT_HEX[seat.idx % 4] + '"></span>' +
@@ -2433,6 +2471,7 @@
       document.getElementById('lobbySeats').innerHTML =
         lobby.seats.map(function (st) { return seatRow(st, lobby); }).join('');
       document.getElementById('lobbyStart').disabled = !!lobby.started || Net.seat() === null;
+      markLeader(lobby);
       var me = Net.seat();
       /* A seat that has never been claimed is simply free; only one that was held and then
          emptied has anybody left it. Before the game starts, neither is news. */
@@ -2440,9 +2479,13 @@
         ? lobby.seats.filter(function (st) { return st.empty && st.away; }) : [];
       var gone = empties.map(function (st) { return st.name; }).join(', ') +
                  (empties.length === 1 ? ' has left' : ' have left');
+      var lead = (lobby.leader === null || lobby.leader === undefined)
+        ? '' : '<br>Leader: <b>' + esc(lobby.seats[lobby.leader].name) +
+               (lobby.leader === me ? ' (you)' : '') + '</b>';
       setDetail('Room <b>' + esc(lobby.room) + '</b><br>' +
                 (me === null ? 'Watching'
                              : 'Seat ' + (me + 1) + ' — <b>' + esc(lobby.seats[me].name) + '</b>') +
+                lead +
                 (lobby.started ? '' : '<br>Waiting to start') +
                 (empties.length ? '<br><span class="gone">' + esc(gone) + '</span>' : ''));
       if (lobby.started) {
@@ -2452,6 +2495,27 @@
         show(lobbyPick);
         setBadge('');
       }
+    });
+
+    /* The button lives in the settings menu but everything it needs lives here, so it is wired
+       from here and closes the menu itself rather than reaching into that closure. */
+    document.getElementById('kickBtn').addEventListener('click', function () {
+      document.getElementById('settingsMenu').classList.add('hidden');
+      document.getElementById('cogBtn').setAttribute('aria-expanded', 'false');
+      say('kickErr', '');
+      drawKickList();
+      document.getElementById('kickPop').classList.remove('hidden');
+    });
+    document.getElementById('kickSeats').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-kick]');
+      if (!b) return;
+      var idx = +b.getAttribute('data-kick');
+      var lobby = Net.lobby();
+      var name = (lobby && lobby.seats[idx]) ? lobby.seats[idx].name : 'that player';
+      if (!window.confirm('Free ' + name + "'s seat? They stay in the room and can take any " +
+                          'free seat, including this one.')) return;
+      say('kickErr', '');
+      Net.kick(idx).then(drawKickList, function (err) { say('kickErr', err.message); });
     });
 
     document.getElementById('lobbySeats').addEventListener('click', function (e) {
@@ -2556,7 +2620,7 @@
       e.preventDefault(); closeModPopup(); return;
     }
     if (e.key === 'Escape') {
-      var shut = ['keysPop', 'cardPop'].filter(function (k) {
+      var shut = ['keysPop', 'cardPop', 'kickPop'].filter(function (k) {
         return !document.getElementById(k).classList.contains('hidden'); });
       if (shut.length) { e.preventDefault();
         shut.forEach(function (k) { document.getElementById(k).classList.add('hidden'); }); return; }

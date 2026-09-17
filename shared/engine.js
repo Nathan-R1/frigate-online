@@ -16,6 +16,24 @@ var Engine = (function () {
 
   var G = null;                 // the live game
   var listeners = [];
+
+  /* ---- randomness ----
+     Every die, every shuffle and the asteroid scatter come from here, and the generator's
+     position is part of the game rather than of the process. That is what makes a saved game
+     honest: restore it and the next roll is the roll that was always going to happen, so a
+     server that dies mid-action and comes back cannot quietly deal anybody a better hand.
+     mulberry32 — small, fast, and good enough for dice. */
+  function rand() {
+    if (!G) return Math.random();          /* before a game exists: setup chatter only */
+    G.rng = (G.rng + 0x6D2B79F5) | 0;
+    var t = G.rng;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function newSeed() {
+    return (Math.floor(Math.random() * 0xFFFFFFFF) ^ (Date.now() & 0xFFFFFFFF)) | 0;
+  }
   function onChange(fn) { listeners.push(fn); }
   function emit() { for (var i = 0; i < listeners.length; i++) listeners[i](G); }
 
@@ -26,10 +44,14 @@ var Engine = (function () {
   /* A line is coloured by whoever it is about, which on someone else's turn is often not
      the player acting: their gun fires, but it is your shield that soaks it and your passive
      that answers. Pass the subject and the line reads in that seat's colour. */
+  /* How much log a game carries. Clients are sent the last 200; the rest is only ever going to
+     be written to disk, so the tail is kept and the head is let go. */
+  var LOG_KEEP = 500;
   function log(msg, who) {
     var idx = who == null ? (speaker === null ? G.active : speaker)
             : (typeof who === 'number' ? who : who.idx);
     G.log.push({ turn: G.turn, side: idx, msg: msg });
+    if (G.log.length > LOG_KEEP * 2) G.log.splice(0, G.log.length - LOG_KEEP);
   }
   function uid(p) { return p + '_' + (G.seq++); }
   function key(x, y) { return x + ',' + y; }
@@ -138,7 +160,7 @@ var Engine = (function () {
 
   function shuffle(a) {
     for (var i = a.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
+      var j = Math.floor(rand() * (i + 1));
       var t = a[i]; a[i] = a[j]; a[j] = t;
     }
     return a;
@@ -153,11 +175,15 @@ var Engine = (function () {
 
   /* newGame(configArray) — 2 to 4 sides. Each config may carry { name, team, ai, deck, modules }.
      A side with no team is its own team, so the default is a free-for-all. */
-  function newGame(configs) {
+  /* A seed may be given so that the same table can be dealt twice — a server restoring a game
+     it saved, or a test that wants the same dice every run. Left out, one is made. */
+  function newGame(configs, seed) {
     if (!Array.isArray(configs)) configs = Array.prototype.slice.call(arguments);
     configs = configs.slice(0, 4);
+    var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
-          log: [], seq: 1, over: null, queue: [], asteroids: {} };
+          log: [], seq: 1, over: null, queue: [], asteroids: {},
+          seed: s0, rng: s0 };
     var pts = spawnPoints(configs.length);
     configs.forEach(function (cfg, i) {
       var s = makeSide(cfg.name, cfg);
@@ -242,7 +268,7 @@ var Engine = (function () {
     }
     var count = Math.max(1, Math.round(size * size * RULES.asteroidPct)), placed = 0;
     while (placed < count && cand.length) {
-      var c = cand.splice(Math.floor(Math.random() * cand.length), 1)[0];
+      var c = cand.splice(Math.floor(rand() * cand.length), 1)[0];
       if (cellAt(c.x, c.y)) continue;
       addAsteroid(c.x, c.y);
       placed++;
@@ -396,7 +422,7 @@ var Engine = (function () {
   }
 
   /* ================= dice ================= */
-  function die(n) { return 1 + Math.floor(Math.random() * n); }
+  function die(n) { return 1 + Math.floor(rand() * n); }
   function roll6() { return die(6); }
   /* an attack is a flat d6 — no skill applies */
   function attackRoll() {
@@ -1595,6 +1621,33 @@ var Engine = (function () {
     return out;
   }
 
+  /* The whole game, for writing down. Not the same thing as a snapshot: a snapshot is what one
+     player may see, this is everything, and it is only offered when the game is *settled* —
+     no prompt waiting, no queued effects. That is the one moment the state is plain data, with
+     no closure parked in a prompt and no live object held by a queued op. Anything else would
+     save a game that cannot be read back. */
+  function settled() { return !!G && !G.pending && G.queue.length === 0; }
+  function save() {
+    if (!settled()) return null;
+    /* trimmed: the log is most of the bytes and only the recent lines are ever read */
+    var out = copy({ turn: G.turn, active: G.active, phase: G.phase, seq: G.seq, over: G.over,
+                     cells: G.cells, asteroids: G.asteroids, players: G.players,
+                     seed: G.seed, rng: G.rng, setup: G.setup });
+    out.log = G.log.slice(-LOG_KEEP);
+    return out;
+  }
+  /* Take a saved game back up. The engine has no other state of its own: an undo point belongs
+     to an activation that is over, and the queue was empty or this would not have been saved. */
+  function restore(state) {
+    G = state;
+    G.queue = G.queue || [];
+    G.pending = null;
+    undoPoint = null;
+    speaker = null;
+    emit();
+    return G;
+  }
+
   /* Adopt a snapshot as the live state. Everything that reads the game keeps working; only
      the calls that change it are meaningless here, and the client routes those to the server. */
   function setState(s) {
@@ -1703,7 +1756,7 @@ var Engine = (function () {
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
     findTech: findTech, findMod: findMod, fx: fx, checkWin: checkWin,
-    snapshot: snapshot, setState: setState,
+    snapshot: snapshot, setState: setState, save: save, restore: restore, settled: settled,
     debug: DEBUG
   };
 })();
