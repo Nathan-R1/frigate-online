@@ -19,6 +19,9 @@
            border:1px solid var(--cyan); color:var(--cyan); border-radius:6px; }
   .g-btn:hover:not(:disabled) { background:var(--cyan); color:var(--ink-strong); }
   .g-btn:disabled { opacity:.35; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
+  /* the phase buttons keep their mark and drop their words when the bar gets tight */
+  .g-btn:has(.btn-ico) { display:inline-flex; align-items:center; gap:6px; }
+  .btn-ico { width:13px; height:13px; flex:none; display:block; }
   .g-btn.ghost { border-color:var(--line-bright); color:var(--ink-mid); }
   /* one colour per seat, so up to four ships stay distinguishable on the board */
   :root { --p0:#4fd8c9; --p1:#d2544e; --p2:#e0a93f; --p3:#9a7ce0; }
@@ -33,6 +36,12 @@
   .side-bar:not(.turn) { opacity:.55; }
   .side-bar.out { opacity:.3; text-decoration:line-through; }
   .side-bar b { font-size:14px; }
+  .side-bar .sb-hull, .side-bar .sb-sh { display:inline-flex; align-items:center; gap:4px; }
+  .sb-ico { width:13px; height:13px; flex:none; display:block; }
+
+  /* tight bar: the phase buttons keep only their mark, and the seats only their team and stats */
+  @media (max-width: 900px) { .btn-label { display:none; } }
+  @media (max-width: 700px) { .side-bar .sb-name { display:none; } }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
@@ -218,7 +227,11 @@
   .g-hand { flex:1; min-height:0; container-type:size;
             display:flex; gap:8px; padding:0 14px 8px; overflow-x:auto; overflow-y:hidden;
             align-items:stretch; }
-  .hcard { flex:0 0 auto; width:clamp(112px, 64cqh, 208px); height:100%;
+  /* Square by default: the hand's height drives the width, so a card is 1:1 whatever height
+     the grip is dragged to. Two escapes from that, in order — the min width wins on a very
+     short hand, leaving cards wider than tall; and a full hand shrinks them back toward that
+     min before the row starts scrolling. */
+  .hcard { flex:0 1 auto; width:100cqh; min-width:112px; height:100%;
            border:1px solid var(--line); border-radius:8px;
            padding:clamp(4px, 5cqh, 10px) clamp(5px, 6cqh, 12px);
            background:var(--panel-alt); display:flex; flex-direction:column;
@@ -294,6 +307,27 @@
     background:rgba(156,63,102,.12); }
   .mp-meta .ticon { width:11px; height:11px; flex:none; display:block; }
   .mp-desc { color:var(--ink-mid); font-size:12.5px; line-height:1.55; white-space:pre-line; }
+  /* settings cog and its menu, in the shape the tabletop board uses */
+  .settings-wrap { position:relative; display:flex; align-items:center; }
+  .settings-cog { font-size:14px; line-height:1; padding:6px 10px; }
+  .settings-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
+    background:var(--panel-alt); border:1px solid var(--line-bright); border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.6); min-width:210px; padding:8px; }
+  .set-group { font-family:var(--disp); font-size:10.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-dim); padding:2px 4px 6px; }
+  .set-row { display:flex; align-items:center; gap:10px; padding:3px 4px; }
+  .set-label { font-family:var(--mono); font-size:11px; color:var(--ink-mid); flex:1; }
+  .set-opts { display:flex; gap:4px; }
+  .set-opts button { font-family:var(--mono); font-size:10px; letter-spacing:.06em;
+    padding:4px 7px; cursor:pointer; border-radius:4px;
+    background:none; border:1px solid var(--line-bright); color:var(--ink-mid); }
+  .set-opts button:hover { border-color:var(--cyan); color:var(--cyan); }
+  .set-opts button.on { border-color:var(--cyan); color:var(--ink-strong); background:var(--cyan); }
+  .set-sep { height:1px; background:var(--line); margin:8px 2px 6px; }
+  .set-item { display:block; width:100%; text-align:left; font-family:var(--mono); font-size:11px;
+    padding:6px 6px; cursor:pointer; border-radius:4px;
+    background:none; border:1px solid transparent; color:var(--ink-mid); }
+  .set-item:hover { border-color:var(--cyan); color:var(--cyan); }
   .hidden { display:none !important; }
   /* new-game roster */
   #modePick .box { min-width:min(92vw, 480px); text-align:left; }
@@ -325,11 +359,32 @@
     <span class="g-turn" id="turnLabel">—</span>
     <span id="barRow"></span>
     <span style="flex:1"></span>
-    <span class="g-turn" id="phaseLabel" style="color:var(--amber)"></span>
-    <button type="button" class="g-btn ghost" id="linkBtn" title="Cycle the hull connector style">Links: Glow</button>
-    <button type="button" class="g-btn ghost" id="newBtn">New Game</button>
-    <button type="button" class="g-btn" id="playPhaseBtn">End Play Phase</button>
-    <button type="button" class="g-btn" id="endBtn">End Turn</button>
+    <button type="button" class="g-btn" id="playPhaseBtn">
+      <svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7V5Z"
+        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span class="btn-label">End Play Phase</span></button>
+    <button type="button" class="g-btn" id="endBtn">
+      <svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7V5Z"
+        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path
+        d="M18 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="btn-label">End Turn</span></button>
+    <span class="settings-wrap">
+      <button type="button" class="g-btn ghost settings-cog" id="cogBtn" title="Settings"
+              aria-haspopup="true" aria-expanded="false">⚙</button>
+      <div class="settings-menu hidden" id="settingsMenu" role="menu">
+        <div class="set-group">Graphics</div>
+        <div class="set-row"><span class="set-label">Links</span>
+          <span class="set-opts" id="linkOpts">
+            <button type="button" data-link="glow">Glow</button>
+            <button type="button" data-link="mech">Mech</button>
+            <button type="button" data-link="off">Off</button>
+          </span>
+        </div>
+        <div class="set-sep"></div>
+        <div class="set-group">Game</div>
+        <button type="button" class="set-item" id="newBtn">New Game…</button>
+      </div>
+    </span>
   </div>
   <div class="g-mid">
     <div class="g-board" id="boardWrap"><div class="grid" id="grid"></div>
@@ -396,6 +451,13 @@
   /* one colour per seat. The SVG shapes need real hex to derive their fills and detail
      lines, so these are the source of truth and --p0..--p3 in the stylesheet mirror them. */
   var SEAT_HEX = ['#4fd8c9', '#d2544e', '#e0a93f', '#9a7ce0'];
+  var BAR_HULL_ICON = '<svg class="sb-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M12 21s-7-4.35-9.5-9.2C.7 7.9 2.7 4 6.4 4c2 0 3.6 1.1 5.6 3.4C14 5.1 15.6 4 17.6 4' +
+    'c3.7 0 5.7 3.9 3.9 7.8C19 16.65 12 21 12 21Z" stroke="var(--icon-hull)" stroke-width="1.6" ' +
+    'stroke-linejoin="round"/></svg>';
+  var BAR_SHIELD_ICON = '<svg class="sb-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" stroke="var(--icon-shield)" ' +
+    'stroke-width="1.6" stroke-linejoin="round"/></svg>';
   var TEAM_LETTER = ['A', 'B', 'C', 'D'];
 
   /* The roster: one entry per seat, in turn order. `ai` hands that seat to the commander,
@@ -593,8 +655,10 @@
       /* Move, hand size and plays left are all visible where they are actually used — on the
          pieces, in the hand bar and in the prompt — so the top bar keeps only what you cannot
          read off the board: hull and shields. */
-      '<span class="sb-hull">HULL <b>' + (core ? core.hull : 0) + '</b></span>' +
-      '<span class="sb-sh">SH <b>' + s.shield + '</b>/' + s.shieldMax + '</span>';
+      '<span class="sb-hull" title="Hull">' + BAR_HULL_ICON +
+        '<b>' + (core ? core.hull : 0) + '</b></span>' +
+      '<span class="sb-sh" title="Shields">' + BAR_SHIELD_ICON +
+        '<b>' + s.shield + '</b>/' + s.shieldMax + '</span>';
   }
   function renderTop(G) {
     document.getElementById('turnLabel').textContent =
@@ -612,8 +676,6 @@
     pb.classList.toggle('hidden', !inPlay);
     eb.disabled = !mine;
     pb.disabled = !mine;
-    document.getElementById('phaseLabel').textContent =
-      G.phase === 'play' ? 'PLAY PHASE' : (G.phase === 'action' ? 'ACTION PHASE' : '');
   }
 
   /* ---------- board ----------
@@ -1587,16 +1649,40 @@
   document.getElementById('modPop').addEventListener('click', function (e) {
     if (e.target.id === 'modPop') closeModPopup();      /* click the backdrop to dismiss */
   });
+  /* ---------- settings menu ---------- */
   (function () {
-    var btn = document.getElementById('linkBtn');
-    function label() { btn.textContent = 'Links: ' + CONN_NAMES[connStyle]; }
-    label();
-    btn.addEventListener('click', function () {
-      connStyle = CONN_STYLES[(CONN_STYLES.indexOf(connStyle) + 1) % CONN_STYLES.length];
-      try { localStorage.setItem('frigateConnStyle', connStyle); } catch (e) {}
-      label();
+    var cog = document.getElementById('cogBtn');
+    var menu = document.getElementById('settingsMenu');
+    var opts = document.getElementById('linkOpts');
+    function mark() {
+      [].forEach.call(opts.children, function (b) {
+        b.classList.toggle('on', b.getAttribute('data-link') === connStyle);
+      });
+    }
+    function open(on) {
+      menu.classList.toggle('hidden', !on);
+      cog.setAttribute('aria-expanded', on ? 'true' : 'false');
+    }
+    mark();
+    cog.addEventListener('click', function (e) {
+      e.stopPropagation();
+      open(menu.classList.contains('hidden'));
+    });
+    opts.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-link]');
+      if (!b) return;
+      connStyle = b.getAttribute('data-link');
+      try { localStorage.setItem('frigateConnStyle', connStyle); } catch (e2) {}
+      mark();
       connSig = null;
       Engine.emit();
+    });
+    /* click anywhere else, or press Escape, to put it away */
+    document.addEventListener('click', function (e) {
+      if (!menu.classList.contains('hidden') && !menu.contains(e.target)) open(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !menu.classList.contains('hidden')) { e.preventDefault(); open(false); }
     });
   })();
   document.getElementById('endBtn').addEventListener('click', function () { Engine.endTurn(); });
@@ -1665,6 +1751,8 @@
     document.getElementById('rostWarn').classList.toggle('hidden', ok);
   }
   function askMode() {
+    var menu = document.getElementById('settingsMenu');
+    if (menu) menu.classList.add('hidden');   /* the menu got us here; it has done its job */
     renderRoster();
     document.getElementById('modePick').classList.remove('hidden');
   }
