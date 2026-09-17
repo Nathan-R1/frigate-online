@@ -721,7 +721,12 @@ var Engine = (function () {
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
     s.moveLeft = n;
     log(s.name + ' gains Move ' + n + ' per module.');
-    prompt({ kind: 'move', label: 'Move your modules — ' + n + ' each', onResolve: function () {} });
+    prompt({ kind: 'move', label: 'Move your modules — ' + n + ' each',
+      /* Done means done: unspent Move is lost rather than banked onto the next engine */
+      onResolve: function () {
+        Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
+        s.moveLeft = 0;
+      } });
   };
 
   OPS.gainShield = function (o, ctx) {
@@ -1006,7 +1011,10 @@ var Engine = (function () {
     var e = fx(modName, 'mod');
     return function (x, y) {
       if (!inBounds(x, y) || cellAt(x, y)) return false;
-      var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+      /* only hull that is itself joined to the Core can carry a new module */
+      var reach = connectedToCore(s);
+      var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+        .filter(function (m) { return reach[m.id]; });
       var cores = mods.filter(function (m) { return isCoreLike(s, m); });
       var p = { x: x, y: y };
       if (e.placement === 'adjacentToCore')
@@ -1142,9 +1150,33 @@ var Engine = (function () {
       return (pas.effect || []).some(function (o) { return o.op === 'countsAsCore'; });
     });
   }
+  /* Everything joined to the Core by a chain of adjacent modules. This is the rule beneath
+     every card's own requirement: a module may satisfy "adjacent to any" against a neighbour
+     and still be invalid, because that pair is drifting on its own with no path home. */
+  function connectedToCore(s) {
+    var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    var core = s.modules[s.coreId];
+    var seen = {};
+    if (!core) return seen;
+    seen[core.id] = true;
+    var queue = [core];
+    while (queue.length) {
+      var cur = queue.shift();
+      for (var i = 0; i < mods.length; i++) {
+        var o = mods[i];
+        if (seen[o.id] || !adjacent(cur, o)) continue;
+        seen[o.id] = true;
+        queue.push(o);
+      }
+    }
+    return seen;
+  }
+
   function meetsReq(s, m) {
     var e = fx(m.name, 'mod');
     if (m.id === s.coreId || e.core) return true;
+    /* the base rule first: no path back to the Core and nothing else matters */
+    if (!connectedToCore(s)[m.id]) return false;
     var others = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
       .filter(function (o) { return o !== m; });
     var cores = others.filter(function (o) { return isCoreLike(s, o); });
@@ -1215,6 +1247,7 @@ var Engine = (function () {
     undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph, setTelegraph: setTelegraph,
     hostileObjects: hostileObjects, objectById: objectById, stepObject: stepObject,
+    connectedToCore: connectedToCore,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
