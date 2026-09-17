@@ -1,6 +1,6 @@
 # AI strategy design
 
-How the enemy commander thinks. All of this lives in `client/game/ai/` and is loaded by
+How the enemy commander thinks. All of this lives in `shared/ai/` and is loaded by
 `game.html`; no AI logic sits in `game.html`, `engine.js` or any PHP file.
 
 ## 1. Why the current AI is weak

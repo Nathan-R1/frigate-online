@@ -8,12 +8,12 @@ then fight it — against the computer on one screen, or against other people ov
 | | |
 | --- | --- |
 | **`client/game.html`** | The game. Board, hand, log, settings, the new-game roster, and online play. |
-| **`client/game/engine.js`** | The rules. Pure state and rules, no DOM: turn order, movement, line of sight, damage, the effect queue that drives every card. |
-| **`client/game/ai/`** | The computer player — knowledge, pathing, placement, doctrine, and the commander that ties them together. |
+| **`shared/engine.js`** | The rules. Pure state and rules, no DOM: turn order, movement, line of sight, damage, the effect queue that drives every card. Loaded by the browser *and* the server. |
+| **`shared/ai/`** | The computer player — knowledge, pathing, placement, doctrine, and the commander that ties them together. Runs in the tab offline, on the server online. |
 | **`client/game/pieces.js`** | The silhouettes drawn on the board, one shape per module class. |
 | **`client/game/net.js`** | The browser's half of online play: sends intents, receives state. |
 | **`client/sheet-builder/sheet-builder.html`** | The ship builder. Pick a hull, spend points on crew skills, choose modules and a deck. Builds hand back to the game. |
-| **`client/frigate-sheet/presets/`** | The card and module data, shared by the game and the builder. This is the source of truth for what a card does. |
+| **`shared/presets/`** | The card and module data. This is the source of truth for what a card does. |
 | **`server/game-server.js`** | The authoritative server for online play. Runs the same `engine.js` the browser does. |
 | **`tools/validate-effects.js`** | Checks every preset has behaviour and every op is reachable. |
 
@@ -25,7 +25,10 @@ Computer for each seat, and start. Everything runs in the browser.
 ## Playing online
 
 ```bash
-./run-online.sh
+./run-online.sh            # start
+./run-online.sh status     # is it up?
+./run-online.sh stop       # shut it down
+./run-online.sh restart
 ```
 
 Then open **http://localhost:8080/client/game.html**. Press **Host online…** on the new-game
@@ -35,8 +38,9 @@ screen; you get a six-character room code. Everyone else opens the same address,
 - Others on your network use `http://<your-ip>:8080/client/game.html` — the script prints it.
 - The page finds the server by itself, so it also works served from somewhere else; add
   `?server=http://host:8080` if it needs telling.
-- A different port: `PORT=9000 ./run-online.sh`
+- A different port: `PORT=9000 ./run-online.sh` — and the same when stopping it.
 - Server log: `/tmp/frigate-online.log`
+- Games live in memory, so stopping the server ends whatever is in progress.
 
 ### How online play works
 

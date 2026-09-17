@@ -6,8 +6,8 @@
 <title>Frigate — Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="frigate-sheet/css/style.css">
-<link rel="stylesheet" href="frigate-sheet/css/frigate.css">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/frigate.css">
 <style>
   body { margin:0; padding:0; height:100vh; overflow:hidden; font-family:var(--body); }
   .g-wrap { display:grid; grid-template-rows:auto 1fr auto; height:100vh; }
@@ -594,16 +594,16 @@
   <h2 id="overTitle">—</h2><button type="button" class="g-btn" onclick="location.reload()">Play again</button>
 </div></div>
 
-<script src="frigate-sheet/presets/tech-presets.js"></script>
-<script src="frigate-sheet/presets/mod-presets.js"></script>
-<script src="frigate-sheet/presets/card-effects.js"></script>
-<script src="game/engine.js"></script>
+<script src="../shared/presets/tech-presets.js"></script>
+<script src="../shared/presets/mod-presets.js"></script>
+<script src="../shared/presets/card-effects.js"></script>
+<script src="../shared/engine.js"></script>
 <script src="game/pieces.js"></script>
-<script src="game/ai/ai-knowledge.js"></script>
-<script src="game/ai/ai-path.js"></script>
-<script src="game/ai/ai-placement.js"></script>
-<script src="game/ai/ai-doctrine.js"></script>
-<script src="game/ai/ai-commander.js"></script>
+<script src="../shared/ai/ai-knowledge.js"></script>
+<script src="../shared/ai/ai-path.js"></script>
+<script src="../shared/ai/ai-placement.js"></script>
+<script src="../shared/ai/ai-doctrine.js"></script>
+<script src="../shared/ai/ai-commander.js"></script>
 <script src="game/net.js"></script>
 <script>
 (function () {
@@ -2599,7 +2599,7 @@
   });
 
   /* ---------- enemy turn ----------
-     All decision-making lives in client/game/ai/. This page only drives the clock. */
+     All decision-making lives in shared/ai/. This page only drives the clock. */
   /* How fast the computer plays, and how long its intended move is drawn on the board before
      it commits. The commander publishes the route, we hold the clock for the telegraph, then
      the next tick walks it. */
