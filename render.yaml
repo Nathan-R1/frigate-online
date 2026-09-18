@@ -4,6 +4,10 @@
 # connection string (Connect > Session pooler, the IPv4 one on port 5432). Nothing secret
 # belongs in this file.
 #
+# Region: put the database as close to this as you can. Render has no Australian region, so a
+# Supabase project in ap-southeast-2 (Sydney) is a cross-sea hop from Singapore — about 90ms
+# each way. Matching them means a Supabase project in ap-southeast-1.
+#
 # Keep this at ONE instance. The live game is held in the process between settled points, so
 # two instances would each believe they own a room. Durability is already handled — the game
 # is written to Postgres, and a restart or deploy picks it straight back up.
@@ -12,7 +16,8 @@ services:
     name: frigate-online
     runtime: node
     plan: free
-    buildCommand: npm install
+    region: singapore        # closest to an ap-southeast-2 (Sydney) database; see the note below
+    buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeploy: true

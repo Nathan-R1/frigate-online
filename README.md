@@ -38,7 +38,10 @@ screen; you get a six-character room code. Everyone else opens the same address,
 
 - Others on your network use `http://<your-ip>:8080/client/game.html` — the script prints it.
 - The page finds the server by itself, so it also works served from somewhere else; add
-  `?server=http://host:8080` if it needs telling.
+  `?server=http://host:8080` if it needs telling. That address is taken quietly only when it
+  is this origin, the same host on another port, or a machine on your network — anywhere
+  further afield is asked about first, and never remembered, because a link that silently
+  repoints the game is a link worth being suspicious of.
 - A different port: `PORT=9000 ./run-online.sh` — and the same when stopping it.
 - Server log: `/tmp/frigate-online.log`
 

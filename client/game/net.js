@@ -29,16 +29,83 @@ var Net = (function () {
      The page is not necessarily served by the game server: this project already runs a PHP
      server for the battle map, and opening game.html from that one leaves /api pointing at
      something that answers in HTML. So the server is looked for rather than assumed — the
-     origin the page came from first, then the default port — and the answer is remembered. */
+     origin the page came from first, then the default port — and the answer is remembered.
+
+     An address that arrives in the URL is a different thing from one the page worked out for
+     itself. ?server= is what makes a laptop and a phone on the same wifi find each other, and
+     it is also a link somebody can be sent: follow one and the page keeps its real address in
+     the bar while everything it says — including the token that holds your seat — goes
+     wherever the link pointed. So an address from outside is taken quietly only where a link
+     could not have moved you anywhere you were not already: this origin, the host you came
+     from on another port, or a machine on this network. Anything further afield is asked
+     about once, in words naming the host. And none of it is ever written down — only what the
+     page found for itself is remembered, because a remembered address is one click that
+     lasts. */
   var BASE = null;
   var DEFAULT_PORT = 8080;
 
+  /* The origin a base would actually reach; '' is this very page. */
+  function originOf(base) {
+    if (!base) return location.origin;
+    try { return new URL(base, location.href).origin; } catch (e) { return null; }
+  }
+
+  /* This machine, or one on this network — the same judgement the server makes about an
+     incoming Origin, made here about a destination. */
+  function isLocalHost(host) {
+    return host === 'localhost' || host === '::1' || host === '[::1]' ||
+           /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
+           /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  }
+
+  function isTrustedBase(base) {
+    var o = originOf(base);
+    if (!o) return false;
+    if (o === location.origin) return true;
+    var u;
+    try { u = new URL(o); } catch (e) { return false; }
+    if (u.hostname === location.hostname) return true;   /* the same host on another port */
+    return isLocalHost(u.hostname);
+  }
+
+  /* Asked once per address, and only for one that is neither ours nor local. Saying no is not
+     an error: the page carries on looking where it would have looked anyway. */
+  var askedAbout = {};
+  function allowForeign(base) {
+    var o = originOf(base);
+    if (!o) return false;
+    if (askedAbout[o] !== undefined) return askedAbout[o];
+    var ok = false;
+    try {
+      ok = window.confirm(
+        'This link wants the game to talk to ' + o + ' instead of ' + location.origin + '.\n\n' +
+        'That server would receive everything this page sends, including the token that holds ' +
+        'your seat. Allow it only if you know whose server it is.\n\nUse ' + o + '?');
+    } catch (e) { ok = false; }
+    askedAbout[o] = ok;
+    return ok;
+  }
+
   function candidates() {
     var out = [], seen = {};
-    function add(b) { if (b !== null && b !== undefined && !seen[b]) { seen[b] = 1; out.push(b); } }
+    function add(b, fromUrl) {
+      if (b === null || b === undefined || seen[b]) return;
+      seen[b] = 1;
+      out.push({ base: b, fromUrl: !!fromUrl });
+    }
     var asked = (location.search.match(/[?&]server=([^&]+)/) || [])[1];
-    if (asked) add(decodeURIComponent(asked).replace(/\/$/, ''));
-    try { add(localStorage.getItem('frigateServer')); } catch (e) {}
+    if (asked) {
+      var want = decodeURIComponent(asked).replace(/\/$/, '');
+      if (isTrustedBase(want) || allowForeign(want)) add(want, true);
+    }
+    /* Only an address the page found itself is ever remembered — but a browser that met an
+       earlier build may still be holding one it was handed, so it is judged on the way out
+       too, and forgotten if it does not pass. */
+    try {
+      var kept = localStorage.getItem('frigateServer');
+      if (kept && isTrustedBase(kept)) add(kept);
+      else if (kept) localStorage.removeItem('frigateServer');
+    } catch (e) {}
     if (location.protocol === 'http:' || location.protocol === 'https:') add('');   /* same origin */
     if (location.hostname) add(location.protocol + '//' + location.hostname + ':' + DEFAULT_PORT);
     add('http://localhost:' + DEFAULT_PORT);
@@ -76,10 +143,12 @@ var Net = (function () {
           'No game server found. Start it with ./run-online.sh, then reload — or add ' +
           '?server=http://host:' + DEFAULT_PORT + ' to this address.'));
       }
-      var base = list[i++];
-      return probe(base).then(function (ok) {
+      var cand = list[i++];
+      return probe(cand.base).then(function (ok) {
         BASE = ok;
-        try { localStorage.setItem('frigateServer', ok); } catch (e) {}
+        /* An address the page worked out for itself is worth remembering. One that arrived in
+           the URL is not: remembering it would turn one followed link into every later visit. */
+        if (!cand.fromUrl) { try { localStorage.setItem('frigateServer', ok); } catch (e) {} }
         return ok;
       }, next);
     }
