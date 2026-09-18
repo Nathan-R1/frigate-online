@@ -400,6 +400,15 @@
   }
   .exp-pick .opt-title { font-size: 12px; margin-bottom: 4px; }
   .exp-pick .exp-none { color: var(--ink-dim); font-style: italic; font-size: 12.5px; }
+  .exp-issues {
+    grid-column: 1 / -1;
+    background: var(--panel); border: 1px solid var(--red-dim); border-left: 3px solid var(--red);
+    border-radius: 8px; padding: 12px 14px; color: var(--red);
+  }
+  .exp-issues .opt-title { color: var(--red); font-size: 12px; margin-bottom: 6px; }
+  .exp-issues ul { margin: 0; padding-left: 18px; }
+  .exp-issues li { font-size: 12.5px; line-height: 1.5; margin: 3px 0; }
+  .exp-issues li b { color: var(--red); }
   .exp-field { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .exp-field label { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mid); text-transform: uppercase; }
   .exp-field input {
@@ -642,9 +651,14 @@
       storageBase: '0',
       sensorRangeBase: '0', drawPlayBase: '1', drawDrawBase: '4'
     },
+    /* Thirteen points, spent so that the ship these defaults describe is actually legal:
+       Logistics covers the 4 storage its deck carries, and Science at 0 allows the 3 Starter
+       Cards it deploys with (3 plus half of 0). The points come off Navigation and Piloting,
+       which cost the default nothing it cannot fly without. Change these and check the deck
+       still fits — the crew-skill step and the export screen will both say if it does not. */
     skills: {
       Cyber: '1', Diplomacy: '0', Engineering: '3', Leadership: '0',
-      Logistics: '2', Navigation: '3', Piloting: '3', Sensors: '2', Science: '-1'
+      Logistics: '4', Navigation: '1', Piloting: '2', Sensors: '2', Science: '0'
     }
   };
 
@@ -1623,13 +1637,46 @@
     if (name === 'Science') return 3 + Math.floor(eff / 2);
     return eff;
   }
+  /* Two opposite things can be wrong with a skill.
+     Over: the deck asks for more than the skill allows — too much storage against Logistics,
+     too much capacity against Leadership, too many promoted cards against Science.
+     Under: only Science has one, and it exists because Science is the odd one out. The others
+     are ceilings you must stay beneath; Science is a budget of Starter Cards to spend, and a
+     budget left unspent is a ship that arrives at the first turn smaller than it was paid for.
+     Nothing said so, so it was quietly easy to finish a sheet having promoted nothing. */
+  function skillIssue(name) {
+    var eff = skillEffective(name);
+    var cost = skillCost(name), allowed = skillCap(name, eff);
+    if (cost > 0 && cost > allowed)
+      return { kind: 'over', skill: name, text: skillWarning(name, cost, allowed) };
+    if (name === 'Science' && cost < allowed) {
+      var left = allowed - cost;
+      return { kind: 'under', skill: name,
+               text: '⚠ ' + left + ' Starter Card' + (left === 1 ? '' : 's') + ' still to assign. ' +
+                     'Your allowance is ' + allowed + ' (3 plus half your Science) and you have ' +
+                     'promoted ' + cost + '. Promote ' + (left === 1 ? 'one more card' : left + ' more') +
+                     ' in the deck step, or your ship starts smaller than it could.' };
+    }
+    return null;
+  }
+
+  /* Everything wrong with the sheet right now, in the order the skills are shown. */
+  function sheetIssues() {
+    var out = [];
+    for (var i = 0; i < SKILL_DISPLAY_ORDER.length; i++) {
+      var issue = skillIssue(SKILL_DISPLAY_ORDER[i]);
+      if (issue) out.push(issue);
+    }
+    return out;
+  }
+
   function skillWarning(name, cost, cap) {
     if (name === 'Science')
       return '⚠ You have promoted ' + cost + ' Starter Card' + (cost === 1 ? '' : 's') +
              ' — more than your allowance of ' + cap + ' (3 plus half your Science). ' +
              'Raise Science or demote a card.';
     return '⚠ Your tech deck costs ' + cost + ' — more than this skill\'s cap of ' + cap +
-           '. Raise ' + esc(name) + ' or drop cards.';
+           '. Raise ' + name + ' or drop cards.';
   }
   function recommendSkills() {
     var sk = {};
@@ -1694,9 +1741,8 @@ function skillsOptions() {
       var canMinus = base > -1;
       var desc = SKILL_DESCRIPTIONS[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
-      var cost = skillCost(n);
-      var cap = skillCap(n, eff);
-      var short = cost > 0 && cost > cap;
+      var issue = skillIssue(n);
+      var short = !!issue;
       out.push(
         '<div class="sk" data-skill="' + esc(n) + '">' +
         '<div class="sk-head' + (short ? ' sk-warn' : '') + '">' +
@@ -1713,7 +1759,7 @@ function skillsOptions() {
         (desc ? '<button type="button" class="skinfo' + (infoOpen ? ' on' : '') + '" title="' + esc(desc) + '"><svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg></button>' : '') +
         '</div>' +
         (infoOpen ? '<span class="sk-desc">' + esc(desc) + '</span>' : '') +
-        (short ? '<span class="sk-warn-desc">' + skillWarning(n, cost, cap) + '</span>' : '') +
+        (issue ? '<span class="sk-warn-desc">' + esc(issue.text) + '</span>' : '') +
         '</div>'
       );
     }
@@ -2381,6 +2427,27 @@ function skillsOptions() {
         }
       }
     }
+    /* A sheet lists the whole deck, and the core picks restored above already grant part of
+       it — so counting both is counting the granted cards twice. Loading an exported sheet
+       used to come back nine cards fatter than it left. The inventory is the remainder: what
+       the deck holds beyond what the picks give. Where it holds fewer, that is a card the
+       build had taken back out, and it is recorded as removed rather than lost. */
+    var keepCore = choices.core;
+    choices.core = c.core;
+    var granted = coreTechCounts();
+    choices.core = keepCore;
+    Object.keys(granted).forEach(function (gn) {
+      var have = c.inv.tech[gn] || 0, give = granted[gn];
+      if (have >= give) {
+        if (have - give > 0) c.inv.tech[gn] = have - give;
+        else delete c.inv.tech[gn];
+      } else {
+        delete c.inv.tech[gn];
+        if (!c.removed) c.removed = {};
+        c.removed[gn] = (c.removed[gn] || 0) + (give - have);
+      }
+    });
+
     if (json && json.mods) {
       for (var mi = 0; mi < json.mods.length; mi++) {
         if (json.mods[mi] && findMod(json.mods[mi].name)) {
@@ -2414,6 +2481,21 @@ function skillsOptions() {
   function renderExport() {
     document.getElementById('shipName').value = choices.shipName;
     var html = '';
+
+    /* The last screen before a sheet leaves is the right place to be told what is wrong with
+       it. The crew-skill step already says each of these, but by the time you are here that
+       step is three clicks behind you and easy to have walked past — so every one of them is
+       repeated where the decision to export is actually made. */
+    var issues = sheetIssues();
+    if (issues.length) {
+      html += '<div class="exp-issues"><div class="opt-title">' +
+        (issues.length === 1 ? 'One thing to fix' : issues.length + ' things to fix') +
+        '</div><ul>' +
+        issues.map(function (x) {
+          return '<li><b>' + esc(x.skill) + '</b> — ' + esc(x.text.replace(/^⚠\s*/, '')) + '</li>';
+        }).join('') +
+        '</ul></div>';
+    }
 
     function pickList(t, invArr) {
       var names = [];
@@ -2684,9 +2766,22 @@ function skillsOptions() {
     if (step !== null && step !== undefined) goStep(parseInt(step, 10));
   });
 
+  /* A seat that has never been built still arrives with a complete sheet — the default ship,
+     hull and core and deck all answered — so "resume at the first unfinished step" would drop
+     you on the export screen with nothing left to decide. The deck is the part anybody
+     actually wants to change about the default, so that is where it opens. */
+  function openAtTech() {
+    var at = 0;
+    for (var i = 0; i < steps.length; i++) if (steps[i].key === 'tech') { at = i; break; }
+    step = at;
+    goToWin(step);
+  }
+
   /* A seat arrives with a build to work on, so drop straight into the run at the first step
      that still needs an answer instead of asking whether to start one. */
-  if (seatReq) resumeRun(); else show('landing');
+  if (seatReq && seatReq.stock) openAtTech();
+  else if (seatReq) resumeRun();
+  else show('landing');
   renderProgressDots();
 })();
 </script>
