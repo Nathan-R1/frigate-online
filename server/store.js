@@ -70,15 +70,36 @@ FileStore.prototype.loadRoom = function (code) {
   });
 };
 
-/* temp file plus rename: a reader sees the old room or the new one, never half of either */
+/* Temp file plus rename: a reader sees the old room or the new one, never half of either.
+   The directory is made once at boot and assumed ever after, which held right up until
+   something removed it underneath a running server. After that every write failed the same
+   way forever, the games in memory had nowhere to go, and the only symptom at the front door
+   was that hosting a game stopped working. A directory that is merely absent is not a reason
+   to lose a game, so it is made again and the write is tried once more. Once more, not until
+   it works: a full disk, or a directory we are not allowed to write to, is a real answer and
+   deserves to be given as one rather than retried in a circle. */
 FileStore.prototype._write = function (code, rec) {
+  var self = this;
   var file = this._path(code), tmp = file + '.tmp';
-  return new Promise(function (resolve, reject) {
-    fs.writeFile(tmp, JSON.stringify(rec), function (err) {
-      if (err) return reject(err);
-      fs.rename(tmp, file, function (err2) { err2 ? reject(err2) : resolve(true); });
+  var body = JSON.stringify(rec);
+
+  function attempt(mayRetry) {
+    return new Promise(function (resolve, reject) {
+      fs.writeFile(tmp, body, function (err) {
+        if (err) {
+          if (err.code !== 'ENOENT' || !mayRetry) return reject(err);
+          console.warn('[store] ' + self.dir + ' had gone — making it again');
+          return fs.mkdir(self.dir, { recursive: true }, function (mkErr) {
+            if (mkErr) return reject(mkErr);
+            attempt(false).then(resolve, reject);
+          });
+        }
+        fs.rename(tmp, file, function (err2) { err2 ? reject(err2) : resolve(true); });
+      });
     });
-  });
+  }
+
+  return attempt(true);
 };
 
 FileStore.prototype.createRoom = function (rec) {
@@ -89,8 +110,19 @@ FileStore.prototype.createRoom = function (rec) {
 FileStore.prototype.saveRoom = function (code, next) {
   var self = this;
   return this.loadRoom(code).then(function (cur) {
-    if (!cur) return false;
-    if (next.version !== undefined && cur.version !== next.version) return false;   /* someone else got there first */
+    /* No record at all is not the same as a record that has moved on.
+       Reporting it as a conflict is what the caller does understand — and the caller answers a
+       conflict by dropping the room from memory, which is right when two servers are arguing
+       over a room and catastrophically wrong when the store simply went missing underneath a
+       game in progress: the game gets thrown away to protect a file that is not there. A live
+       room is never swept away either, since sweepOldRooms skips anything still in memory, so
+       nothing but loss puts us here. Write back what we are holding and keep the game. */
+    if (!cur) {
+      console.warn('[store] ' + code + ' had no record on disk — writing back what we hold');
+      cur = { version: (next.version === undefined ? 0 : next.version), created: Date.now() };
+    } else if (next.version !== undefined && cur.version !== next.version) {
+      return false;                                   /* someone else got there first */
+    }
     var rec = {
       code: code,
       seed: next.seed !== undefined ? next.seed : cur.seed,
@@ -98,7 +130,7 @@ FileStore.prototype.saveRoom = function (code, next) {
       version: (cur.version || 0) + 1,
       state: next.state !== undefined ? next.state : cur.state,
       seats: next.seats !== undefined ? next.seats : cur.seats,
-      created: cur.created,
+      created: cur.created || next.created || Date.now(),
       updated: Date.now()
     };
     return self._write(code, rec).then(function () { return rec; });
