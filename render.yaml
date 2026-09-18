@@ -26,6 +26,12 @@ services:
         sync: false          # set in the dashboard, never committed
       - key: NODE_VERSION
         value: "20"
+      # Render terminates the connection at its edge, so the address this process sees is the
+      # proxy's and every player would share one rate-limit bucket. The forwarded address is
+      # only believed where something in front is known to be setting it, so say so here
+      # rather than leaving it to be inferred from Render's own environment variables.
+      - key: FRIGATE_TRUST_PROXY
+        value: "on"
       # Only needed if the page is served from somewhere other than this service. Left unset,
       # the API answers same-origin requests and local addresses, and nobody else.
       # - key: FRIGATE_ORIGIN

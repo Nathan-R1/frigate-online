@@ -119,7 +119,9 @@ FileStore.prototype.saveRoom = function (code, next) {
        nothing but loss puts us here. Write back what we are holding and keep the game. */
     if (!cur) {
       console.warn('[store] ' + code + ' had no record on disk — writing back what we hold');
-      cur = { version: (next.version === undefined ? 0 : next.version), created: Date.now() };
+      /* nothing but the version chain: every other field is left absent on purpose, so the
+         record we were handed supplies it and a rebuilt room keeps the birthday it had */
+      cur = { version: (next.version === undefined ? 0 : next.version) };
     } else if (next.version !== undefined && cur.version !== next.version) {
       return false;                                   /* someone else got there first */
     }
