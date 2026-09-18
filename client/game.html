@@ -2051,17 +2051,26 @@
            (Engine.canUndo() ? cancelBtn('Cancel — take it back')
                              : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
            '</div>';
-    else if (p.kind === 'target')
-      /* Two different refusals, and only one of them was on offer. "Take it back" rewinds the
-         whole activation, which undoes the move that got you here — no use when the move was
-         the point and you simply do not like the shot. Skip resolves the prompt without
-         firing and leaves everything where it stands. */
-      h += '<div style="font-size:11px;color:var(--ink-dim)">Shaded squares are in this ' +
-           'weapon\'s line of fire. Click an outlined target.</div>' +
+    else if (p.kind === 'target') {
+      /* Two different refusals, and only one of them used to be on offer. "Take it back"
+         rewinds the whole activation, which undoes the move that got you here — no use when
+         the move was the point and you simply do not like the shot. Skip resolves the prompt
+         without firing and leaves everything where it stands.
+         With nothing in reach both are still the right offer: the weapon is only spent if you
+         say so. */
+      var noTargets = !p.targets || !p.targets.length;
+      h += '<div style="font-size:11px;color:' + (noTargets ? 'var(--amber)' : 'var(--ink-dim)') + '">' +
+           (noTargets
+             ? 'Nothing is in range with line of sight. Take it back to keep the weapon ready, ' +
+               'or skip to spend it anyway.'
+             : 'Shaded squares are in this weapon\'s line of fire. Click an outlined target.') +
+           '</div>' +
            '<div style="margin-top:6px">' +
-           '<button class="g-btn ghost" data-done="1">Skip — hold fire</button>' +
+           '<button class="g-btn ghost" data-done="1">' +
+           (noTargets ? 'Skip — spend it anyway' : 'Skip — hold fire') + '</button>' +
            (Engine.canUndo() ? cancelBtn('Cancel — take it back') : '') +
            '</div>';
+    }
     promptEl.innerHTML = h;
   }
 
