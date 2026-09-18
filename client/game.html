@@ -674,6 +674,12 @@
      build be reopened and edited rather than rebuilt from scratch. The roster itself is
      remembered too, so sending the browser off to the builder and back does not lose a
      four-player setup. */
+  /* Going to the sheet builder leaves this page entirely and comes back by reloading it, so
+     anything the screen knew is gone unless it was written down. Which kind of game was being
+     set up is one of those things: without it, editing a ship while hosting drops you back at
+     the very first menu, having forgotten you were arranging an online table. */
+  var SETUP_RETURN_KEY = 'frigateSetupReturn';
+  var setupMode = 'local';
   var GAME_SEATS_KEY = 'frigateGameSeats';
   var GAME_ROSTER_KEY = 'frigateGameRoster';
   var SEAT_REQUEST_KEY = 'frigateBuilderRequest';
@@ -688,6 +694,7 @@
   function writeStore(key, val) {
     try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
   }
+  function dropStore(key) { try { localStorage.removeItem(key); } catch (e) {} }
 
   var seatSheets = readStore(GAME_SEATS_KEY, []);
   if (!Array.isArray(seatSheets)) seatSheets = [];
@@ -701,15 +708,16 @@
   /* A build finished in the builder outside the seat round-trip — "Load in-game?" after an
      export — arrives on its own key. It belongs to whoever is sitting first: the roster is
      where it can then be moved, edited or thrown away like any other. */
-  (function adoptPendingSheet() {
+  var ADOPTED_SHEET = (function adoptPendingSheet() {
     var SHEET_HANDOFF_KEY = 'frigatePendingSheet';
     var sheet = readStore(SHEET_HANDOFF_KEY, null);
-    if (!sheet || typeof sheet !== 'object') return;
+    if (!sheet || typeof sheet !== 'object') return false;
     try { localStorage.removeItem(SHEET_HANDOFF_KEY); } catch (e) {}
     var seat = 0;
     for (var i = 0; i < SEATS.length; i++) if (!SEATS[i].ai) { seat = i; break; }
     seatSheets[seat] = { sheet: sheet, choices: null };
     writeStore(GAME_SEATS_KEY, seatSheets);
+    return true;
   })();
 
   function sheetOf(i) { return (seatSheets[i] && seatSheets[i].sheet) || null; }
@@ -736,6 +744,7 @@
      and "Create new character" still scraps it cleanly. */
   function editSeat(i) {
     writeStore(GAME_ROSTER_KEY, SEATS);
+    writeStore(SETUP_RETURN_KEY, setupMode);   /* so the way back is the way we came */
     writeStore(SEAT_REQUEST_KEY, {
       seat: i, label: 'Player ' + (i + 1),
       choices: (seatSheets[i] && seatSheets[i].choices) || null,
@@ -2410,6 +2419,7 @@
      at the bottom differs. Which one you came through is the only thing it remembers. */
   function openSetup(mode) {
     var online = mode === 'online';
+    setupMode = online ? 'online' : 'local';
     document.getElementById('setupTitle').textContent = online ? 'Online game' : 'Local game';
     document.getElementById('startBtn').classList.toggle('hidden', online);
     document.getElementById('hostBtn').classList.toggle('hidden', !online);
@@ -2982,7 +2992,13 @@
 
   Engine.onChange(render);
   start();          /* build a board so the page is not blank behind the picker */
-  askMode();
+  /* Coming back from the sheet builder is a reload, not a fresh arrival: land where the trip
+     started rather than at the first menu, which would throw away a half-arranged table. */
+  var cameBack = readStore(SETUP_RETURN_KEY, null);
+  dropStore(SETUP_RETURN_KEY);
+  if (cameBack === 'online' || cameBack === 'local') openSetup(cameBack);
+  else if (ADOPTED_SHEET) openSetup('local');
+  else askMode();
 })();
 </script>
 </body>
