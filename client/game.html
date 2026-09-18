@@ -2236,19 +2236,28 @@
        reads as redacted however it was clicked. */
     var rec = id ? recById(id) : null;
     var targetable = rec && p && p.kind === 'target' && p.targets.indexOf(id) >= 0;
+    var inspecting = e.ctrlKey || e.metaKey;
+    /* While something is being walked, a left-click is a destination and nothing else. It used
+       to be answered with a popup about whatever was standing on that square, which made the
+       one square you most want to click unclickable: a module may overrun a deployable, so a
+       deployable's square is a legal place to walk to, and asking about it instead of going
+       there left no way to do it at all. Ctrl-click still inspects, and the walk simply fails
+       where the rules refuse it — a module cannot be overrun, so clicking one does nothing
+       rather than interrupting the move to describe it. */
+    var walking = !!mover(G);
     if (rec && rec.kind === 'ast') {
       /* unless you are being asked to shoot it, a click on a rock just tells you about it */
-      if ((e.ctrlKey || e.metaKey) || !targetable) { openAsteroidPopup(rec); return; }
+      if (inspecting || (!targetable && !walking)) { openAsteroidPopup(rec); return; }
     }
     if (rec && (rec.kind === 'mod' || rec.kind === 'dep')) {
       var theirs = rec.side.team !== G.players[meIdx()].team;
-      if (e.ctrlKey || e.metaKey) {
+      if (inspecting) {
         if (theirs) openUnknownPopup(rec); else openModPopup(rec.o.name, rec);
         return;
       }
       /* a plain click on someone else's piece does nothing else useful, unless it is the
-         target you are being asked to pick */
-      if (theirs && !targetable) {
+         target you are being asked to pick or the square you are walking onto */
+      if (theirs && !targetable && !walking) {
         openUnknownPopup(rec);
         return;
       }

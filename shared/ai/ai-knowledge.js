@@ -129,6 +129,12 @@ var AIKnowledge = (function () {
     });
     return best;
   }
+  /* Weapons that will not be offered an asteroid, so the commander must not count one as a
+     reason to fire. Every attack this ability makes has to be ship-only for it to qualify. */
+  function noRocks(name) {
+    var atks = activateEffect(name).filter(function (o) { return o.op === 'attack'; });
+    return atks.length > 0 && atks.every(function (o) { return o.targets === 'ships'; });
+  }
   /* how far the piece may reposition itself as part of the same activation */
   function selfMove(name) {
     var n = 0;
@@ -140,7 +146,7 @@ var AIKnowledge = (function () {
 
   return { modList: modList, depList: depList, preset: preset, isGun: isGun, isEngine: isEngine,
            activateOf: activateOf, activateEffect: activateEffect, isOneShot: isOneShot,
-           attackReach: attackReach, selfMove: selfMove,
+           attackReach: attackReach, selfMove: selfMove, noRocks: noRocks,
            roleOf: roleOf, weapons: weapons, maxRange: maxRange, minRange: minRange,
            expectedDamage: expectedDamage, exposureAt: exposureAt, shieldFrac: shieldFrac,
            handByRole: handByRole, underCharged: underCharged, chargeTarget: chargeTarget };

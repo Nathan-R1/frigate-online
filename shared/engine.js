@@ -477,6 +477,11 @@ var Engine = (function () {
     dealtDamage(dep);
     if (dep.hull <= 0) {
       log(s.name + "'s " + dep.name + ' is destroyed.', s);
+      /* Fired while it is still listed, because the passive is found by walking its owner's
+         deployables — a mine asked to detonate after it has been taken off the board is not
+         found at all. The queued effect keeps a direct reference, so the blast still knows
+         where the mine was standing. */
+      fire(s, 'onDestroyedOrEnemyEnters', { source: dep });
       vacate(dep.x, dep.y);
       delete s.deployables[dep.id];
     }
@@ -740,6 +745,9 @@ var Engine = (function () {
     var origins = attackOrigins(s, o, ctx);
     var reach = resolveRange(s, o.range);
     var pool = o.targets === 'any' ? hostileObjects(s).concat(friendlyObjects(s)) : hostileObjects(s);
+    /* 'ships' means crewed things only. A torpedo is spent whether it hits or not, and cracking
+       an asteroid with one is a waste nobody would choose — so it is not offered the choice. */
+    if (o.targets === 'ships') pool = pool.filter(function (m) { return !G.asteroids[m.id]; });
     var targets = pool.filter(function (m) {
       /* a beam cannot grab the very module it is firing from */
       if (ctx.module && m.id === ctx.module.id) return false;
@@ -751,6 +759,13 @@ var Engine = (function () {
        question left is whether to pull the trigger. Each one is then resolved in turn, in
        full — its own rolls, its own riders — before the next is touched. */
     if (o.aoe) {
+      /* Some blasts are a decision and some are physics. A mine going off is not a shot its
+         owner chooses to take — and the prompt would be put to whoever is standing on it,
+         which is the wrong person entirely. */
+      if (o.auto) {
+        enqueue(ids.map(function (id) { return { op: '__shot', shot: o, targetId: id }; }), ctx);
+        return;
+      }
       prompt({ kind: 'confirm', label: 'Confirm targets', targets: ids,
         envelope: firingEnvelope(origins, reach),
         onResolve: function () {
@@ -1342,6 +1357,19 @@ var Engine = (function () {
     var n = resolveCount(ctx.side, o.n, ctx);
     promptStepMove(d, n, ctx);
   };
+  /* "Activate" as a passive says: run this piece's own ability, here and now. Not its owner
+     taking a turn — no cost, no readiness, no whose-turn-is-it — because a mine going off is
+     something that happens to whoever set it off, not something its owner chooses. The effect
+     is queued rather than run, since this is already inside the resolver. */
+  OPS.activateSelf = function (o, ctx) {
+    var holder = ctx.deployable || ctx.module || ctx.card;
+    if (!holder) return;
+    var e = fx(holder.name, (ctx.card && !ctx.module) ? 'tech' : 'mod');
+    var a = e && e.activate;
+    if (!a || !a.effect) return;
+    enqueue(a.effect, ctx);
+  };
+
   /* every remaining op is declared in card-effects.js but not yet simulated; it logs
      rather than throwing so a card is always playable and the gap is visible. */
   function notYet(name) { return function (o, ctx) { log('[' + name + '] not yet simulated.'); }; }
@@ -1508,13 +1536,21 @@ var Engine = (function () {
       /* a module may overrun a deployable, but nothing else */
       if (c.kind !== 'deployable') return false;
       var od = G.players[c.owner].deployables[c.id];
-      if (od) { vacate(od.x, od.y); delete G.players[c.owner].deployables[c.id];
-                log(m.name + ' overruns ' + od.name + '.'); }
+      if (od) {
+        log(m.name + ' overruns ' + od.name + '.');
+        /* "an enemy enters this space" — driving over a mine is the case it exists for */
+        fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { source: od });
+        vacate(od.x, od.y);
+        delete G.players[c.owner].deployables[c.id];
+      }
     }
     vacate(m.x, m.y);
     m.x = nx; m.y = ny; m.moveLeft--;
     occupy(nx, ny, { kind: 'module', owner: s.idx, id: m.id });
-    emit();
+    /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
+       outside the resolver, so nothing else will come along to drain it. A mine driven over
+       would have been queued to detonate and then simply sat there. */
+    step();
     return true;
   }
 
