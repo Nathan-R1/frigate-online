@@ -314,6 +314,13 @@ var Net = (function () {
       .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
   }
 
+  /* How fast the computer plays this room. One game, one pace: the server keeps it and the
+     leader sets it, so everybody watching sees the same thing happen at the same time. */
+  function setPace(instant) {
+    return api('/api/pace', { room: ST.room, token: ST.token, instant: !!instant })
+      .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
+  }
+
   /* The leader hands a seat to the computer, or takes it back for a person. */
   function setSeatKind(seatIdx, kind) {
     return api('/api/seatkind', { room: ST.room, token: ST.token, seat: seatIdx, kind: kind })
@@ -435,7 +442,7 @@ var Net = (function () {
     hasState: function () { return ST.stateRoom !== null && ST.stateRoom === ST.room; },
     create: create, look: look, claim: claim, resume: resume, release: release, leave: leave,
     kick: kick,
-    openGames: openGames, setSeatKind: setSeatKind,
+    openGames: openGames, setSeatKind: setSeatKind, setPace: setPace,
     seatSetup: seatSetup, setSeatSetup: setSeatSetup,
     /* are you the one who sat down first, and so the one who can free a seat? */
     isLeader: function () {

@@ -1208,8 +1208,8 @@ var Engine = (function () {
             : kind === 'dep' ? { side: s, module: obj, deployable: obj }
             : { side: s, module: obj };
     if (a.mode === 'choice')
-      return (a.options || []).some(function (opt) { return !costShortfall(opt.cost, ctx); });
-    return !costShortfall(a.cost, ctx);
+      return (a.options || []).some(function (opt) { return !activationShortfall(opt, ctx); });
+    return !activationShortfall(a, ctx);
   }
 
   /* Why this cannot be activated, in words, or null when it can. affordable() answers the same
@@ -1223,15 +1223,15 @@ var Engine = (function () {
             : kind === 'dep' ? { side: s, module: obj, deployable: obj }
             : { side: s, module: obj };
     if (a.mode === 'choice') {
-      var reasons = (a.options || []).map(function (opt) { return costShortfall(opt.cost, ctx); });
+      var reasons = (a.options || []).map(function (opt) { return activationShortfall(opt, ctx); });
       return reasons.every(Boolean) ? reasons[0] : null;
     }
-    return costShortfall(a.cost, ctx) || null;
+    return activationShortfall(a, ctx) || null;
   }
 
   /* Run an activation, but only if its cost can be met in full. */
   function activate(cost, effect, ctx, label, option) {
-    var why = costShortfall(cost, ctx);
+    var why = costShortfall(cost, ctx) || effectShortfall(effect, ctx);
     if (why) {
       log(ctx.side.name + ' cannot activate ' + label + ' — it ' + why + '.', ctx.side);
       emit();
@@ -1416,8 +1416,33 @@ var Engine = (function () {
   function attackOrigins(s, o, ctx) {
     if (o.from === 'self' && ctx.module) return [ctx.module];
     var list = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
-    if (o.from === 'offenseModule') list = list.filter(isOffenseModule);
+    /* A card that names where its shot comes from means it. Falling back to the Core when the
+       ship has none of that kind let a Tract Beam reach out of a hull with no Offense Module
+       at all — the card says "from any Offense Module" and there were none. Where no kind is
+       named, the hull itself is the origin and the Core stands in for a ship stripped to it. */
+    if (o.from === 'offenseModule') return list.filter(isOffenseModule);
     return list.length ? list : [s.modules[s.coreId]].filter(Boolean);
+  }
+
+  /* What an ability needs on the board before it can be used at all, as distinct from what it
+     costs. Read off the effect rather than declared per card: an attack that names the kind of
+     module it fires from cannot be used by a ship that has none. */
+  var ORIGIN_NAMES = { offenseModule: 'Offense Module', movementModule: 'Movement Module',
+                       gravitonModule: 'Graviton module' };
+  function effectShortfall(effect, ctx) {
+    for (var i = 0; i < (effect || []).length; i++) {
+      var o = effect[i];
+      if (o.op !== 'attack' || !o.from || o.from === 'self' || o.from === 'any') continue;
+      if (!attackOrigins(ctx.side, o, ctx).length)
+        return 'has no ' + (ORIGIN_NAMES[o.from] || o.from) + ' to fire from';
+    }
+    return null;
+  }
+
+  /* cost and requirement together, which is what both the button and the engine want */
+  function activationShortfall(a, ctx) {
+    if (!a) return 'has nothing to activate';
+    return costShortfall(a.cost, ctx) || effectShortfall(a.effect, ctx);
   }
   /* Where a module may be built. This asks exactly what meetsReq asks of a module already on
      the board, so a berth that is legal to build is a berth that stays legal — and anything
