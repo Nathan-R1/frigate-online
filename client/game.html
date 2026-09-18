@@ -820,8 +820,12 @@
      core picks it can show as already answered, and the whole deck. The builder works out for
      itself which of those cards its picks granted and which were drawn on top. */
   function stockSheet() {
+    /* isStock marks a ship nobody has built yet. It rides along so that opening one for
+       editing can go straight to the deck — every earlier step of the default is already
+       answered, and resuming "at the first unfinished step" would sail past all of them to
+       the export screen. A sheet that comes back from the builder carries no such mark. */
     return { shipName: '', level: STOCK_LEVEL, hulls: STOCK_HULLS, coreOptions: STOCK_CORE,
-             tech: starterDeck(), mods: [] };
+             tech: starterDeck(), mods: [], isStock: true };
   }
   /* whichever local seat the controls and hand currently belong to */
   var VIEW = 0;
@@ -2913,7 +2917,8 @@
           label: info.name || ('Seat ' + (idx + 1)),
           choices: null,
           sheet: sheet || stockSheet(),
-          stock: !sheet,
+          /* straight to the deck for a ship nobody has built yet, wherever it came from */
+          stock: !sheet || !!sheet.isStock,
           ret: window.location.pathname + window.location.search
         });
         window.location.href = BUILDER_URL;
@@ -2936,8 +2941,12 @@
       SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
       var seats = SEATS.map(function (seat, i) {
         var cfg = seatConfig(i, seat);
+        /* The sheet travels too. Without it a seat arrives holding a pile of cards and
+           nothing about the hull and core that produced them, so opening it in the lobby
+           showed those steps blank and made you answer them again. */
         return { name: cfg.name, team: cfg.team, kind: seat.ai ? 'computer' : 'human',
-                 deck: cfg.deck, modules: cfg.modules, skills: cfg.skills };
+                 deck: cfg.deck, modules: cfg.modules, skills: cfg.skills,
+                 sheet: sheetOf(i) || stockSheet() };
       });
       say('lobbyErr', '');
       netTrouble('');
