@@ -45,6 +45,8 @@
  *   POST /api/release  {room, token}                                  -> give the seat up
  *   POST /api/kick     {room, token, seat}                             -> the leader frees a seat
  *   POST /api/seatkind {room, token, seat, kind}                       -> leader: human <-> computer
+ *   POST /api/seat-setup {room, token, seat}                           -> that seat's ship
+ *   POST /api/set-setup  {room, token, seat, setup, name?}             -> change it, in the lobby
  *   POST /api/start    {room, token}                                  -> deal and begin
  *   POST /api/cmd      {room, token, seq, cmd, args}                  -> one intent
  *   POST /api/ticket   {room, token}                                  -> a ticket for the stream
@@ -95,6 +97,10 @@ var MAX_DECK        = num(process.env.FRIGATE_MAX_DECK, 120);
 var MAX_MODULES     = num(process.env.FRIGATE_MAX_MODULES, 40);
 var MAX_SKILLS      = 40;
 var MAX_TRAITS      = 200;
+/* A builder sheet carried along with a seat, so editing one twice does not lose the hull and
+   core choices that produced it. The engine never reads it; it is handed back to whoever is
+   allowed to edit that seat, and nothing else. */
+var MAX_SHEET       = num(process.env.FRIGATE_MAX_SHEET, 24000);
 var MAX_BODY        = 262144;
 /* A room code is six characters; anything longer is not a mistyped code, it is a probe. */
 var MAX_CODE        = 12;
@@ -192,7 +198,18 @@ function subsTotal() {
 function cleanSetup(d) {
   var deck = Array.isArray(d.deck) ? d.deck.slice(0, MAX_DECK).map(cleanEntry) : null;
   var mods = Array.isArray(d.modules) ? d.modules.slice(0, MAX_MODULES).map(cleanEntry) : null;
-  return { deck: deck, modules: mods, skills: cleanSkills(d.skills) };
+  return { deck: deck, modules: mods, skills: cleanSkills(d.skills),
+           sheet: cleanSheet(d.sheet) };
+}
+
+/* The builder's own document, kept whole but kept small. It is opaque here — round-tripped so
+   a seat can be edited again from where it was left, never interpreted. */
+function cleanSheet(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  var txt;
+  try { txt = JSON.stringify(v); } catch (e) { return null; }
+  if (!txt || txt.length > MAX_SHEET) return null;
+  try { return JSON.parse(txt); } catch (e) { return null; }
 }
 
 /* A deck entry is a name, or a name with traits of its own. Either way it is text, and text
@@ -1164,6 +1181,47 @@ var server = http.createServer(function (req, res) {
         }
         return flush(room, true).then(function () {
           sendJson(res, 200, { ok: true, lobby: lobbyView(room) });
+        });
+      }
+
+      /* ---------- a seat's ship, read and written from the lobby ----------
+         Until now a table was built entirely by whoever created it: the sheets lived in that
+         one browser and were baked into the room at creation. That is fine for a host setting
+         up a game alone and no use at all once everybody is sitting down — the person who has
+         to fly the ship is the one who should be choosing it.
+
+         Who may touch a seat is the same rule as everywhere else: your own, or anybody's if
+         you are the leader. And only before the deal — a ship cannot change once it is on the
+         board. The sheet is read over POST rather than being folded into the lobby everyone
+         receives, because a deck list is nobody else's business. */
+      function mayEditSeat(sub) {
+        return !!sub && (sub.idx === seat.idx || leaderOf(room) === seat.idx);
+      }
+
+      if (route === '/api/seat-setup') {
+        if (!seat) return sendJson(res, 403, { ok: false, error: 'not seated' });
+        var want = room.seats[body.seat | 0];
+        if (!want) return sendJson(res, 400, { ok: false, error: 'no such seat' });
+        if (!mayEditSeat(want))
+          return sendJson(res, 403, { ok: false, error: 'that is not your seat' });
+        return sendJson(res, 200, { ok: true, seat: want.idx, name: want.name,
+                                    setup: want.setup || null });
+      }
+
+      if (route === '/api/set-setup') {
+        if (!seat) return sendJson(res, 403, { ok: false, error: 'not seated' });
+        if (room.status !== 'lobby')
+          return sendJson(res, 409, { ok: false, error: 'the game has started' });
+        var tgt = room.seats[body.seat | 0];
+        if (!tgt) return sendJson(res, 400, { ok: false, error: 'no such seat' });
+        if (!mayEditSeat(tgt))
+          return sendJson(res, 403, { ok: false, error: 'that is not your seat' });
+        tgt.setup = cleanSetup(body.setup || {});
+        if (typeof body.name === 'string' && body.name.trim())
+          tgt.name = body.name.trim().slice(0, 40);
+        broadcast(room);
+        return flush(room, true).then(function () {
+          sendJson(res, 200, { ok: true, seat: tgt.idx, lobby: lobbyView(room) });
         });
       }
 
