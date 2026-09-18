@@ -601,7 +601,7 @@
   </p>
 </div></div>
 <div class="g-over hidden" id="overlay"><div class="box">
-  <h2 id="overTitle">—</h2><button type="button" class="g-btn" onclick="location.reload()">Play again</button>
+  <h2 id="overTitle">—</h2><button type="button" class="g-btn" id="replayBtn">Play again</button>
 </div></div>
 
 <script src="../shared/presets/tech-presets.js"></script>
@@ -835,7 +835,13 @@
     Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat); }));
   }
 
-  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  /* Quotes too. Without them this is safe in text and quietly unsafe in an attribute — and
+     half this file builds attributes by concatenation, so the distinction is one careless
+     line away from mattering. */
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   /* ---------- rendering ---------- */
   /* Keep the hand and controls on a seat that still exists: the active local seat while one
@@ -2826,6 +2832,14 @@
     /* double-click restores the default height */
     grip.addEventListener('dblclick', function () { setH(132); });
   })();
+
+  /* Wired here rather than written on the tag. An onclick attribute is script inside markup,
+     and a page that allows any of that has to allow all of it — which is the permission an
+     injected string would need to become code. Keeping handlers in the script means the page
+     can name the scripts it shipped and refuse the rest. */
+  document.getElementById('replayBtn').addEventListener('click', function () {
+    location.reload();
+  });
 
   Engine.onChange(render);
   start();          /* build a board so the page is not blank behind the picker */

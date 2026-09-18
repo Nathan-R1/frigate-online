@@ -45,7 +45,8 @@
  *   POST /api/kick     {room, token, seat}                             -> the leader frees a seat
  *   POST /api/start    {room, token}                                  -> deal and begin
  *   POST /api/cmd      {room, token, seq, cmd, args}                  -> one intent
- *   GET  /api/stream   ?room=CODE&token=...                           -> SSE of your state
+ *   POST /api/ticket   {room, token}                                  -> a ticket for the stream
+ *   GET  /api/stream   ?room=CODE&ticket=...                          -> SSE of your state
  *   GET  /healthz                                                     -> for the host
  *   everything else                                                    -> static files
  */
@@ -72,6 +73,29 @@ var EVICT_MS = parseInt(process.env.FRIGATE_EVICT, 10) || 10 * 60 * 1000;
 /* How long a room is kept in the store. Zero means forever, which is the default: throwing
    away somebody's game because a number ran out should be something you asked for. */
 var ROOM_TTL_DAYS = parseFloat(process.env.FRIGATE_ROOM_TTL_DAYS) || 0;
+
+/* ---------- ceilings ----------
+   A game needs none of these. They exist because this process answers the open internet, where
+   a request costs the sender nothing and can be sent a million times, and every one of them
+   spends something of ours: memory for a room, event-loop time to serialise a state, a row in
+   somebody else's database. Each number below is the point past which a stranger would be
+   spending it rather than a player. They are generous — a real game never approaches one — and
+   every one can be moved without touching the code. */
+var MAX_ROOMS_LIVE  = num(process.env.FRIGATE_MAX_ROOMS, 300);   /* rooms held in memory */
+var MAX_SUBS_ROOM   = num(process.env.FRIGATE_MAX_SUBS_ROOM, 16);
+var MAX_SUBS_TOTAL  = num(process.env.FRIGATE_MAX_SUBS, 400);
+var MAX_DECK        = num(process.env.FRIGATE_MAX_DECK, 120);
+var MAX_MODULES     = num(process.env.FRIGATE_MAX_MODULES, 40);
+var MAX_SKILLS      = 40;
+var MAX_TRAITS      = 200;
+var MAX_BODY        = 262144;
+/* A room code is six characters; anything longer is not a mistyped code, it is a probe. */
+var MAX_CODE        = 12;
+
+function num(v, dflt) { var n = parseInt(v, 10); return (isNaN(n) || n < 0) ? dflt : n; }
+
+/* Whether /api/list says what rooms exist. Off unless asked for: see the endpoint. */
+var LIST_ROOMS = process.env.FRIGATE_LIST === '1';
 
 /* ---------- the rules, compiled once and instantiated per room ---------- */
 
@@ -116,6 +140,51 @@ function newCode() {
   return code;
 }
 function newToken() { return crypto.randomBytes(24).toString('hex'); }
+
+function subsTotal() {
+  return Object.keys(rooms).reduce(function (a, c) { return a + rooms[c].subs.length; }, 0);
+}
+
+/* ---------- what a table may be set with ----------
+   A seat arrives describing the ship it wants to fly, and the engine is careful about the
+   names: one it does not know it ignores. It is not careful about how MANY, because nothing in
+   the game ever asked it to be. A deck is a dozen cards; the body that carries it holds a
+   quarter of a megabyte, which is twenty thousand — and twenty thousand cards is a state of a
+   couple of megabytes that this server then serialises for every watcher, several times a
+   second, and writes to the database on every settled turn. One request, paid for by everyone
+   afterwards. So the count is checked here, where the number arrives, rather than trusted to
+   stay sensible because it always has. */
+function cleanSetup(d) {
+  var deck = Array.isArray(d.deck) ? d.deck.slice(0, MAX_DECK).map(cleanEntry) : null;
+  var mods = Array.isArray(d.modules) ? d.modules.slice(0, MAX_MODULES).map(cleanEntry) : null;
+  return { deck: deck, modules: mods, skills: cleanSkills(d.skills) };
+}
+
+/* A deck entry is a name, or a name with traits of its own. Either way it is text, and text
+   that is going to be held in a saved game has a length. */
+function cleanEntry(e) {
+  if (typeof e === 'string') return e.slice(0, 80);
+  if (!e || typeof e !== 'object') return '';
+  var out = { name: String(e.name || '').slice(0, 80) };
+  if (e.traits !== undefined && e.traits !== null) out.traits = String(e.traits).slice(0, MAX_TRAITS);
+  return out;
+}
+
+/* Skills are numbers under names the engine knows. Anything else is somebody else's idea: the
+   keys are counted and kept plain, and __proto__ is not a skill. */
+function cleanSkills(sk) {
+  if (!sk || typeof sk !== 'object' || Array.isArray(sk)) return null;
+  var out = Object.create(null), n = 0;
+  Object.keys(sk).forEach(function (k) {
+    if (n >= MAX_SKILLS) return;
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') return;
+    var v = sk[k];
+    if (typeof v !== 'number' && typeof v !== 'string') return;
+    out[String(k).slice(0, 40)] = typeof v === 'number' ? v : String(v).slice(0, 40);
+    n++;
+  });
+  return n ? Object.assign({}, out) : null;
+}
 
 /* The computer plays only the seats it was given at the table. A seat meant for a person stays
    theirs: if they go, it empties and waits, and the game waits with it rather than having
@@ -288,11 +357,19 @@ function stateFor(room, seat) {
   });
 }
 
+/* Everybody looking through the same seat is owed the same bytes, and a snapshot is the most
+   expensive thing this server does — so it is built once per distinct seat and handed round,
+   rather than once per watcher. With one player that changes nothing; with a crowd on one room
+   it is the difference between a broadcast costing what the game costs and costing what the
+   audience costs. */
 function broadcast(room) {
   room.rev++;
   room.touched = Date.now();
+  var bySeat = Object.create(null);
   room.subs.forEach(function (sub) {
-    try { sub.res.write('data: ' + stateFor(room, sub.seat) + '\n\n'); } catch (e) {}
+    var key = sub.seat ? sub.seat.idx : 'watch';
+    if (bySeat[key] === undefined) bySeat[key] = 'data: ' + stateFor(room, sub.seat) + '\n\n';
+    try { sub.res.write(bySeat[key]); } catch (e) {}
   });
 }
 
@@ -338,7 +415,8 @@ function applyCommand(room, seat, cmd, args) {
   try {
     ret = room.E[cmd].apply(null, args);
   } catch (e) {
-    return 'refused: ' + e.message;
+    console.error('[engine] ' + cmd + ': ' + (e && e.stack ? e.stack : e));
+    return 'the rules could not apply that';
   }
   if (ret === false) return 'the rules do not allow that';
   return null;
@@ -381,9 +459,34 @@ function sweepOldRooms() {
 }
 
 /* Settled rooms are written down; rooms nobody is using are let go of. */
+/* Over the ceiling, the quietest rooms go — watched or not.
+   Eviction on idleness alone is a promise an outsider can stop us keeping simply by holding a
+   stream open, and a room that cannot be let go of is memory that cannot be got back. Nothing
+   is lost by going: the game is in the store and the next request loads it straight back, so
+   the cost to a real player who happens to be the quietest is one reconnection. */
+function evictOverflow() {
+  var codes = Object.keys(rooms);
+  if (codes.length <= MAX_ROOMS_LIVE) return;
+  codes.sort(function (a, b) { return rooms[a].touched - rooms[b].touched; })
+       .slice(0, codes.length - MAX_ROOMS_LIVE)
+       .forEach(function (code) {
+    var room = rooms[code];
+    if (!room) return;
+    flush(room, true).then(function () {
+      if (rooms[code] !== room) return;
+      room.subs.forEach(function (sub) { try { sub.res.end(); } catch (e) {} });
+      room.subs.length = 0;
+      delete rooms[code];
+      console.warn('[rooms] over ' + MAX_ROOMS_LIVE + ' in memory — dropped ' + code);
+    });
+  });
+}
+
 function housekeeping() {
   var now = Date.now();
   sweepOldRooms();
+  sweepBuckets(now);
+  sweepTickets(now);
   Object.keys(rooms).forEach(function (code) {
     var room = rooms[code];
     if (room.dirty) flush(room);
@@ -392,6 +495,92 @@ function housekeeping() {
         if (rooms[code] === room && room.subs.length === 0 && !room.dirty) delete rooms[code];
       });
     }
+  });
+  evictOverflow();
+}
+
+/* ---------- stream tickets ----------
+   A seat token is the one thing that says who you are, and EventSource cannot carry a header,
+   so before this the token was spelled out in the stream's URL — where it is written into
+   every access log the request passes through and kept for as long as logs are kept. A ticket
+   is what goes in the URL instead: a separate secret, minted over POST where the body is not
+   logged, that buys one thing only. It opens a stream as its seat. It cannot play a card.
+   Somebody who reads it out of a log can watch that seat's game, which is worth closing and is
+   not worth the seat itself, and it dies with the seat it was cut for. */
+var tickets = Object.create(null);
+var TICKET_IDLE_MS = 30 * 60 * 1000;
+
+function newTicket(room, seat) {
+  var id = crypto.randomBytes(18).toString('hex');
+  tickets[id] = { room: room.code, seat: seat.idx, hash: seat.tokenHash, used: Date.now() };
+  return id;
+}
+
+/* A ticket is only worth anything while the seat it names is still held by the same person —
+   the token hash is checked, so a seat given up and taken by somebody else leaves the old
+   ticket pointing at nothing. */
+function ticketSeat(room, id) {
+  var t = id && tickets[id];
+  if (!t || t.room !== room.code) return null;
+  var seat = room.seats[t.seat];
+  if (!seat || !seat.tokenHash || seat.tokenHash !== t.hash) { delete tickets[id]; return null; }
+  t.used = Date.now();
+  return seat;
+}
+
+function dropTickets(code, seatIdx) {
+  Object.keys(tickets).forEach(function (id) {
+    var t = tickets[id];
+    if (t.room === code && (seatIdx === undefined || t.seat === seatIdx)) delete tickets[id];
+  });
+}
+
+function sweepTickets(now) {
+  Object.keys(tickets).forEach(function (id) {
+    if (now - tickets[id].used > TICKET_IDLE_MS) delete tickets[id];
+  });
+}
+
+/* ---------- what one caller may spend ----------
+   A token bucket per client address. The costs say what each thing is worth to us rather than
+   to them: a room is a database row and a V8 context, a stream is a socket held open, and
+   everything else is arithmetic. The buckets are swept, because a map keyed on something the
+   caller chooses is itself a way to spend our memory. */
+var buckets = Object.create(null);
+var RATE_CAP = num(process.env.FRIGATE_RATE_CAP, 120);      /* credits held at most */
+var RATE_FILL = num(process.env.FRIGATE_RATE_FILL, 2);      /* credits back per second */
+var COST = { '/api/create': 30, '/api/stream': 5, '/api/ticket': 2, other: 1 };
+
+/* Behind Render the socket belongs to the proxy, so every player would share one bucket and
+   rate limiting would mean nothing. The forwarded address is only believed where something in
+   front is known to be setting it — never on a bare port, where the caller writes it. */
+var TRUST_PROXY = process.env.FRIGATE_TRUST_PROXY
+  ? process.env.FRIGATE_TRUST_PROXY !== 'off'
+  : !!process.env.RENDER;
+
+function clientAddr(req) {
+  if (TRUST_PROXY) {
+    var f = req.headers['x-forwarded-for'];
+    if (f) return String(f).split(',')[0].trim().slice(0, 64);
+  }
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+function rateOk(req, route) {
+  var addr = clientAddr(req), now = Date.now();
+  var b = buckets[addr];
+  if (!b) b = buckets[addr] = { credits: RATE_CAP, seen: now };
+  b.credits = Math.min(RATE_CAP, b.credits + (now - b.seen) / 1000 * RATE_FILL);
+  b.seen = now;
+  var cost = COST[route] || COST.other;
+  if (b.credits < cost) return false;
+  b.credits -= cost;
+  return true;
+}
+
+function sweepBuckets(now) {
+  Object.keys(buckets).forEach(function (a) {
+    if (now - buckets[a].seen > 600000) delete buckets[a];
   });
 }
 
@@ -447,37 +636,135 @@ function withCors(h, req) {
   return out;
 }
 
+/* ---------- what every answer carries ----------
+   A page is not only what it contains; it is also what a browser will let it do. These say
+   that the game may talk to the server it came from and nowhere else, may not be framed, may
+   not have its base rewritten, and may not load a plugin — so that a hole opened somewhere in
+   the client has far less to reach for. connect-src is the load-bearing one: it is what stops
+   a page of ours from being talked into sending a seat token somewhere it was not served
+   from. FRIGATE_ORIGIN, where it is set, is added to it, because that is the same permission
+   said once. FRIGATE_CSP=off is the way out for anyone who needs one. */
+var CSP_ON = process.env.FRIGATE_CSP !== 'off';
+
+function csp(nonce) {
+  return [
+    "default-src 'self'",
+    "script-src 'self'" + (nonce ? " 'nonce-" + nonce + "'" : ''),
+    /* inline style attributes are how the board is coloured, so this one cannot be a nonce:
+       a nonce in style-src would switch 'unsafe-inline' off and take the board with it */
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src " + ["'self'"].concat(ALLOWED).join(' '),
+    "base-uri 'none'",
+    "object-src 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'"
+  ].join('; ');
+}
+
+function guarded(h, nonce) {
+  h['X-Content-Type-Options'] = 'nosniff';
+  h['Referrer-Policy'] = 'no-referrer';
+  h['X-Frame-Options'] = 'DENY';
+  if (CSP_ON) h['Content-Security-Policy'] = csp(nonce);
+  return h;
+}
+
+/* An error a stranger reads should say what they can do about it and nothing else. What it was
+   actually about goes to the log with a tag, so a report of "it said 500, tag a1b2c3d4" is
+   enough to find the one line that matters. */
+function fail(res, code, message, err) {
+  var tag = crypto.randomBytes(4).toString('hex');
+  if (err) console.error('[' + tag + '] ' + (err && err.stack ? err.stack : err));
+  sendJson(res, code, { ok: false, error: message, tag: tag });
+}
+
 function sendJson(res, code, obj) {
   var body = JSON.stringify(obj);
-  res.writeHead(code, withCors({ 'Content-Type': 'application/json; charset=utf-8',
-                                 'Cache-Control': 'no-store',
-                                 'Content-Length': Buffer.byteLength(body) }, res.req));
+  res.writeHead(code, withCors(guarded({ 'Content-Type': 'application/json; charset=utf-8',
+                                         'Cache-Control': 'no-store',
+                                         'Content-Length': Buffer.byteLength(body) }), res.req));
   res.end(body);
 }
 
-function readBody(req, done) {
-  var chunks = [], size = 0;
+/* JSON, said so in the request.
+   The point is not politeness about types. A browser will send text/plain, a form encoding or
+   a multipart body to another origin with no permission asked and no preflight, and before
+   this that was enough to reach every POST here — so any page anywhere could have a visitor
+   quietly create rooms. application/json is not on that list: asking for it means the browser
+   has to ask us first, and the CORS rules above are then the ones that answer. */
+function wantsJson(req) {
+  var t = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  return t === 'application/json';
+}
+
+function readBody(req, res, done) {
+  var chunks = [], size = 0, over = false;
   req.on('data', function (c) {
+    if (over) return;
     size += c.length;
-    if (size > 262144) { req.destroy(); return; }      /* a sheet is large, a payload is not */
+    if (size > MAX_BODY) {                 /* a sheet is large, a payload is not */
+      over = true;
+      sendJson(res, 413, { ok: false, error: 'that payload is too large' });
+      req.destroy();
+      return;
+    }
     chunks.push(c);
   });
   req.on('end', function () {
+    if (over) return;
     var obj = null;
     try { obj = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (e) { obj = null; }
     done(obj);
   });
+  req.on('error', function () { over = true; });
 }
 
+/* ---------- static files ----------
+   Only the two directories the browser actually asks for. Serving the project root was one
+   line shorter and handed out everything that happened to sit next to the game: the working
+   copy's .git, the notes, the package manifest — and, the day anybody puts one there, a .env
+   holding the database URL. A traversal check alone does not help with that, because none of
+   it is a traversal: it is all legitimately inside the root. So the root is not the thing
+   being served. A dot-led segment is refused outright, and a file whose type we do not name is
+   not ours to hand over. */
+var SERVABLE = { client: 1, shared: 1 };
+
 function serveStatic(req, res, urlPath) {
-  var rel = decodeURIComponent(urlPath.split('?')[0]);
-  if (rel === '/') rel = '/client/game.html';
-  var file = path.join(ROOT, rel);
-  if (file.indexOf(ROOT + path.sep) !== 0 && file !== ROOT) { res.writeHead(403); res.end('no'); return; }
+  var rel;
+  try { rel = decodeURIComponent(urlPath.split('?')[0]); } catch (e) { rel = null; }
+  if (rel === null || rel.indexOf('\0') >= 0) { res.writeHead(400); res.end('no'); return; }
+  if (rel === '/' || rel === '') rel = '/client/game.html';
+
+  var parts = rel.split('/').filter(Boolean);
+  var bad = !parts.length || !SERVABLE[parts[0]] ||
+            parts.some(function (seg) { return seg.charAt(0) === '.'; });
+  if (bad) { res.writeHead(404); res.end('not found'); return; }
+
+  var file = path.join(ROOT, parts.join(path.sep));
+  if (file.indexOf(ROOT + path.sep) !== 0) { res.writeHead(403); res.end('no'); return; }
+
+  var type = MIME[path.extname(file).toLowerCase()];
+  if (!type) { res.writeHead(404); res.end('not found'); return; }
+
   fs.stat(file, function (err, st) {
     if (err || !st.isFile()) { res.writeHead(404); res.end('not found'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-                         'Cache-Control': 'no-cache' });
+    /* A page is rewritten on the way out so its own inline script carries this response's
+       nonce. That is what lets script-src name the scripts we shipped and refuse every other
+       one, which is the whole value of the header. */
+    if (type.indexOf('text/html') === 0) {
+      fs.readFile(file, 'utf8', function (e2, html) {
+        if (e2) { res.writeHead(404); res.end('not found'); return; }
+        var nonce = crypto.randomBytes(16).toString('base64');
+        var body = html.replace(/<script(?=[\s>])(?![^>]*\bnonce=)/g, '<script nonce="' + nonce + '"');
+        res.writeHead(200, guarded({ 'Content-Type': type, 'Cache-Control': 'no-cache',
+                                     'Content-Length': Buffer.byteLength(body) }, nonce));
+        res.end(body);
+      });
+      return;
+    }
+    res.writeHead(200, guarded({ 'Content-Type': type, 'Cache-Control': 'no-cache' }));
     fs.createReadStream(file).pipe(res);
   });
 }
@@ -493,27 +780,48 @@ var server = http.createServer(function (req, res) {
   }
   var route = qi >= 0 ? u.slice(0, qi) : u;
 
-  if (req.method === 'OPTIONS') { res.writeHead(204, withCors({}, req)); res.end(); return; }
+  if (req.method === 'OPTIONS') { res.writeHead(204, withCors(guarded({}), req)); res.end(); return; }
+
+  /* Everything under /api costs credits. Static files do not: those are the game loading, and
+     whatever sits in front of this process is better placed to say no to a flood of them. */
+  if (route.indexOf('/api/') === 0 && !rateOk(req, route))
+    return sendJson(res, 429, { ok: false, error: 'too many requests — slow down' });
+
+  /* A room code is six characters. Anything longer is somebody trying the door, and it should
+     cost us nothing, least of all a database round trip. */
+  if (qs.room && qs.room.length > MAX_CODE)
+    return sendJson(res, 400, { ok: false, error: 'no such room' });
 
   if (route === '/healthz') {
-    return sendJson(res, 200, { ok: true, store: store.kind, rules: RULES_VERSION,
-                                rooms: Object.keys(rooms).length,
-                                uptime: Math.round(process.uptime()) });
+    /* Enough for a host to know we are alive, and nothing a stranger can learn from. */
+    return sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()) });
   }
 
   if (route === '/api/stream') {
+    if (subsTotal() >= MAX_SUBS_TOTAL)
+      return sendJson(res, 503, { ok: false, error: 'the server is full — try again shortly' });
     return getRoom(qs.room).then(function (room) {
       if (!room) return sendJson(res, 404, { ok: false, error: 'no such room' });
-      var seat = seatOf(room, qs.token);
-      res.writeHead(200, withCors({ 'Content-Type': 'text/event-stream; charset=utf-8',
+      if (room.subs.length >= MAX_SUBS_ROOM)
+        return sendJson(res, 503, { ok: false, error: 'too many people are watching that room' });
+      /* A ticket, or nothing. The seat token used to be accepted here and it is not any more:
+         it has no business in a URL. An old client sending one simply watches. */
+      var seat = ticketSeat(room, qs.ticket);
+      res.writeHead(200, withCors(guarded({ 'Content-Type': 'text/event-stream; charset=utf-8',
                                     'Cache-Control': 'no-cache', 'Connection': 'keep-alive',
-                                    'X-Accel-Buffering': 'no' }, req));
+                                    'X-Accel-Buffering': 'no' }), req));
       var sub = { res: res, seat: seat };
       room.subs.push(sub);
       if (seat) seat.live++;
       res.write('data: ' + stateFor(room, seat) + '\n\n');
       if (seat) broadcast(room);         /* someone arriving is news for everyone else */
-      var beat = setInterval(function () { try { res.write(': ping\n\n'); } catch (e) {} }, 15000);
+      /* The heartbeat keeps the ticket alive as well as the socket: a stream open for hours
+         never re-opens, so without this its ticket would be swept as idle underneath it and
+         the reconnection after a blip would come back as a watcher. */
+      var beat = setInterval(function () {
+        if (qs.ticket && tickets[qs.ticket]) tickets[qs.ticket].used = Date.now();
+        try { res.write(': ping\n\n'); } catch (e) {}
+      }, 15000);
       req.on('close', function () {
         clearInterval(beat);
         var i = room.subs.indexOf(sub);
@@ -521,7 +829,7 @@ var server = http.createServer(function (req, res) {
         if (sub.seat) sub.seat.live = Math.max(0, sub.seat.live - 1);
         broadcast(room);
       });
-    }).catch(function (e) { sendJson(res, 500, { ok: false, error: e.message }); });
+    }).catch(function (e) { fail(res, 500, 'could not open that stream', e); });
   }
 
   if (route === '/api/room') {
@@ -530,28 +838,39 @@ var server = http.createServer(function (req, res) {
         if (!room) return sendJson(res, 404, { ok: false, error: 'no such room' });
         sendJson(res, 200, { ok: true, lobby: lobbyView(room) });
       })
-      .catch(function (e) { sendJson(res, 500, { ok: false, error: e.message }); });
+      .catch(function (e) { fail(res, 500, 'could not read that room', e); });
   }
 
+  /* This answers two questions, and only one of them is anybody's business. "Are you the game
+     server?" is what the page asks to find us, and what the start script asks to know we are
+     up. "What games are running?" is a list of every room code on the server, which is the
+     key to the front door of each one — a stranger could read it, walk in and sit down. So the
+     list is only ever filled in for somebody who has been told to expect it. */
   if (route === '/api/list') {
+    if (!LIST_ROOMS) return sendJson(res, 200, { ok: true, rooms: [] });
     return store.listRooms()
       .then(function (list) {
         sendJson(res, 200, { ok: true, rooms: list.map(function (r) {
           return { room: r.code, started: r.status !== 'lobby',
                    seats: (r.seats || []).length }; }) });
       })
-      .catch(function (e) { sendJson(res, 500, { ok: false, error: e.message }); });
+      .catch(function (e) { fail(res, 500, 'could not list rooms', e); });
   }
 
   if (req.method !== 'POST') return serveStatic(req, res, route);
 
-  readBody(req, function (body) {
+  if (!wantsJson(req))
+    return sendJson(res, 415, { ok: false, error: 'send application/json' });
+
+  readBody(req, res, function (body) {
     if (!body || typeof body !== 'object') return sendJson(res, 400, { ok: false, error: 'bad payload' });
 
     if (route === '/api/create') {
       var defs = Array.isArray(body.seats) ? body.seats : [];
       if (defs.length < 2 || defs.length > 4)
         return sendJson(res, 400, { ok: false, error: 'a game seats two to four' });
+      if (Object.keys(rooms).length >= MAX_ROOMS_LIVE)
+        return sendJson(res, 503, { ok: false, error: 'the server is full — try again shortly' });
       var rec = {
         code: newCode(),
         seed: crypto.randomBytes(4).readInt32LE(0),
@@ -565,9 +884,7 @@ var server = http.createServer(function (req, res) {
             team: (d.team === undefined || d.team === null) ? i : (+d.team | 0),
             kind: d.kind === 'computer' ? 'computer' : 'human',
             tokenHash: null, lastSeq: -1,
-            setup: { deck: Array.isArray(d.deck) ? d.deck : null,
-                     modules: Array.isArray(d.modules) ? d.modules : null,
-                     skills: d.skills || null }
+            setup: cleanSetup(d || {})
           };
         })
       };
@@ -576,7 +893,7 @@ var server = http.createServer(function (req, res) {
           var room = hydrate(saved);
           sendJson(res, 200, { ok: true, room: room.code, lobby: lobbyView(room) });
         })
-        .catch(function (e) { sendJson(res, 500, { ok: false, error: e.message }); });
+        .catch(function (e) { fail(res, 500, 'could not make that room', e); });
     }
 
     getRoom(body.room).then(function (room) {
@@ -613,6 +930,14 @@ var server = http.createServer(function (req, res) {
 
       var seat = seatOf(room, body.token);
 
+      /* The stream needs something to identify itself with and cannot send a header, so it is
+         given a ticket instead of the token — cut here, over POST, where the body stays out of
+         the logs the URL would have gone into. */
+      if (route === '/api/ticket') {
+        if (!seat) return sendJson(res, 403, { ok: false, error: 'not seated' });
+        return sendJson(res, 200, { ok: true, ticket: newTicket(room, seat), seat: seat.idx });
+      }
+
       if (route === '/api/release') {
         if (!seat) return sendJson(res, 403, { ok: false, error: 'not seated' });
         seat.tokenHash = null;
@@ -621,6 +946,7 @@ var server = http.createServer(function (req, res) {
         seat.joinedAt = null;
         seat.live = 0;
         detachSeat(room, seat.idx);
+        dropTickets(room.code, seat.idx);
         syncControl(room);
         broadcast(room);
         return flush(room, true).then(function () {
@@ -645,6 +971,7 @@ var server = http.createServer(function (req, res) {
         target.joinedAt = null;
         target.live = 0;
         detachSeat(room, target.idx);
+        dropTickets(room.code, target.idx);
         /* their stream stays open — they simply become a watcher, and can take a free seat */
         syncControl(room);
         broadcast(room);
@@ -666,7 +993,8 @@ var server = http.createServer(function (req, res) {
           room.E.newGame(configs, room.seed);
           if (room.AI) room.AI.reset();
         } catch (e) {
-          return sendJson(res, 500, { ok: false, error: 'could not deal: ' + e.message });
+          console.error('[deal] ' + room.code + ': ' + (e && e.stack ? e.stack : e));
+          return sendJson(res, 500, { ok: false, error: 'the game could not be dealt' });
         }
         room.status = 'playing';
         syncControl(room);
@@ -697,7 +1025,7 @@ var server = http.createServer(function (req, res) {
 
       return sendJson(res, 404, { ok: false, error: 'no such endpoint' });
     }).catch(function (e) {
-      sendJson(res, 500, { ok: false, error: e.message });
+      fail(res, 500, 'something went wrong handling that', e);
     });
   });
 });
@@ -709,7 +1037,13 @@ function begin() {
   return store.init().then(function () {
     timers.push(setInterval(tickRooms, AI_TICK_MS));
     timers.push(setInterval(housekeeping, FLUSH_MS));
-    return new Promise(function (resolve) {
+    return new Promise(function (resolve, reject) {
+      /* a port already in use is an ordinary mistake, not a stack trace */
+      server.on('error', function (e) {
+        reject(e.code === 'EADDRINUSE'
+          ? new Error('port ' + PORT + ' is already in use — is a server already running?')
+          : e);
+      });
       server.listen(PORT, function () {
         console.log('Frigate server on http://localhost:' + PORT + '/client/game.html');
         console.log('  store: ' + store.kind + '   rules: ' + RULES_VERSION);

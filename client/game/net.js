@@ -273,12 +273,32 @@ var Net = (function () {
 
   /* ---- the stream ---- */
 
+  /* Opening the stream takes a step more than it looks like it should.
+     EventSource cannot carry a header, so whatever says who we are has to go in the URL — and
+     a URL is written into every log between here and the server. The seat token is the one
+     thing that must not be, so it stays in POST bodies and buys a ticket instead: a separate
+     secret, good for reading this seat's stream and nothing else. A watcher needs none and
+     opens straight away. */
+  var gen = 0;
   function connect() {
     if (ST.es) { ST.es.close(); ST.es = null; }
-    var url = (BASE || '') + '/api/stream?room=' + encodeURIComponent(ST.room) +
-              (ST.token ? '&token=' + encodeURIComponent(ST.token) : '');
-    ST.es = new EventSource(url);
-    ST.es.onmessage = function (ev) {
+    var mine = ++gen, room = ST.room;
+    function open(ticket) {
+      /* a later connect() started while we were asking: that one owns the stream now */
+      if (mine !== gen || ST.room !== room) return;
+      var url = (BASE || '') + '/api/stream?room=' + encodeURIComponent(room) +
+                (ticket ? '&ticket=' + encodeURIComponent(ticket) : '');
+      ST.es = new EventSource(url);
+      wire(ST.es);
+    }
+    if (!ST.token) return open(null);
+    api('/api/ticket', { room: room, token: ST.token })
+      .then(function (j) { open(j.ticket); },
+            function () { open(null); });   /* no ticket: watch rather than show nothing */
+  }
+
+  function wire(es) {
+    es.onmessage = function (ev) {
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (typeof msg.rev === 'number' && msg.rev < ST.rev) return;   /* a push we have passed */
@@ -298,10 +318,11 @@ var Net = (function () {
       }
       fireLobby();
     };
-    ST.es.onerror = function () { fireError('lost the connection — trying again'); };
+    es.onerror = function () { fireError('lost the connection — trying again'); };
   }
 
   function disconnect() {
+    gen++;                 /* a ticket still on its way back no longer has a stream to open */
     if (ST.es) { ST.es.close(); ST.es = null; }
     uninstall();
   }

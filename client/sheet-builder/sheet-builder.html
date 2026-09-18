@@ -495,7 +495,7 @@
     <div class="ship-class-label">Sheet Builder</div>
   </div>
   <div class="menu-actions">
-    <button type="button" class="menu-toggle" onclick="closeBuilder()" title="Close the sheet builder"><span class="menu-ico" aria-hidden="true">✕</span><span class="menu-label">Close</span></button>
+    <button type="button" class="menu-toggle" data-act="closeBuilder" title="Close the sheet builder"><span class="menu-ico" aria-hidden="true">✕</span><span class="menu-label">Close</span></button>
   </div>
 </nav>
 
@@ -511,9 +511,9 @@
       be exported to a full frigate sheet JSON.
     </p>
     <div class="land-btns">
-      <button type="button" class="b-btn primary" onclick="startNew()">Create new character</button>
-      <button type="button" class="b-btn" onclick="loadExisting()">Load existing character</button>
-      <button type="button" class="b-btn" id="resumeBtn" onclick="resumeRun()" style="display:none;">Continue run in progress</button>
+      <button type="button" class="b-btn primary" data-act="startNew">Create new character</button>
+      <button type="button" class="b-btn" data-act="loadExisting">Load existing character</button>
+      <button type="button" class="b-btn" id="resumeBtn" data-act="resumeRun" style="display:none;">Continue run in progress</button>
     </div>
     <div class="land-opts">
       <label class="dl-row"><input type="checkbox" id="statBlocksBox"> Customise stat-blocks</label>
@@ -526,7 +526,7 @@
   <!-- SEAT BANNER: shown when the game sent us here to build for one of its players -->
   <div class="seat-banner" id="seatBanner" style="display:none;">
     <span id="seatBannerText"></span>
-    <button type="button" class="b-btn" onclick="scrapSeatBuild()">Scrap &amp; start over</button>
+    <button type="button" class="b-btn" data-act="scrapSeatBuild">Scrap &amp; start over</button>
   </div>
 
   <!-- PROGRESS -->
@@ -552,7 +552,7 @@
     <div class="eyebrow"><span class="eb-text">Review &amp; Export</span></div>
     <div class="win-nav">
       <button type="button" class="b-btn" id="expBackBtn">← Back</button>
-      <button type="button" class="b-btn primary ready" id="exportBtn" onclick="exportSheet()">⇩ Export</button>
+      <button type="button" class="b-btn primary ready" id="exportBtn" data-act="exportSheet">⇩ Export</button>
     </div>
     <div class="exp-grid" id="expSummary"></div>
     <div class="exp-field">
@@ -1982,7 +1982,7 @@ function skillsOptions() {
       if (locked) cls += ' locked';
       html += '<button type="button" class="pstep ' + cls + '"' +
         (locked ? ' disabled title="' + escapeHtml(lockReason(i)) + '"' : '') +
-        ' onclick="goStep(' + i + ')">' + (i + 1) + '. ' +
+        ' data-step="' + i + '">' + (i + 1) + '. ' +
         esc(isExport ? 'Export' : steps[i].label) + '</button>';
     }
     el.innerHTML = html;
@@ -2002,8 +2002,12 @@ function skillsOptions() {
     if (i === steps.length) { enterExport(); return; }
     goToWin(i);
   }
+  /* Quotes too. Without them this is safe in text and quietly unsafe in an attribute — and
+     half this file builds attributes by concatenation, so the distinction is one careless
+     line away from mattering. */
   function esc(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function updateProgress() {
     var el = document.getElementById('psteps');
@@ -2665,6 +2669,21 @@ function skillsOptions() {
   window.loadExisting = function () { loadExisting(); };
   window.resumeRun = function () { resumeRun(); };
   window.goStep = goStep;
+  /* Every button that used to carry its own onclick is answered from here instead. An onclick
+     attribute is script written into markup, and a page that permits any of it permits all of
+     it — which is exactly the door an injected string would need. One listener, a name per
+     button, and the page can then name the scripts it shipped and refuse everything else. */
+  var ACTIONS = { closeBuilder: closeBuilder, startNew: startNew, loadExisting: loadExisting,
+                  resumeRun: resumeRun, scrapSeatBuild: scrapSeatBuild, exportSheet: exportSheet };
+  document.addEventListener('click', function (ev) {
+    var el = ev.target.closest && ev.target.closest('[data-act],[data-step]');
+    if (!el) return;
+    var act = el.getAttribute('data-act');
+    if (act && ACTIONS[act]) { ACTIONS[act](); return; }
+    var step = el.getAttribute('data-step');
+    if (step !== null && step !== undefined) goStep(parseInt(step, 10));
+  });
+
   /* A seat arrives with a build to work on, so drop straight into the run at the first step
      that still needs an answer instead of asking whether to start one. */
   if (seatReq) resumeRun(); else show('landing');

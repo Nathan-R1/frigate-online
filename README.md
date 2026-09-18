@@ -45,6 +45,22 @@ screen; you get a six-character room code. Everyone else opens the same address,
 - A different port: `PORT=9000 ./run-online.sh` — and the same when stopping it.
 - Server log: `/tmp/frigate-online.log`
 
+### Knobs the deployment has, and why
+
+None of these need setting to play. They exist because the server also answers strangers.
+
+| Variable | Default | What it is for |
+| --- | --- | --- |
+| `FRIGATE_ORIGIN` | unset | Origins allowed to call the API from another page. Unset means local and private addresses only, and the same list is added to the page's `connect-src`. |
+| `FRIGATE_LIST` | off | Whether `/api/list` says which rooms exist. A room code is the key to that room, so the list stays empty unless you ask for it. The endpoint still answers, which is how the page and the start script find the server. |
+| `PGSSL_CA` | unset | The database's CA certificate, as a path or as PEM. With it the TLS connection to Postgres is *verified*; without it the traffic is encrypted but the far end is unproven, and the server says so at boot. |
+| `FRIGATE_TRUST_PROXY` | on under Render | Whether `X-Forwarded-For` names the caller. On a bare port the caller writes that header themselves, so it is only believed where something in front is known to set it. |
+| `FRIGATE_MAX_ROOMS` | 300 | Rooms held in memory. Past this the quietest are flushed and dropped; the store still has them. |
+| `FRIGATE_MAX_SUBS_ROOM` / `FRIGATE_MAX_SUBS` | 16 / 400 | Open streams per room, and in total. |
+| `FRIGATE_MAX_DECK` / `FRIGATE_MAX_MODULES` | 120 / 40 | How much ship one seat may describe. A real build is a dozen cards. |
+| `FRIGATE_RATE_CAP` / `FRIGATE_RATE_FILL` | 120 / 2 | Credits a caller holds, and credits back per second. A room costs 30, a stream 5, everything else 1. |
+| `FRIGATE_CSP` | on | `off` removes the Content-Security-Policy header. |
+
 ### How online play works
 
 The server is the only place the game advances. A browser sends an *intent* — play this card,
