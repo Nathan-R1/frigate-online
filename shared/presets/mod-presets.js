@@ -4,7 +4,7 @@ var MOD_PRESETS = [
     {name:'Core', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'science', onbuild:'', passive:'', onactivate:''},
     {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable. This is a Stealth Effect.', onactivate:''},
     {name:'Directed Laser Beam', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to target an Object:\nRange: any, Attacks: 1, Dmg: 2 ⚡ (4 if range >= 10)'},
-    {name:'Fusion Mine', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'offense', onbuild:'', passive:'When destroyed or an enemy enters this space activate.', onactivate:'Range: 1 AoE, Save: Piloting, Dmg: 2d6 💥\nAfter activating, remove.'},
+    {name:'Fusion Mine', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'offense', onbuild:'', passive:'When destroyed or an enemy enters this space activate.', onactivate:'Range: 1 AoE, Check: Sensors, Dmg: 2d6 💥\nAfter activating, remove.'},
     {name:'Armor', traits:'', req:'Adjacent to any', hull:'2', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:''},
     {name:'Cannon', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to Target an object:\nRange: 6 from self, Attacks: 2, Dmg: 2 💥'},
     {name:'Comms Unit', traits:'', req:'Adjacent to any', hull:'2', type:'module', tt:'science', onbuild:'', passive:'Allies within Sensor range of this gain a +2 bonus on all Checks and Saves.', onactivate:''},
