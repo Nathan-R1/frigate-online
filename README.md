@@ -52,6 +52,7 @@ None of these need setting to play. They exist because the server also answers s
 | Variable | Default | What it is for |
 | --- | --- | --- |
 | `FRIGATE_ORIGIN` | unset | Origins allowed to call the API from another page. Unset means local and private addresses only, and the same list is added to the page's `connect-src`. |
+| `FRIGATE_ROOM_TTL_DAYS` | 7 days | How long a room nobody has touched is kept. Abandoned lobbies would otherwise stay in the database for good, and the Join screen would keep offering them. 0 means never sweep. |
 | `FRIGATE_LIST` | off | Whether `/api/list` says which rooms exist. A room code is the key to that room, so the list stays empty unless you ask for it. The endpoint still answers, which is how the page and the start script find the server. |
 | `PGSSL_CA` | unset | The database's CA certificate, as a path or as PEM. With it the TLS connection to Postgres is *verified*; without it the traffic is encrypted but the far end is unproven, and the server says so at boot. |
 | `FRIGATE_TRUST_PROXY` | on under Render | Whether `X-Forwarded-For` names the caller. On a bare port the caller writes that header themselves, so it is only believed where something in front is known to set it. |
@@ -130,7 +131,7 @@ one — the game itself is safe in Postgres.
 | `FRIGATE_AI_TICK` | ms between computer actions (default 380) |
 | `FRIGATE_FLUSH` | ms before a settled game is written down (default 500) |
 | `FRIGATE_EVICT` | ms before an unwatched room leaves memory (default 10 min) |
-| `FRIGATE_ROOM_TTL_DAYS` | delete rooms older than this; default 0, meaning never |
+| `FRIGATE_ROOM_TTL_DAYS` | delete rooms untouched for this many days; default 7, and 0 means never. The clock runs from a room's last change, so a long game is never at risk, and the sweep runs at most hourly. |
 
 ## Checks
 
