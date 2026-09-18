@@ -265,25 +265,6 @@ mod: {
                                             attacks:1,dmg:'2d6',check:'Sensors',dmgType:'kinetic'},
                                            {op:'removeSelf'}] } },
 'Decoy Deployable':   { deployable:true, speed:0,
-                        passive:[{ trigger:'static', effect:[{op:'stealthMimic',as:'deployable'}] }] },
-'Shuttle Craft I':    { deployable:true, speed:2,
-                        onPlay:[{op:'addCharge',target:'self',n:1,actsAsShield:true}],
-                        activate:{ cost:[{op:'exhaustSelf'}],
-                                   effect:[{op:'moveSelf',n:2},
-                                           {op:'chooseOne', options:[
-                                             { label:'Attack', effect:[{op:'attack',range:1,from:'self',
-                                                                        attacks:1,dmg:1}] },
-                                             { label:'Scan', effect:[{op:'skillCheck',skill:'Sensors',
-                                                                      onSuccess:[{op:'scan'}]}] } ]}] } },
-'Tug Craft I':        { deployable:true, speed:2,
-                        onPlay:[{op:'addCharge',target:'self',n:1,actsAsShield:true}],
-                        activate:{ cost:[{op:'exhaustSelf'}],
-                                   effect:[{op:'moveSelf',n:2},
-                                           {op:'chooseOne', options:[
-                                             { label:'Attack', effect:[{op:'attack',range:1,from:'self',
-                                                                        attacks:1,dmg:1}] },
-                                             { label:'Shove', effect:[{op:'attack',range:1,from:'self',
-                                                                       attacks:1,dmg:0,save:'Piloting',
-                                                                       onSuccess:[{op:'moveObject',what:'target',n:1}]}] } ]}] } }
+                        passive:[{ trigger:'static', effect:[{op:'stealthMimic',as:'deployable'}] }] }
 }
 };
