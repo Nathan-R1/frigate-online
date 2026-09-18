@@ -494,7 +494,7 @@
             <button type="button" data-debug="1">On</button>
           </span>
         </div>
-        <button type="button" class="set-item hidden" id="kickBtn">Kick a player…</button>
+        <button type="button" class="set-item hidden" id="kickBtn">Manage seats…</button>
         <button type="button" class="set-item" id="keysBtn">Debug keybinds…</button>
         <button type="button" class="set-item" id="newBtn">New Game…</button>
       </div>
@@ -538,9 +538,11 @@
 <div class="mp-back hidden" id="kickPop"><div class="mp-box" role="dialog" aria-modal="true"
      aria-labelledby="kickPopName">
   <button type="button" class="mp-close" id="kickPopClose" title="Close">&#10005;</button>
-  <div class="mp-head"><span class="mp-name" id="kickPopName">Kick a player</span></div>
-  <p class="rost-note">You sat down first, so the seats are yours to clear. Freeing a seat does
-     not remove that player from the room — they keep watching, and can take any free seat.</p>
+  <div class="mp-head"><span class="mp-name" id="kickPopName">Seats</span></div>
+  <p class="rost-note">You sat down first, so the seats are yours to arrange. Freeing a seat
+     does not remove that player from the room — they keep watching, and can take any free
+     seat. Handing one to the computer lets a game carry on when somebody has gone; opening a
+     computer seat back up leaves it waiting for a person.</p>
   <div id="kickSeats"></div>
   <p id="kickErr" class="rost-note" style="color:var(--red);min-height:1em"></p>
 </div></div>
@@ -618,6 +620,7 @@
      leave it — close the tab, come back tomorrow, and it is still there. Games are saved, so
      the server restarting does not end one.</p>
   <div id="lobbySeats"></div>
+  <p id="lobbyHint" class="rost-note hidden" style="color:var(--amber)"></p>
   <p id="lobbyErr" class="rost-note" style="color:var(--red);min-height:1em"></p>
   <p style="margin:16px 0 0">
     <button type="button" class="g-btn" id="lobbyStart">Start the game</button>
@@ -2450,10 +2453,10 @@
     var badge = document.getElementById('netBadge');
     var codeBox = document.getElementById('roomCode');
 
-    function show(el) {
-      [modePick, setupPick, roomPick, lobbyPick].forEach(function (x) { x.classList.add('hidden'); });
-      if (el) el.classList.remove('hidden');
-    }
+    /* One list of screens, kept in one place: showPick above owns it, and this is the same
+       thing said with an element rather than a name. Two lists that had to agree is how a
+       screen gets left on top of the board. */
+    function show(el) { showPick(el ? el.id : null); }
     function say(id, msg) { document.getElementById(id).textContent = msg || ''; }
     /* An online button that cannot reach a server has to say so where it was pressed, not
        only in the corner: the usual reason is that the server simply is not running. */
@@ -2484,21 +2487,36 @@
       if (!document.getElementById('kickPop').classList.contains('hidden')) drawKickList();
     }
 
+    /* Every seat but your own, each offering the one thing worth doing to it: a computer seat
+       can be opened up for a person, a seat somebody holds can be freed, and an empty one can
+       be handed to the computer so the game is not left waiting on a player who has gone. */
     function drawKickList() {
       var lobby = Net.lobby(), me = Net.seat();
-      var rows = (lobby ? lobby.seats : []).filter(function (st) {
-        return st.kind === 'human' && st.taken && st.idx !== me;
-      });
+      var rows = (lobby ? lobby.seats : []).filter(function (st) { return st.idx !== me; });
+      function act(kind, idx, label) {
+        return '<button type="button" class="g-btn ghost" data-kind="' + kind + '" data-seat="' +
+               idx + '" style="padding:3px 9px;font-size:11px">' + label + '</button>';
+      }
       document.getElementById('kickSeats').innerHTML = rows.length
         ? rows.map(function (st) {
+            var what, btn;
+            if (st.kind === 'computer') {
+              what = 'computer';
+              btn = act('human', st.idx, 'Open it up');
+            } else if (st.taken) {
+              what = st.watching ? 'here' : 'not watching';
+              btn = '<button type="button" class="g-btn ghost" data-kick="' + st.idx +
+                    '" style="padding:3px 9px;font-size:11px">Free this seat</button>';
+            } else {
+              what = 'empty';
+              btn = act('computer', st.idx, 'Give to computer');
+            }
             return '<div class="lb-seat">' +
               '<span class="lb-dot" style="background:' + SEAT_HEX[st.idx % 4] + '"></span>' +
               '<span class="lb-name">' + esc(st.name) + '</span>' +
-              '<span class="lb-who">' + (st.watching ? 'here' : 'not watching') + '</span>' +
-              '<button type="button" class="g-btn ghost" data-kick="' + st.idx +
-              '" style="padding:3px 9px;font-size:11px">Free this seat</button></div>';
+              '<span class="lb-who">' + what + '</span>' + btn + '</div>';
           }).join('')
-        : '<p class="rost-note">Nobody else is sitting down.</p>';
+        : '<p class="rost-note">There are no other seats.</p>';
     }
 
     function seatRow(seat, lobby) {
@@ -2526,7 +2544,14 @@
       document.getElementById('lobbyCode').textContent = lobby.room;
       document.getElementById('lobbySeats').innerHTML =
         lobby.seats.map(function (st) { return seatRow(st, lobby); }).join('');
-      document.getElementById('lobbyStart').disabled = !!lobby.started || Net.seat() === null;
+      /* The Start button goes dead when this browser holds no seat, which is right and says
+         nothing. Now that hosting no longer sits you down on your behalf, the reason has to be
+         on screen or the host is left looking at a button that will not press. */
+      var seated = Net.seat() !== null;
+      document.getElementById('lobbyStart').disabled = !!lobby.started || !seated;
+      var hint = document.getElementById('lobbyHint');
+      hint.textContent = (!lobby.started && !seated) ? 'Take a seat to start the game.' : '';
+      hint.classList.toggle('hidden', !hint.textContent);
       markLeader(lobby);
       var me = Net.seat();
       /* A seat that has never been claimed is simply free; only one that was held and then
@@ -2563,6 +2588,13 @@
       document.getElementById('kickPop').classList.remove('hidden');
     });
     document.getElementById('kickSeats').addEventListener('click', function (e) {
+      var k = e.target.closest('button[data-kind]');
+      if (k) {
+        say('kickErr', '');
+        Net.setSeatKind(+k.getAttribute('data-seat'), k.getAttribute('data-kind'))
+          .then(drawKickList, function (err) { say('kickErr', err.message); });
+        return;
+      }
       var b = e.target.closest('button[data-kick]');
       if (!b) return;
       var idx = +b.getAttribute('data-kick');
@@ -2593,12 +2625,14 @@
       });
       say('lobbyErr', '');
       netTrouble('');
+      /* The table goes up, and then the host picks a chair at it like anybody else.
+         Sitting them down in the first human seat automatically was one fewer click and the
+         wrong seat surprisingly often — you may have built the roster with yourself third, or
+         want the team that starts second. The lobby already offers every free seat; the host
+         simply arrives as a watcher and takes one. Watching is why the stream is opened here:
+         without it the lobby would not show anybody else arriving. */
       Net.create(seats)
-        .then(function () {
-          var first = seats.map(function (s, i) { return i; })
-            .filter(function (i) { return seats[i].kind === 'human'; })[0];
-          return first === undefined ? null : Net.claim(first);
-        })
+        .then(function () { Net.connect(); })
         .catch(function (err) { netTrouble(err.message); });
     });
 
@@ -2858,9 +2892,18 @@
     holdUntil = Date.now() + AI_TELEGRAPH_MS;
     Engine.emit();
   });
+  /* Any of these on screen means nobody is playing the board behind it.
+     It used to ask only about the roster, which was true when the roster was the only thing
+     that covered the board. It is not any more: waiting in a lobby leaves this page's own
+     practice game running underneath, and a computer seat in it will happily take its turn —
+     so the host watches pieces move in a game that has not started. Online is not a good
+     enough test on its own, because a room in its lobby has no state yet and the page does not
+     count as online until one arrives. What is true in every one of these cases is simply that
+     a picker is up. */
   function menuOpen() {
-    return !document.getElementById('modePick').classList.contains('hidden') ||
-           !document.getElementById('setupPick').classList.contains('hidden');
+    return PICKERS.some(function (id) {
+      return !document.getElementById(id).classList.contains('hidden');
+    });
   }
   setInterval(function () {
     var G = Engine.get();

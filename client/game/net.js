@@ -277,6 +277,12 @@ var Net = (function () {
       .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
   }
 
+  /* The leader hands a seat to the computer, or takes it back for a person. */
+  function setSeatKind(seatIdx, kind) {
+    return api('/api/seatkind', { room: ST.room, token: ST.token, seat: seatIdx, kind: kind })
+      .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
+  }
+
   function start() {
     return api('/api/start', { room: ST.room, token: ST.token }).then(function (j) {
       ST.lobby = j.lobby; fireLobby(); return j.lobby;
@@ -382,7 +388,7 @@ var Net = (function () {
     seat: function () { return ST.token ? ST.seat : null; },
     lobby: function () { return ST.lobby; },
     create: create, look: look, claim: claim, resume: resume, release: release, kick: kick,
-    openGames: openGames,
+    openGames: openGames, setSeatKind: setSeatKind,
     /* are you the one who sat down first, and so the one who can free a seat? */
     isLeader: function () {
       return !!(ST.lobby && ST.seat !== null && ST.token && ST.lobby.leader === ST.seat);
