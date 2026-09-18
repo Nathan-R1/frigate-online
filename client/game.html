@@ -2575,6 +2575,30 @@
         '</div>';
     }
 
+    /* What sits behind a lobby is not a game. The server has not dealt one yet and says so by
+       sending no state at all — which leaves whatever this page last played still on the board,
+       and the overlay is a dim rather than a curtain, so you sit in a new room looking through
+       it at your old game. That reads as though joining did nothing.
+
+       So the table is laid out for the room you are actually in: its seats, on their teams, as
+       bare Cores, because nobody's deck is anybody else's business until the deal. It is
+       plainly not a game in progress, which is the point. The moment the server deals, its
+       state replaces this wholesale. Keyed on the room so a stream of lobby updates does not
+       rebuild it on every one. */
+    var lobbyTable = null;
+    function layOutLobbyTable(lobby) {
+      var key = lobby.room + ':' + lobby.seats.map(function (st) {
+        return st.team + (st.kind === 'computer' ? 'c' : 'h');
+      }).join(',');
+      if (lobbyTable === key) return;
+      lobbyTable = key;
+      selMod = null;
+      AICommander.reset();
+      Engine.newGame(lobby.seats.map(function (st) {
+        return { name: st.name, team: st.team, ai: st.kind === 'computer' };
+      }));
+    }
+
     Net.onError(function (msg) { setBadge(msg, true); say('lobbyErr', msg); });
 
     Net.onLobby(function (lobby) {
@@ -2608,9 +2632,23 @@
                 (lobby.started ? '' : '<br>Waiting to start') +
                 (empties.length ? '<br><span class="gone">' + esc(gone) + '</span>' : ''));
       if (lobby.started) {
-        show(null);
+        /* A started room is only worth uncovering the board for once the board is that room's
+           game. Between asking about a room and the first push that carries its state there is
+           at least one round trip, and for a returning player three — a claim and a ticket
+           before the stream is even opened. Locally that is a few milliseconds and nobody ever
+           saw it. Over a real network it is a visible flash of the last game this page played,
+           and against an instance that has gone to sleep it is however long the host takes to
+           wake up, with nothing over the board at all. So the screen stays covered, and the
+           table underneath is laid out for this room rather than left as the old one. */
+        if (Net.hasState()) {
+          show(null);
+        } else {
+          layOutLobbyTable(lobby);
+          say('roomErr', 'joining…');
+        }
         setBadge(empties.length ? gone : '', empties.length > 0);
       } else {
+        layOutLobbyTable(lobby);
         show(lobbyPick);
         setBadge('');
       }
