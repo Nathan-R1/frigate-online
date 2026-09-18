@@ -311,12 +311,93 @@ var AICommander = (function () {
        will never be offered one must not be counted into range by it. */
     var tgts = allFoeObjects(s);
     if (!K.noRocks(name)) tgts = tgts.concat(pinningRocks(s));
+    /* A piece that closes before firing is only worth spending if it can genuinely arrive —
+       walked, not measured. Trusting the straight line is what sent torpedoes off to die in
+       empty space: a target thirteen squares away is not thirteen squares away if the way is
+       blocked, and a one-shot that falls short is simply gone. */
+    if (extraMove > 0) return !!routeToShot(origin, tgts, reach, extraMove);
     for (var i = 0; i < tgts.length; i++) {
       var d = Engine.dist(origin, tgts[i]);
       if (d <= reach && Engine.hasLos(origin, tgts[i])) return true;   /* can hit from here */
-      if (extraMove > 0 && d <= reach + extraMove) return true;        /* can hit after its run */
     }
     return false;
+  }
+
+  /* ---- can it actually get somewhere worth shooting from? ----
+     A straight line is a guess. A deployable may not enter an occupied square at all, so the
+     distance that matters is the walk, not the gap — and the two differ exactly where it
+     matters, in the crowded space around a hull. This walks the empty squares outward and
+     returns the route to the nearest one that can see a target within reach, or null when
+     there is no such square. The same answer then serves twice: whether to spend the thing at
+     all, and where to send it once spent. */
+  function routeToShot(obj, tgts, reach, move) {
+    if (!tgts.length) return null;
+    function shoots(x, y) {
+      var at = { x: x, y: y };
+      for (var i = 0; i < tgts.length; i++)
+        if (Engine.dist(at, tgts[i]) <= reach && Engine.hasLos(at, tgts[i])) return true;
+      return false;
+    }
+    if (shoots(obj.x, obj.y)) return [];               /* already in a firing position */
+    var n = Engine.RULES.boardSize;
+    var start = obj.x + ',' + obj.y;
+    var seen = {}, q = [{ x: obj.x, y: obj.y, d: 0, prev: null }], head = 0;
+    seen[start] = 1;
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (head < q.length) {
+      var cur = q[head++];
+      if (cur.d >= move) continue;
+      for (var i = 0; i < 4; i++) {
+        var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
+        if (nx < 0 || ny < 0 || nx >= n || ny >= n || seen[k]) continue;
+        seen[k] = 1;
+        if (Engine.cellAt(nx, ny)) continue;           /* nothing may be walked through */
+        var node = { x: nx, y: ny, d: cur.d + 1, prev: cur };
+        if (shoots(nx, ny)) {
+          var out = [];
+          for (var m = node; m && m.prev; m = m.prev) out.unshift({ x: m.x, y: m.y });
+          return out;
+        }
+        q.push(node);
+      }
+    }
+    return null;
+  }
+
+  /* No shot available this turn, but a piece that survives its activation is still better off
+     closer than where it stands. Walks as far toward the nearest target as its movement and
+     the obstacles allow, so an activation that cannot fire is at least an advance. */
+  function routeCloser(obj, tgts, move) {
+    if (!tgts.length) return null;
+    function near(x, y) {
+      var best = 1e9;
+      for (var i = 0; i < tgts.length; i++)
+        best = Math.min(best, Engine.dist({ x: x, y: y }, tgts[i]));
+      return best;
+    }
+    var n = Engine.RULES.boardSize;
+    var seen = {}, q = [{ x: obj.x, y: obj.y, d: 0, prev: null }], head = 0;
+    seen[obj.x + ',' + obj.y] = 1;
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    var bestNode = null, bestScore = near(obj.x, obj.y);
+    while (head < q.length) {
+      var cur = q[head++];
+      if (cur.d >= move) continue;
+      for (var i = 0; i < 4; i++) {
+        var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
+        if (nx < 0 || ny < 0 || nx >= n || ny >= n || seen[k]) continue;
+        seen[k] = 1;
+        if (Engine.cellAt(nx, ny)) continue;
+        var node = { x: nx, y: ny, d: cur.d + 1, prev: cur };
+        var score = near(nx, ny);
+        if (score < bestScore) { bestScore = score; bestNode = node; }
+        q.push(node);
+      }
+    }
+    if (!bestNode) return null;
+    var out = [];
+    for (var m = bestNode; m && m.prev; m = m.prev) out.unshift({ x: m.x, y: m.y });
+    return out;
   }
 
   /* A deployable asked where to go. Answering "nowhere" is what this used to do, which is why
@@ -328,29 +409,18 @@ var AICommander = (function () {
     var found = Engine.objectById(p.objId);
     if (!found) return;
     var obj = found.obj;
+    var name = obj.name;
+    var reach = K.attackReach(s, name);
+    if (reach === null) return;                          /* it is not going anywhere to shoot */
     var tgts = allFoeObjects(s);
-    if (!tgts.length) return;
-    var best = null, bd = 1e9;
-    tgts.forEach(function (t) { var d = Engine.dist(obj, t); if (d < bd) { bd = d; best = t; } });
-    if (!best) return;
-    var guard = 0;
-    while (guard++ < 64) {
+    if (!K.noRocks(name)) tgts = tgts.concat(pinningRocks(s));
+    /* the best square to shoot from, or failing that the best square to be in */
+    var route = routeToShot(obj, tgts, reach, p.left) || routeCloser(obj, tgts, p.left);
+    if (!route || !route.length) return;
+    for (var i = 0; i < route.length; i++) {
       var pend = Engine.get().pending;
       if (!pend || pend.kind !== 'moveObject' || pend.left <= 0) break;
-      var dx = best.x - obj.x, dy = best.y - obj.y;
-      if (Math.abs(dx) + Math.abs(dy) <= 1) break;        /* close enough to strike */
-      var sx = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
-      var sy = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
-      var moved = false;
-      /* close the longer leg first, and go round anything in the way rather than stopping */
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        if (sx) moved = Engine.stepObject(p.objId, sx, 0);
-        if (!moved && sy) moved = Engine.stepObject(p.objId, 0, sy);
-      } else {
-        if (sy) moved = Engine.stepObject(p.objId, 0, sy);
-        if (!moved && sx) moved = Engine.stepObject(p.objId, sx, 0);
-      }
-      if (!moved) break;
+      if (!Engine.stepObject(p.objId, route[i].x - obj.x, route[i].y - obj.y)) break;
     }
   }
 

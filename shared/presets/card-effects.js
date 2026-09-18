@@ -258,8 +258,11 @@ mod: {
                         passive:[{ trigger:'onDestroyedOrEnemyEnters',
                                    effect:[{op:'activateSelf'}] }],
                         activate:{ cost:[],
-                                   effect:[{op:'attack',range:1,from:'self',aoe:'radius',auto:true,
-                                            attacks:1,dmg:'2d6',save:'Piloting',dmgType:'kinetic'},
+                                   /* A Sensors check, not a gun's roll. `save:` was carried
+                                      here for a long time and read by nothing at all, so the
+                                      blast was quietly rolling a flat d6. */
+                                   effect:[{op:'attack',range:1,from:'self',aoe:'radius',
+                                            attacks:1,dmg:'2d6',check:'Sensors',dmgType:'kinetic'},
                                            {op:'removeSelf'}] } },
 'Decoy Deployable':   { deployable:true, speed:0,
                         passive:[{ trigger:'static', effect:[{op:'stealthMimic',as:'deployable'}] }] },

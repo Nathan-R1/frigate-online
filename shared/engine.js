@@ -481,7 +481,7 @@ var Engine = (function () {
          deployables — a mine asked to detonate after it has been taken off the board is not
          found at all. The queued effect keeps a direct reference, so the blast still knows
          where the mine was standing. */
-      fire(s, 'onDestroyedOrEnemyEnters', { source: dep });
+      fire(s, 'onDestroyedOrEnemyEnters', { self: dep, source: dep });
       vacate(dep.x, dep.y);
       delete s.deployables[dep.id];
     }
@@ -640,6 +640,11 @@ var Engine = (function () {
     passiveHolders(s).forEach(function (h) {
       h.passives.forEach(function (pas) {
         if (pas.trigger !== trigger) return;
+        /* Most events are announcements: everything a side holds gets to answer them. Some are
+           about one particular piece — a mine is destroyed, and it is that mine that goes off,
+           not every mine on the board. Such an event names the piece it happened to, and only
+           that piece's own passive is offered the chance to answer. */
+        if (payload && payload.self && h.obj !== payload.self) return;
         var ctx = {};
         for (var k in h.ctx) ctx[k] = h.ctx[k];
         for (var k2 in (payload || {})) ctx[k2] = payload[k2];
@@ -751,7 +756,9 @@ var Engine = (function () {
     var targets = pool.filter(function (m) {
       /* a beam cannot grab the very module it is firing from */
       if (ctx.module && m.id === ctx.module.id) return false;
-      return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
+      return origins.some(function (or) {
+        return dist(or, m) <= reach + powerOf(or) && hasLos(or, m);
+      });
     });
     if (!targets.length) {
       /* Nothing in reach. Saying so and walking away spends the weapon on empty space, and the
@@ -759,6 +766,9 @@ var Engine = (function () {
          other, with nothing to click. Taking it back refunds the activation; skipping leaves
          it spent, which is what used to happen without being asked. */
       log(s.name + ' has no target in range with line of sight.', s);
+      /* Nothing paid, nobody to ask: a mine that finds nothing simply finds nothing, and the
+         player whose turn it happens to be is not the one being offered the choice. */
+      if (unattended(o, ctx)) return;
       prompt({ kind: 'target', label: 'Nothing in range', targets: [],
                envelope: firingEnvelope(origins, reach),
                onResolve: function () {} });
@@ -772,7 +782,7 @@ var Engine = (function () {
       /* Some blasts are a decision and some are physics. A mine going off is not a shot its
          owner chooses to take — and the prompt would be put to whoever is standing on it,
          which is the wrong person entirely. */
-      if (o.auto) {
+      if (unattended(o, ctx)) {
         enqueue(ids.map(function (id) { return { op: '__shot', shot: o, targetId: id }; }), ctx);
         return;
       }
@@ -791,6 +801,30 @@ var Engine = (function () {
   OPS.__shot = function (o, ctx) { shoot(o.shot, ctx, o.targetId); };
 
   /* One target, start to finish. */
+  /* ---- Power tokens ----
+     Divert Power puts a token on a module and the card says what that is worth: +1 Hull, Move,
+     Range and Damage. Rather than a general buff engine, the token is simply read at each of
+     the four places a module's number is asked for, which is what the card describes and all
+     it describes. Hull is handled where the token is placed, because hull is a pool rather
+     than a reading. */
+  function powerOf(m) { return (m && m.tokens && m.tokens.Power) || 0; }
+
+  /* ---- Decomp Strikes ----
+     "When you make an attack roll with a module adjacent to an Asteroid or other terrain you
+     may reroll each missed attack once." Decided here for the same reason point defence is:
+     it has to answer in the middle of a roll, and the passive queue only runs between actions,
+     which is why this card has never done anything. The "may" is taken generously — a free
+     reroll nobody would decline is not worth a prompt per missed shot. */
+  function hasInPlay(s, name) {
+    return s.played.some(function (id) { return s.cards[id] && s.cards[id].name === name; });
+  }
+  function besideTerrain(m) {
+    if (!m) return false;
+    var ids = Object.keys(G.asteroids || {});
+    for (var i = 0; i < ids.length; i++) if (dist(m, G.asteroids[ids[i]]) === 1) return true;
+    return false;
+  }
+
   /* ---- point defence ----
      Is this module standing under one of its owner's P.D. modules? Range 1, as the card says,
      measured from the P.D. to the piece being shot at — so a P.D. covers itself and everything
@@ -810,6 +844,15 @@ var Engine = (function () {
     return false;
   }
 
+  /* Is there somebody at the controls to put this question to?
+     Two ways there is not. A blast that is happening rather than being chosen — a mine going
+     off because somebody drove over it — has nothing to decide. And a side that is not the one
+     whose turn it is has nobody present to decide it: the prompt would be shown to whoever is
+     sitting there, which for a mine is precisely the player it is going off underneath. */
+  function unattended(o, ctx) {
+    return !!(o.auto || ctx.auto || !ctx.side || ctx.side.idx !== G.active);
+  }
+
   function shoot(o, ctx, targetId) {
     var s = ctx.side;
     var t = objectById(targetId);
@@ -820,10 +863,12 @@ var Engine = (function () {
     var from = null, fd = 1e9;
     origins.forEach(function (or) {
       var d = dist(or, t.obj);
-      if (d <= reach && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
+      if (d <= reach + powerOf(or) && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
     });
     var n = resolveCount(s, o.attacks, ctx);
-    var dmg = resolveCount(s, o.dmg, ctx);
+    var base = resolveCount(s, o.dmg, ctx);
+    /* a powered gun hits harder; a zero-damage beam is not a gun, and stays zero */
+    var dmg = base > 0 ? base + powerOf(from) : 0;
     var hit = false;
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
@@ -832,6 +877,7 @@ var Engine = (function () {
        a module under that umbrella cannot be hit by one. Only deployables: a P.D. is close-in
        defence, not a shield against the enemy fleet's guns. */
     var swatted = !!ctx.deployable && !friendly && pointDefenceCovers(t);
+    var decomp = hasInPlay(s, 'Decomp Strikes') && besideTerrain(from);
     /* The dice are about to be cast, so the activation can no longer be taken back. A
        rider's prompt may still be cancelled, but that cancels only the rider — the cost
        stays paid and the card stays exhausted. */
@@ -847,6 +893,12 @@ var Engine = (function () {
       var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
             : swatted ? { hit: false, text: 'P.D. covers the target — the shot is swatted down' }
             : o.check ? check(s, o.check, RULES.dc) : attackRoll();
+      /* one second swing per missed shot, when the gun is working beside terrain */
+      if (!c.hit && !swatted && decomp) {
+        var again = o.check ? check(s, o.check, RULES.dc) : attackRoll();
+        log('  ' + c.text + ' — miss; Decomp Strikes rerolls.');
+        c = again;
+      }
       if (c.hit) {
         log('  ' + c.text + ' — hit.');
         if (dmg > 0) {
@@ -900,6 +952,11 @@ var Engine = (function () {
     /* Move N is N for EACH module. "gain N Move for each module" is therefore just N —
        multiplying by the module count here would apply the same factor twice. */
     var n = (o.from === 'stat' && o.stat === 'speed') ? speedOf(s) : resolveCount(s, o.n, ctx);
+    /* Power on the module making the grant raises the grant itself, for every piece it reaches
+       — a powered Graviton Engine gives Move 4 per module rather than Move 3 and a limp. It
+       belongs here rather than where the Move is handed out, because it is a property of the
+       engine being run, not of whoever receives its output. */
+    n += powerOf(ctx.module);
     s.moveBonus = 0;
     /* queue the grant, then the passives in front of it: an optional one may stop to ask,
        and its answer has to be in before the Move is handed out */
@@ -1377,7 +1434,29 @@ var Engine = (function () {
     var e = fx(holder.name, (ctx.card && !ctx.module) ? 'tech' : 'mod');
     var a = e && e.activate;
     if (!a || !a.effect) return;
-    enqueue(a.effect, ctx);
+    /* This is the piece acting of its own accord, so nothing it does stops to ask — including
+       on its owner's own turn, where there would otherwise be somebody to ask. */
+    var sub = {};
+    for (var k in ctx) sub[k] = ctx[k];
+    sub.auto = true;
+    enqueue(a.effect, sub);
+  };
+
+  /* Put a token on one of your modules. Only Power exists so far, and it is the one case where
+     placing the token does something at once rather than being read later: Hull is a pool, not
+     a reading, so the point is added here and the module is that much harder to kill from now
+     on. */
+  OPS.addToken = function (o, ctx) {
+    var s = ctx.side, token = o.token || 'Power';
+    function give(m) {
+      m.tokens = m.tokens || {};
+      m.tokens[token] = (m.tokens[token] || 0) + 1;
+      if (token === 'Power') { m.hull += 1; m.hullMax += 1; }
+      log(s.name + ' diverts power to ' + m.name + '.', s);
+      emit();
+    }
+    if (o.target === 'choose') { withOwnModule(s, 'Give a Power token to…', give); return; }
+    if (ctx.module) give(ctx.module);
   };
 
   /* every remaining op is declared in card-effects.js but not yet simulated; it logs
@@ -1574,7 +1653,7 @@ var Engine = (function () {
       if (od) {
         log(m.name + ' overruns ' + od.name + '.');
         /* "an enemy enters this space" — driving over a mine is the case it exists for */
-        fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { source: od });
+        fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
         vacate(od.x, od.y);
         delete G.players[c.owner].deployables[c.id];
       }
@@ -1876,6 +1955,7 @@ var Engine = (function () {
     connectedToCore: connectedToCore,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
+    isCoreLike: function (s2, m) { return isCoreLike(s2, m); },
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
