@@ -241,7 +241,7 @@ mod: {
                         activate:{ cost:[],
                                    effect:[{op:'moveSelf',n:12,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:3,
-                                            check:'Sensors',dmgType:'kinetic'},
+                                            check:'Sensors',dmgType:'kinetic',targets:'ships'},
                                            {op:'removeSelf'}] } },
 /* It arrives ready rather than spent — it can run the turn it is launched — and it is spent by
    firing rather than by existing. A round that connects is gone, which is what a guided round
@@ -258,7 +258,7 @@ mod: {
                         passive:[{ trigger:'onDestroyedOrEnemyEnters',
                                    effect:[{op:'activateSelf'}] }],
                         activate:{ cost:[],
-                                   effect:[{op:'attack',range:1,from:'self',aoe:'radius',
+                                   effect:[{op:'attack',range:1,from:'self',aoe:'radius',auto:true,
                                             attacks:1,dmg:'2d6',save:'Piloting',dmgType:'kinetic'},
                                            {op:'removeSelf'}] } },
 'Decoy Deployable':   { deployable:true, speed:0,

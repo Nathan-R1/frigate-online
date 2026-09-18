@@ -307,13 +307,51 @@ var AICommander = (function () {
   function hasTargetFor(s, origin, name, extraMove) {
     var reach = K.attackReach(s, name);
     if (reach === null) return true;                  /* not a weapon — no range to satisfy */
-    var tgts = allFoeObjects(s).concat(pinningRocks(s));
+    /* A rock is a reason to fire a gun and not a reason to spend a torpedo, so a weapon that
+       will never be offered one must not be counted into range by it. */
+    var tgts = allFoeObjects(s);
+    if (!K.noRocks(name)) tgts = tgts.concat(pinningRocks(s));
     for (var i = 0; i < tgts.length; i++) {
       var d = Engine.dist(origin, tgts[i]);
       if (d <= reach && Engine.hasLos(origin, tgts[i])) return true;   /* can hit from here */
       if (extraMove > 0 && d <= reach + extraMove) return true;        /* can hit after its run */
     }
     return false;
+  }
+
+  /* A deployable asked where to go. Answering "nowhere" is what this used to do, which is why
+     a torpedo or a TAT round sat exactly where it was launched and then attacked whatever
+     happened to be beside it — usually nothing at all. It now closes on the nearest enemy
+     piece until it is adjacent or out of movement, so the attack that follows in the same
+     activation has something within reach. */
+  function flyObject(s, p) {
+    var found = Engine.objectById(p.objId);
+    if (!found) return;
+    var obj = found.obj;
+    var tgts = allFoeObjects(s);
+    if (!tgts.length) return;
+    var best = null, bd = 1e9;
+    tgts.forEach(function (t) { var d = Engine.dist(obj, t); if (d < bd) { bd = d; best = t; } });
+    if (!best) return;
+    var guard = 0;
+    while (guard++ < 64) {
+      var pend = Engine.get().pending;
+      if (!pend || pend.kind !== 'moveObject' || pend.left <= 0) break;
+      var dx = best.x - obj.x, dy = best.y - obj.y;
+      if (Math.abs(dx) + Math.abs(dy) <= 1) break;        /* close enough to strike */
+      var sx = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+      var sy = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+      var moved = false;
+      /* close the longer leg first, and go round anything in the way rather than stopping */
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        if (sx) moved = Engine.stepObject(p.objId, sx, 0);
+        if (!moved && sy) moved = Engine.stepObject(p.objId, 0, sy);
+      } else {
+        if (sy) moved = Engine.stepObject(p.objId, 0, sy);
+        if (!moved && sx) moved = Engine.stepObject(p.objId, sx, 0);
+      }
+      if (!moved) break;
+    }
   }
 
   /* ---------- prompt answers ---------- */
@@ -324,7 +362,7 @@ var AICommander = (function () {
        on purpose, so it fires */
     if (p.kind === 'confirm') return true;
     if (p.kind === 'move') { manoeuvre(s, st); return null; }
-    if (p.kind === 'moveObject') return null;
+    if (p.kind === 'moveObject') { flyObject(s, p); return null; }
     if (p.kind === 'space') {
       var name = AIPlacement.nameFromLabel(p.label);
       return AIPlacement.best(s, foeOf(s), name, p.filter);
