@@ -745,7 +745,23 @@ function serveStatic(req, res, urlPath) {
   var rel;
   try { rel = decodeURIComponent(urlPath.split('?')[0]); } catch (e) { rel = null; }
   if (rel === null || rel.indexOf('\0') >= 0) { res.writeHead(400); res.end('no'); return; }
-  if (rel === '/' || rel === '') rel = '/client/game.html';
+
+  /* The front door is a redirect, not a quiet substitution.
+     Handing back game.html while the address bar still says "/" looks like it works and is
+     not: the page asks for css/style.css and game/net.js, which are written relative to the
+     directory it lives in, and a browser sitting at the root resolves them to /css and /game,
+     where nothing is. Sending it to the real address first means every relative path in the
+     page resolves the way the page was written. The other way out would be a <base> tag, and
+     that door is deliberately shut — base-uri 'none' in the policy above. */
+  if (rel === '/' || rel === '') {
+    res.writeHead(302, guarded({ 'Location': '/client/game.html', 'Cache-Control': 'no-store' }));
+    res.end();
+    return;
+  }
+
+  /* Browsers ask for this whether or not anybody offered one; an answer costs less than a
+     404 in everybody's console. */
+  if (rel === '/favicon.ico') { res.writeHead(204, guarded({})); res.end(); return; }
 
   var parts = rel.split('/').filter(Boolean);
   var bad = !parts.length || !SERVABLE[parts[0]] ||
