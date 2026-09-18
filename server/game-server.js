@@ -651,10 +651,13 @@ function csp(nonce) {
     "default-src 'self'",
     "script-src 'self'" + (nonce ? " 'nonce-" + nonce + "'" : ''),
     /* inline style attributes are how the board is coloured, so this one cannot be a nonce:
-       a nonce in style-src would switch 'unsafe-inline' off and take the board with it */
-    "style-src 'self' 'unsafe-inline'",
+       a nonce in style-src would switch 'unsafe-inline' off and take the board with it.
+       Google Fonts needs naming twice and in two different directives, which is what makes it
+       easy to half-fix: googleapis serves the stylesheet, gstatic serves the .woff2 files
+       that stylesheet then asks for. Allow one without the other and the fonts still fail. */
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data:",
-    "font-src 'self'",
+    "font-src 'self' https://fonts.gstatic.com",
     "connect-src " + ["'self'"].concat(ALLOWED).join(' '),
     "base-uri 'none'",
     "object-src 'none'",
@@ -793,8 +796,12 @@ var server = http.createServer(function (req, res) {
     return sendJson(res, 400, { ok: false, error: 'no such room' });
 
   if (route === '/healthz') {
-    /* Enough for a host to know we are alive, and nothing a stranger can learn from. */
-    return sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()) });
+    /* Enough for a host to know we are alive, plus the two things worth knowing at a glance
+       about a deploy: which store it came up on and which build is live. A stranger learns
+       both, and that is the trade — a service that quietly fell back to the file store looks
+       identical to a healthy one otherwise, and on an ephemeral disk that costs every game. */
+    return sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()),
+                                store: store.kind, rules: RULES_VERSION });
   }
 
   if (route === '/api/stream') {
