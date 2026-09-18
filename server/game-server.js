@@ -306,8 +306,12 @@ function flush(room, force) {
   room.dirty = false;
   room.saving = room.saving.then(function () {
     if (state) state.rules = RULES_VERSION;
+    /* seed and created travel with every save, not because a save normally needs them — the
+       store has them already — but so that a store which has lost the record can be handed a
+       complete one back rather than a partial rebuild. */
     return store.saveRoom(room.code, {
-      version: room.version, status: room.status, state: state, seats: seatRecords(room)
+      version: room.version, status: room.status, state: state, seats: seatRecords(room),
+      seed: room.seed, created: room.created
     });
   }).then(function (rec) {
     if (rec === false) {
