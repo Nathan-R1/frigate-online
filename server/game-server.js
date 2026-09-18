@@ -44,6 +44,7 @@
  *   POST /api/claim    {room, seat, token?}                           -> {token, seat}
  *   POST /api/release  {room, token}                                  -> give the seat up
  *   POST /api/kick     {room, token, seat}                             -> the leader frees a seat
+ *   POST /api/seatkind {room, token, seat, kind}                       -> leader: human <-> computer
  *   POST /api/start    {room, token}                                  -> deal and begin
  *   POST /api/cmd      {room, token, seq, cmd, args}                  -> one intent
  *   POST /api/ticket   {room, token}                                  -> a ticket for the stream
@@ -975,6 +976,37 @@ var server = http.createServer(function (req, res) {
            is what makes a reload silent. Otherwise the seat has to actually be free. */
         var mine = seatOf(room, body.token);
         if (mine) {
+          /* Unless you asked for a different one. Handing back the seat you are in is right for
+             a reload, which sends no seat or its own, and wrong for somebody clicking "Take it"
+             on the chair beside them — they were told the seat was free and then nothing moved.
+             Before the deal a seat is just a chair; after it, it is a hand of cards and a
+             half-built ship, so this is a lobby move only. The token comes with you: it is who
+             you are, not where you sat. */
+          var asked = (body.seat === undefined || body.seat === null) ? mine.idx : (body.seat | 0);
+          if (asked !== mine.idx && room.status === 'lobby') {
+            var to = room.seats[asked];
+            if (!to) return sendJson(res, 400, { ok: false, error: 'no such seat' });
+            if (to.kind === 'computer')
+              return sendJson(res, 409, { ok: false, error: 'that seat is the computer' });
+            if (to.tokenHash) return sendJson(res, 409, { ok: false, error: 'that seat is taken' });
+            to.tokenHash = mine.tokenHash;
+            to.away = false;
+            to.lastSeq = -1;
+            to.joinedAt = mine.joinedAt;   /* moving chairs is not arriving again */
+            mine.tokenHash = null;
+            mine.away = true;
+            mine.lastSeq = -1;
+            mine.joinedAt = null;
+            mine.live = 0;
+            detachSeat(room, mine.idx);
+            dropTickets(room.code, mine.idx);
+            syncControl(room);
+            broadcast(room);
+            return flush(room, true).then(function () {
+              sendJson(res, 200, { ok: true, token: body.token, seat: to.idx,
+                                   lobby: lobbyView(room) });
+            });
+          }
           mine.away = false;
           syncControl(room);
           broadcast(room);
@@ -1046,6 +1078,41 @@ var server = http.createServer(function (req, res) {
         /* their stream stays open — they simply become a watcher, and can take a free seat */
         syncControl(room);
         broadcast(room);
+        return flush(room, true).then(function () {
+          sendJson(res, 200, { ok: true, lobby: lobbyView(room) });
+        });
+      }
+
+      /* ---------- who is meant to be in a chair ----------
+         The leader can hand a seat to the computer or take it back again. Both directions
+         matter and neither was possible: a seat whose player has gone stops the game until
+         somebody arrives, and a computer seat could not be freed up for a person who did.
+         It works mid-game as well as in the lobby, because that is exactly when you need it —
+         the engine is told who plays what through syncControl, and the commander picks the
+         seat up on its next tick or leaves it waiting. */
+      if (route === '/api/seatkind') {
+        if (!seat) return sendJson(res, 403, { ok: false, error: 'not seated' });
+        if (leaderOf(room) !== seat.idx)
+          return sendJson(res, 403, { ok: false, error: 'only the leader can do that' });
+        var sub = room.seats[body.seat | 0];
+        if (!sub) return sendJson(res, 400, { ok: false, error: 'no such seat' });
+        if (sub.idx === seat.idx)
+          return sendJson(res, 400, { ok: false, error: 'use Leave to give up your own seat' });
+        var kind = body.kind === 'computer' ? 'computer' : 'human';
+        if (sub.kind !== kind) {
+          /* Giving a seat to the computer takes it off whoever was in it — the same authority
+             the leader already has to free one, said in a single step. */
+          sub.kind = kind;
+          sub.tokenHash = null;
+          sub.away = kind === 'human';
+          sub.lastSeq = -1;
+          sub.joinedAt = null;
+          sub.live = 0;
+          detachSeat(room, sub.idx);
+          dropTickets(room.code, sub.idx);
+          syncControl(room);
+          broadcast(room);
+        }
         return flush(room, true).then(function () {
           sendJson(res, 200, { ok: true, lobby: lobbyView(room) });
         });
