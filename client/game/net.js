@@ -20,7 +20,11 @@ var Net = (function () {
   var ST = {
     room: null, token: null, seat: null,
     lobby: null, es: null, seq: 0, rev: -1,
-    online: false, error: null
+    online: false, error: null,
+    /* Which room the board currently on screen actually came from. Not a boolean: switching
+       rooms without disconnecting leaves `online` true from the previous one, and "we are
+       online" is then mistaken for "we are showing this game". */
+    stateRoom: null
   };
   var lobbyFns = [], errFns = [];
   var LOCAL = {};                     /* the engine calls we took over, kept for offline play */
@@ -222,6 +226,8 @@ var Net = (function () {
       .then(readJson)
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'no such room');
+        /* a different room means the board on screen is somebody else's game, whatever it is */
+        if (j.lobby.room !== ST.room) ST.stateRoom = null;
         ST.room = j.lobby.room; ST.lobby = j.lobby;
         rememberRoom(ST.room);
         fireLobby();
@@ -333,6 +339,7 @@ var Net = (function () {
       if (msg.state) {
         if (!ST.online) install();
         Engine.setState(msg.state);
+        ST.stateRoom = ST.room;
       }
       fireLobby();
     };
@@ -387,6 +394,8 @@ var Net = (function () {
     room: function () { return ST.room; },
     seat: function () { return ST.token ? ST.seat : null; },
     lobby: function () { return ST.lobby; },
+    /* true only when the board on screen is this room's game, as the server sent it */
+    hasState: function () { return ST.stateRoom !== null && ST.stateRoom === ST.room; },
     create: create, look: look, claim: claim, resume: resume, release: release, kick: kick,
     openGames: openGames, setSeatKind: setSeatKind,
     /* are you the one who sat down first, and so the one who can free a seat? */
