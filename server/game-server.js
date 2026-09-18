@@ -396,13 +396,24 @@ var COMMANDS = {
 function walkRoute(room, seat, objId, steps) {
   var G = room.E.get();
   if (!Array.isArray(steps) || !steps.length || steps.length > 64) return 'bad route';
+  /* Which kind of walk this is comes from the prompt, not from who owns the thing being
+     walked. A beam that has taken hold of something moves it with stepObject, and that stays
+     true when the thing it is holding is your own hull — a Tract Beam grabs friendly modules
+     on purpose, and says so. Deciding by ownership instead got exactly that case backwards:
+     your own module on the end of your own beam was walked as ordinary movement, which the
+     rules refuse outside the move phase, so the beam fired, the prompt opened, and the piece
+     would not budge for anything. The page has always chosen this way; this is the server
+     agreeing with it. */
+  var pend = G.pending;
+  var onBeam = !!(pend && pend.kind === 'moveObject');
   var mine = G.players[seat.idx];
-  var isModule = !!(mine && mine.modules[objId]);
   for (var i = 0; i < steps.length; i++) {
     var st = steps[i];
     if (!Array.isArray(st) || st.length !== 2) return 'bad route';
-    var ok = isModule ? room.E.moveModule(objId, st[0] | 0, st[1] | 0)
-                      : room.E.stepDeployable(objId, st[0] | 0, st[1] | 0);
+    var ok = onBeam ? room.E.stepObject(objId, st[0] | 0, st[1] | 0)
+                    : (mine && mine.modules[objId])
+                        ? room.E.moveModule(objId, st[0] | 0, st[1] | 0)
+                        : room.E.stepDeployable(objId, st[0] | 0, st[1] | 0);
     if (!ok) break;
   }
   return null;
