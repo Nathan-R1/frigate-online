@@ -100,9 +100,12 @@ var Engine = (function () {
   function hasLos(a, b) { return !lineBlocked(a.x, a.y, b.x, b.y); }
 
   /* ================= setup ================= */
+  /* The same thirteen points as the sheet builder's defaults, and they have to stay the same:
+     a seat with no sheet plays with these, and one carrying the default sheet plays with those,
+     and a player should not find the two ships differ. */
   function defaultSkills() {
     return { Cyber: 1, Diplomacy: 0, Engineering: 3, Leadership: 0,
-             Logistics: 2, Navigation: 3, Piloting: 3, Sensors: 2, Science: -1 };
+             Logistics: 4, Navigation: 1, Piloting: 2, Sensors: 2, Science: 0 };
   }
 
   /* deckList: array of tech names (repeats allowed) */

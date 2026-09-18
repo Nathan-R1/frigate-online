@@ -751,6 +751,9 @@
       /* A seat that has never been built still opens on something: the stock frigate it
          would otherwise fly, so the builder has a sheet to modify rather than a blank run. */
       sheet: sheetOf(i) || stockSheet(),
+      /* a seat nobody has built opens on the deck: the default ship is already a whole sheet,
+         and the deck is the part anybody actually wants to change about it */
+      stock: !sheetOf(i),
       ret: window.location.pathname + window.location.search
     });
     window.location.href = BUILDER_URL;
@@ -758,8 +761,12 @@
 
   /* The default kit as a sheet the builder can load — only the card names matter, the rest
      it derives from the presets itself. */
+  /* The same ship in the shape the builder reads, which is the shape it exports: the hull and
+     core picks it can show as already answered, and the whole deck. The builder works out for
+     itself which of those cards its picks granted and which were drawn on top. */
   function stockSheet() {
-    return { shipName: '', tech: starterDeck(), mods: [] };
+    return { shipName: '', level: STOCK_LEVEL, hulls: STOCK_HULLS, coreOptions: STOCK_CORE,
+             tech: starterDeck(), mods: [] };
   }
   /* whichever local seat the controls and hand currently belong to */
   var VIEW = 0;
@@ -819,19 +826,40 @@
      Cannon and a Graviton Engine already built and its Shield Generator in play — the same
      rule a built sheet follows, rather than a hull handed out beside the rules. Promotion is
      per copy, so only one of the two Cannon Units deploys. */
-  var STOCK_DECK = [
-    { name: 'Cannon Unit', starter: true }, { name: 'Cannon Unit' },
-    { name: 'P.D. Unit' },
-    { name: 'Graviton Unit', starter: true },
-    { name: 'Shield Generator', starter: true },
-    { name: 'Grav Jet' }, { name: 'Rocket Array' }, { name: 'Boost' }, { name: 'Dynamo' },
-    { name: 'Torpedo Launcher' }, { name: 'Armor Unit' }, { name: 'Thrust Unit' }
-  ];
+  /* ---------- the ship a seat flies when nobody has built one ----------
+     A Striker hull at three, all three core options standard, and three techs on top of what
+     those picks grant. It is described as the build rather than as a pile of cards, because it
+     is read two ways: the game wants the flat deck to deal, and the builder wants the choices
+     that produce it, so that opening the default for editing shows a sheet already filled in
+     rather than a blank run. The grants are spelled out beside the picks they come from — they
+     live in the builder's own tables, and this is the seam where the two have to agree. */
+  var STOCK_LEVEL = 3;
+  var STOCK_HULLS = { Striker: 3 };
+  var STOCK_CORE = { weapons: 'Standard', engines: 'Standard', generator: 'Standard' };
+  /* what Standard weapons, engines and generator grant at the builder's tables */
+  var STOCK_GRANTED = [['Cannon Unit', 4], ['Graviton Unit', 3], ['Boost', 1], ['Shield Generator', 1]];
+  /* and what this build draws on top of them */
+  var STOCK_EXTRA = [['P.D. Unit', 1], ['Tract Beam', 1], ['Torpedo Launcher', 1]];
+  /* the copies that deploy before the first turn — a deck with none arrives as a bare Core */
+  var STOCK_STARTERS = { 'Cannon Unit': 1, 'Graviton Unit': 1, 'Shield Generator': 1 };
+
+  function stockCards() {
+    var out = [];
+    STOCK_GRANTED.concat(STOCK_EXTRA).forEach(function (pair) {
+      for (var i = 0; i < pair[1]; i++) out.push(pair[0]);
+    });
+    return out;
+  }
+  /* The deck as the game deals it: every card, with the promoted copies carrying the trait. */
   function starterDeck() {
-    return STOCK_DECK.map(function (c) {
-      var base = (Engine.findTech(c.name) || {}).traits || '';
-      return { name: c.name,
-               traits: c.starter ? (base ? base + ' Starter Card' : 'Starter Card') : base };
+    var left = {};
+    Object.keys(STOCK_STARTERS).forEach(function (k) { left[k] = STOCK_STARTERS[k]; });
+    return stockCards().map(function (name) {
+      var base = (Engine.findTech(name) || {}).traits || '';
+      var promote = left[name] > 0;
+      if (promote) left[name]--;
+      return { name: name,
+               traits: promote ? (base ? base + ' Starter Card' : 'Starter Card') : base };
     });
   }
   /* What a seat brings to the table: its own build if it has one, the stock frigate if not.
