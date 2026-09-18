@@ -26,6 +26,17 @@ var fs = require('fs');
 var path = require('path');
 var crypto = require('crypto');
 
+/* A CA as either a path to a certificate or the certificate itself, so a container that has
+   an env var but nowhere to put a file is no worse off than one with a disk. */
+function readCa(v) {
+  if (!v) return null;
+  if (/-----BEGIN CERTIFICATE-----/.test(v)) return v;
+  try { return fs.readFileSync(v, 'utf8'); }
+  catch (e) {
+    throw new Error('PGSSL_CA is set but cannot be read: ' + e.message);
+  }
+}
+
 function hashToken(token) {
   return token ? crypto.createHash('sha256').update(String(token)).digest('hex') : null;
 }
@@ -124,11 +135,24 @@ function PgStore(url) {
     throw new Error('DATABASE_URL is set but node-postgres is not installed. Run: npm install');
   }
   this.kind = 'postgres';
-  /* Supabase's poolers terminate TLS with a certificate this client has no chain for, which is
-     the documented way to reach them; the connection is still encrypted. Set PGSSL=off for a
-     plain local server. */
-  var ssl = process.env.PGSSL === 'off' ? false : { rejectUnauthorized: false };
+  /* TLS to the database.
+     Encryption without verification is what you get by default: Supabase's poolers present a
+     certificate this client has no chain for, so the traffic is private but the other end is
+     unproven, and an attacker positioned between Render and Supabase could sit in the middle
+     of it. That is worth fixing and worth being told about, so point PGSSL_CA at Supabase's
+     CA — the file itself, or its PEM text — and the certificate is actually checked. Without
+     it the old behaviour stands and says so once at boot rather than passing for safe.
+     PGSSL=off for a plain local server; PGSSL=on to force TLS to one. */
+  var ca = readCa(process.env.PGSSL_CA);
+  var ssl = process.env.PGSSL === 'off' ? false
+          : ca ? { ca: ca, rejectUnauthorized: true }
+               : { rejectUnauthorized: false };
   if (/localhost|127\.0\.0\.1/.test(url) && process.env.PGSSL !== 'on') ssl = false;
+  if (ssl && !ca) {
+    console.warn('[store] database TLS is encrypted but UNVERIFIED — set PGSSL_CA to the ' +
+                 "database's CA certificate to authenticate the other end");
+  }
+  this.verified = !!(ssl && ca);
   this.pool = new pg.Pool({ connectionString: url, ssl: ssl, max: 8,
                             idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 }
