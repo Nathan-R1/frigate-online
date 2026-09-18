@@ -127,6 +127,32 @@ var RULES_SCRIPT = new vm.Script(RULES_SRC, { filename: 'frigate-rules.js' });
    the game so a mismatch can be seen rather than guessed at. */
 var RULES_VERSION = crypto.createHash('sha256').update(RULES_SRC).digest('hex').slice(0, 12);
 
+/* ---------- have the rules changed under us? ----------
+   The rules are read once and compiled into a context that lives as long as the process. That
+   is the right thing for a running game and a trap for whoever is editing them: the page is
+   served from disk and updates on reload, while the rules the server plays by do not, so a
+   card can behave one way in the browser and another on the server, and the only clue is that
+   nothing you changed seems to have happened. Rather than expect anyone to remember, the file
+   times are noted at boot and checked occasionally, and the server says so plainly once. */
+var RULES_STAMP = SOURCES.map(function (f) {
+  try { return f + ':' + fs.statSync(path.join(ROOT, f)).mtimeMs; } catch (e) { return f + ':?'; }
+}).join('|');
+var rulesStale = false;
+var lastRulesCheck = 0;
+
+function checkRulesFresh() {
+  if (rulesStale || Date.now() - lastRulesCheck < 15000) return;
+  lastRulesCheck = Date.now();
+  var now = SOURCES.map(function (f) {
+    try { return f + ':' + fs.statSync(path.join(ROOT, f)).mtimeMs; } catch (e) { return f + ':?'; }
+  }).join('|');
+  if (now === RULES_STAMP) return;
+  rulesStale = true;
+  console.warn('[rules] the rule files on disk have changed since this server started. It is ' +
+               'still playing by the ones it compiled at boot (' + RULES_VERSION + '). Restart ' +
+               'it to pick the new ones up — the page already has them.');
+}
+
 function newRules() {
   var sandbox = { console: console };
   vm.createContext(sandbox);
@@ -508,6 +534,7 @@ function evictOverflow() {
 
 function housekeeping() {
   var now = Date.now();
+  checkRulesFresh();
   sweepOldRooms();
   sweepBuckets(now);
   sweepTickets(now);
@@ -844,7 +871,8 @@ var server = http.createServer(function (req, res) {
        both, and that is the trade — a service that quietly fell back to the file store looks
        identical to a healthy one otherwise, and on an ephemeral disk that costs every game. */
     return sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()),
-                                store: store.kind, rules: RULES_VERSION });
+                                store: store.kind, rules: RULES_VERSION,
+                                rulesStale: rulesStale });
   }
 
   if (route === '/api/stream') {

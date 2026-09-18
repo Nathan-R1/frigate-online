@@ -23,8 +23,10 @@ tech: {
 'Comms Unit':             { onPlay:[{op:'createModule',module:'Comms Unit'},{op:'trashSelf'}] },
 'Shield Unit':            { onPlay:[{op:'createModule',module:'Shield Connector'},{op:'trashSelf'}] },
 'SPEAR Unit':             { onPlay:[{op:'createModule',module:'SPEAR Connector'},{op:'trashSelf'}] },
-'Repulsor Unit':          { onPlay:[{op:'createModule',module:'Repulsor Unit'}] },
-'Quantum Disrupter Unit': { onPlay:[{op:'createModule',module:'Quantum Disrupter'}] },
+'Repulsor Unit':          { onPlay:[{op:'createModule',module:'Repulsor Unit'},
+                                    {op:'trashSelf'}] },
+'Quantum Disrupter Unit': { onPlay:[{op:'createModule',module:'Quantum Disrupter'},
+                                    {op:'trashSelf'}] },
 'Citadel':                { onPlay:[{op:'gainHull',n:5,mayExceed:true,target:'core'},
                                     {op:'createModule',module:'Citadel'},{op:'trashSelf'}] },
 
@@ -185,9 +187,10 @@ mod: {
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'attack',range:6,from:'self',attacks:2,dmg:2,
                                             dmgType:'kinetic'}] } },
+/* The passive is not declared here any more. It has to answer in the middle of an attack being
+   resolved, and the passive queue only runs between actions — which is why this one never once
+   fired. It lives in shoot(), as pointDefenceCovers(). */
 'P.D.':               { placement:'adjacentToCore',
-                        passive:[{ trigger:'onDeployableTargetsNearby', range:1, optional:true,
-                                   effect:[{op:'activateTargetingDeployable',free:true}] }],
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'attack',range:2,from:'self',attacks:3,dmg:2,
                                             dmgType:'kinetic'}] } },
@@ -196,7 +199,10 @@ mod: {
                                    effect:[{op:'attack',range:'any',from:'self',attacks:1,dmg:2,
                                             dmgType:'energy',dmgIfRangeAtLeast:{range:10,dmg:4}}] } },
 'Quantum Disrupter':  { placement:'adjacentToCore',
-                        activate:{ cost:[{op:'exhaustOther',filter:'offenseModule',n:3}],
+                        /* It is a Weapon Module itself, so it is one of the three it needs —
+                           asking for three OTHERS means a small ship can never fire it at all. */
+                        activate:{ cost:[{op:'exhaustOther',filter:'offenseModule',n:3,
+                                          includeSelf:true}],
                                    effect:[{op:'attack',range:12,from:'self',attacks:1,dmg:6,
                                             check:'Sensors',dmgType:'bio'},
                                            {op:'createAnomaly',at:'random',fromSelf:true,minR:0,maxR:11}] } },
@@ -204,7 +210,7 @@ mod: {
                         activate:{ cost:[{op:'exhaustOther',filter:'offenseModuleAdjacent',n:2}],
                                    effect:[{op:'attack',range:'sensors',from:'self',attacks:4,dmg:2,
                                             dmgType:'energy',
-                                            onHit:[{op:'applyStatus',status:'exhausted',
+                                            onSuccess:[{op:'applyStatus',status:'exhausted',
                                                     duration:'oneRound',target:'hitModule'}]}] } },
 'Shield Connector':   { placement:'adjacentToAny',
                         activate:{ cost:[{op:'exhaustOther',filter:'adjacentModule',n:2}],
@@ -237,13 +243,17 @@ mod: {
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:3,
                                             check:'Sensors',dmgType:'kinetic'},
                                            {op:'removeSelf'}] } },
+/* It arrives ready rather than spent — it can run the turn it is launched — and it is spent by
+   firing rather than by existing. A round that connects is gone, which is what a guided round
+   is; one that misses is still out there, exhausted until next turn, and gets another try.
+   Without the exhaust it had no limit at all and could fire as many times in a turn as you
+   cared to click. */
 'TAT Guided':         { deployable:true, speed:4,
-                        onPlay:[{op:'exhaustSelf'}],
-                        activate:{ cost:[],
+                        activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'moveSelf',n:4,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:4,
                                             check:'Sensors',dmgType:'kinetic',
-                                            onHit:[{op:'removeSelf'}]}] } },
+                                            onSuccess:[{op:'removeSelf'}]}] } },
 'Fusion Mine':        { deployable:true, speed:0,
                         passive:[{ trigger:'onDestroyedOrEnemyEnters',
                                    effect:[{op:'activateSelf'}] }],
@@ -271,6 +281,6 @@ mod: {
                                                                         attacks:1,dmg:1}] },
                                              { label:'Shove', effect:[{op:'attack',range:1,from:'self',
                                                                        attacks:1,dmg:0,save:'Piloting',
-                                                                       onHit:[{op:'moveObject',what:'target',n:1}]}] } ]}] } }
+                                                                       onSuccess:[{op:'moveObject',what:'target',n:1}]}] } ]}] } }
 }
 };
