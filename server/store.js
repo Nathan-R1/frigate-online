@@ -37,6 +37,18 @@ function readCa(v) {
   }
 }
 
+/* One room record reduced to what a stranger may know about it: that it exists, whether it has
+   started, and how many chairs are empty. Everything else — the state, the names, and above
+   all the token hashes — stays here. Null when there is nothing free to advertise. */
+function summariseOpen(rec) {
+  if (!rec || rec.status === 'over') return null;
+  var seats = rec.seats || [];
+  var free = seats.filter(function (s) { return s.kind === 'human' && !s.tokenHash; }).length;
+  if (!free) return null;
+  return { code: rec.code, status: rec.status, total: seats.length, free: free,
+           updated: rec.updated || rec.created || 0 };
+}
+
 function hashToken(token) {
   return token ? crypto.createHash('sha256').update(String(token)).digest('hex') : null;
 }
@@ -149,6 +161,19 @@ FileStore.prototype.listRooms = function () {
       Promise.all(codes.map(function (c) { return self.loadRoom(c); }))
         .then(function (recs) { resolve(recs.filter(Boolean)); });
     });
+  });
+};
+
+/* ---------- games somebody could still join ----------
+   Deliberately not "every room". A room code is the key to that room, so a listing that hands
+   out all of them hands out the keys; this one answers a narrower question — which games have
+   a chair nobody is sitting in — and returns nothing else. A finished game is not one, a full
+   game is not one, and a seat the computer is playing is not one either. */
+FileStore.prototype.listOpenRooms = function (limit) {
+  return this.listRooms().then(function (recs) {
+    return recs.map(summariseOpen).filter(Boolean)
+               .sort(function (a, b) { return b.updated - a.updated; })
+               .slice(0, limit || 40);
   });
 };
 
@@ -337,6 +362,28 @@ PgStore.prototype.listRooms = function () {
     });
 };
 
+/* The same question asked of Postgres, which can count for us. The filter is in the HAVING so
+   that rooms with nothing free never travel; the token hash is never selected at all. */
+PgStore.prototype.listOpenRooms = function (limit) {
+  return this.pool.query(
+    "SELECT g.code," +
+    "       g.status," +
+    '       extract(epoch from g.updated)*1000 AS updated,' +
+    '       count(s.idx) AS total,' +
+    "       count(*) FILTER (WHERE s.kind = 'human' AND s.token_hash IS NULL) AS free" +
+    '  FROM games g LEFT JOIN game_seats s ON s.code = g.code' +
+    " WHERE g.status <> 'over'" +
+    ' GROUP BY g.code, g.status, g.updated' +
+    " HAVING count(*) FILTER (WHERE s.kind = 'human' AND s.token_hash IS NULL) > 0" +
+    ' ORDER BY g.updated DESC LIMIT $1', [limit || 40])
+    .then(function (r) {
+      return r.rows.map(function (g) {
+        return { code: g.code, status: g.status, updated: Number(g.updated),
+                 total: Number(g.total), free: Number(g.free) };
+      });
+    });
+};
+
 PgStore.prototype.deleteRoom = function (code) {
   return this.pool.query('DELETE FROM games WHERE code = $1', [code]).then(function () {});
 };
@@ -352,5 +399,5 @@ function createStore(opts) {
   return new FileStore(opts.dir || path.join(__dirname, 'data'));
 }
 
-module.exports = { createStore: createStore, hashToken: hashToken,
+module.exports = { createStore: createStore, hashToken: hashToken, summariseOpen: summariseOpen,
                    FileStore: FileStore, PgStore: PgStore };

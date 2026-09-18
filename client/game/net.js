@@ -203,6 +203,18 @@ var Net = (function () {
     });
   }
 
+  /* Games with a chair free. A plain GET: there is nothing to say and nothing to prove, and
+     the server decides what is fit to tell. */
+  function openGames() {
+    return findServer()
+      .then(function (base) { return fetch(base + '/api/open'); })
+      .then(readJson)
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'could not look for games');
+        return j.games || [];
+      });
+  }
+
   function look(room) {
     return findServer().then(function (base) {
       return fetch(base + '/api/room?room=' + encodeURIComponent(room));
@@ -370,6 +382,7 @@ var Net = (function () {
     seat: function () { return ST.token ? ST.seat : null; },
     lobby: function () { return ST.lobby; },
     create: create, look: look, claim: claim, resume: resume, release: release, kick: kick,
+    openGames: openGames,
     /* are you the one who sat down first, and so the one who can free a seat? */
     isLeader: function () {
       return !!(ST.lobby && ST.seat !== null && ST.token && ST.lobby.leader === ST.seat);

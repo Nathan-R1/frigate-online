@@ -40,6 +40,7 @@
  * ENDPOINTS
  *   POST /api/create   {seats:[{name,team,kind,deck,modules,skills}]}  -> {room}
  *   GET  /api/room     ?room=CODE                                     -> lobby, no secrets
+ *   GET  /api/open                                                     -> games with a free seat
  *   POST /api/claim    {room, seat, token?}                           -> {token, seat}
  *   POST /api/release  {room, token}                                  -> give the seat up
  *   POST /api/kick     {room, token, seat}                             -> the leader frees a seat
@@ -96,6 +97,8 @@ function num(v, dflt) { var n = parseInt(v, 10); return (isNaN(n) || n < 0) ? df
 
 /* Whether /api/list says what rooms exist. Off unless asked for: see the endpoint. */
 var LIST_ROOMS = process.env.FRIGATE_LIST === '1';
+/* How many joinable games the Join screen will show at once. */
+var OPEN_LIMIT = num(process.env.FRIGATE_OPEN_LIMIT, 40);
 
 /* ---------- the rules, compiled once and instantiated per room ---------- */
 
@@ -556,7 +559,7 @@ var buckets = Object.create(null);
    mistaken for an attack. The sustained allowance below is what actually bounds abuse. */
 var RATE_CAP = num(process.env.FRIGATE_RATE_CAP, 240);
 var RATE_FILL = num(process.env.FRIGATE_RATE_FILL, 2);      /* credits back per second */
-var COST = { '/api/create': 30, '/api/stream': 5, '/api/ticket': 2, other: 1 };
+var COST = { '/api/create': 30, '/api/stream': 5, '/api/open': 3, '/api/ticket': 2, other: 1 };
 
 /* Behind Render the socket belongs to the proxy, so every player would share one bucket and
    rate limiting would mean nothing. The forwarded address is only believed where something in
@@ -885,6 +888,44 @@ var server = http.createServer(function (req, res) {
                    seats: (r.seats || []).length }; }) });
       })
       .catch(function (e) { fail(res, 500, 'could not list rooms', e); });
+  }
+
+  /* ---------- games you could join ----------
+     The one listing that is public on purpose: it is what the search on the Join screen shows.
+     It is deliberately not /api/list. That question — "what rooms exist" — is every key on the
+     server, and stays shut. This one asks "what could I sit down at", and answers with nothing
+     but the code, whether it has started, and how many chairs are empty. No names, no state,
+     no indication of who is in there.
+
+     The consequence is worth being clear about rather than discovering: a game with a seat
+     held open for a friend is now discoverable by anyone, and the friend is not the only one
+     who can take it. That is the same trade the feature is, not a flaw in it — but if you ever
+     want a game to be unlisted, the place to add the flag is here.
+
+     A room that is live in memory is asked rather than the store, because a seat claimed or
+     given up a moment ago may not have been written down yet. */
+  if (route === '/api/open') {
+    return store.listOpenRooms(OPEN_LIMIT)
+      .then(function (list) {
+        var out = [], seen = Object.create(null);
+        function offer(code, status, free, total) {
+          if (!free || status === 'over' || seen[code]) return;
+          seen[code] = 1;
+          out.push({ room: code, started: status !== 'lobby', free: free, seats: total });
+        }
+        list.forEach(function (r) {
+          var live = rooms[r.code];
+          if (live) offer(live.code, live.status, live.seats.filter(emptySeat).length, live.seats.length);
+          else offer(r.code, r.status, r.free, r.total);
+        });
+        /* and anything in memory the store has not caught up with */
+        Object.keys(rooms).forEach(function (code) {
+          var live = rooms[code];
+          offer(code, live.status, live.seats.filter(emptySeat).length, live.seats.length);
+        });
+        sendJson(res, 200, { ok: true, games: out.slice(0, OPEN_LIMIT) });
+      })
+      .catch(function (e) { fail(res, 500, 'could not look for games', e); });
   }
 
   if (req.method !== 'POST') return serveStatic(req, res, route);
