@@ -72,9 +72,14 @@ var FLUSH_MS = parseInt(process.env.FRIGATE_FLUSH, 10) || 500;
 /* A room nobody is watching is dropped from memory this long after its last use. It is in the
    store; the next request loads it straight back. */
 var EVICT_MS = parseInt(process.env.FRIGATE_EVICT, 10) || 10 * 60 * 1000;
-/* How long a room is kept in the store. Zero means forever, which is the default: throwing
-   away somebody's game because a number ran out should be something you asked for. */
-var ROOM_TTL_DAYS = parseFloat(process.env.FRIGATE_ROOM_TTL_DAYS) || 0;
+/* How long a room is kept in the store. A week, after which a room nobody has touched is
+   swept. Zero still means forever, for anyone who wants it, but forever is the wrong default
+   for a service that anybody can create a room on: every abandoned lobby was staying in the
+   database for good, and the Join screen was still offering them. The clock runs from the last
+   time a room changed, not from when it was made, so a long game is never in danger. */
+var ROOM_TTL_DAYS = process.env.FRIGATE_ROOM_TTL_DAYS !== undefined
+  ? (parseFloat(process.env.FRIGATE_ROOM_TTL_DAYS) || 0)
+  : 7;
 
 /* ---------- ceilings ----------
    A game needs none of these. They exist because this process answers the open internet, where
@@ -920,20 +925,25 @@ var server = http.createServer(function (req, res) {
     return store.listOpenRooms(OPEN_LIMIT)
       .then(function (list) {
         var out = [], seen = Object.create(null);
-        function offer(code, status, free, total) {
+        function offer(code, status, free, total, taken) {
           if (!free || status === 'over' || seen[code]) return;
           seen[code] = 1;
-          out.push({ room: code, started: status !== 'lobby', free: free, seats: total });
+          out.push({ room: code, started: status !== 'lobby', free: free, seats: total,
+                     taken: taken });
+        }
+        function held(room) {
+          return room.seats.filter(function (s) { return s.kind === 'human' && s.tokenHash; }).length;
         }
         list.forEach(function (r) {
           var live = rooms[r.code];
-          if (live) offer(live.code, live.status, live.seats.filter(emptySeat).length, live.seats.length);
-          else offer(r.code, r.status, r.free, r.total);
+          if (live) offer(live.code, live.status, live.seats.filter(emptySeat).length,
+                          live.seats.length, held(live));
+          else offer(r.code, r.status, r.free, r.total, r.taken);
         });
         /* and anything in memory the store has not caught up with */
         Object.keys(rooms).forEach(function (code) {
           var live = rooms[code];
-          offer(code, live.status, live.seats.filter(emptySeat).length, live.seats.length);
+          offer(code, live.status, live.seats.filter(emptySeat).length, live.seats.length, held(live));
         });
         sendJson(res, 200, { ok: true, games: out.slice(0, OPEN_LIMIT) });
       })

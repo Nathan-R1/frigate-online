@@ -45,7 +45,10 @@ function summariseOpen(rec) {
   var seats = rec.seats || [];
   var free = seats.filter(function (s) { return s.kind === 'human' && !s.tokenHash; }).length;
   if (!free) return null;
-  return { code: rec.code, status: rec.status, total: seats.length, free: free,
+  /* how many chairs actually have somebody in them — a room with none is a room nobody has
+     come back to, and the Join screen would rather not lead with those */
+  var taken = seats.filter(function (s) { return s.kind === 'human' && s.tokenHash; }).length;
+  return { code: rec.code, status: rec.status, total: seats.length, free: free, taken: taken,
            updated: rec.updated || rec.created || 0 };
 }
 
@@ -370,7 +373,8 @@ PgStore.prototype.listOpenRooms = function (limit) {
     "       g.status," +
     '       extract(epoch from g.updated)*1000 AS updated,' +
     '       count(s.idx) AS total,' +
-    "       count(*) FILTER (WHERE s.kind = 'human' AND s.token_hash IS NULL) AS free" +
+    "       count(*) FILTER (WHERE s.kind = 'human' AND s.token_hash IS NULL) AS free," +
+    "       count(*) FILTER (WHERE s.kind = 'human' AND s.token_hash IS NOT NULL) AS taken" +
     '  FROM games g LEFT JOIN game_seats s ON s.code = g.code' +
     " WHERE g.status <> 'over'" +
     ' GROUP BY g.code, g.status, g.updated' +
@@ -379,7 +383,7 @@ PgStore.prototype.listOpenRooms = function (limit) {
     .then(function (r) {
       return r.rows.map(function (g) {
         return { code: g.code, status: g.status, updated: Number(g.updated),
-                 total: Number(g.total), free: Number(g.free) };
+                 total: Number(g.total), free: Number(g.free), taken: Number(g.taken) };
       });
     });
 };

@@ -338,8 +338,14 @@ var Net = (function () {
       }
       if (msg.state) {
         if (!ST.online) install();
-        Engine.setState(msg.state);
+        /* Recorded before the state is handed over, not after. Drawing a board is a lot of
+           code, and if any of it throws, the note saying which room we are looking at would
+           never be written and the lobby covering the board would never come down — the game
+           would be running, unreachable, behind a screen that will not close. The board is
+           worth failing over; the way out of the room is not. */
         ST.stateRoom = ST.room;
+        try { Engine.setState(msg.state); }
+        catch (e) { if (typeof console !== 'undefined') console.error('[net] could not draw that state', e); }
       }
       fireLobby();
     };
