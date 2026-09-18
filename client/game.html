@@ -3272,6 +3272,10 @@
     Engine.setTelegraph(!instantMoves);
     if (instantMoves) { telegraphed = null; holdUntil = 0; clearRoute(); }
     try { localStorage.setItem('frigateInstant', instantMoves ? '1' : '0'); } catch (e) {}
+    /* Offline this is a setting of yours, because the computer is playing here. Online it is
+       playing on the server, where this page's preference means nothing at all — so the wish
+       is sent on, and the server decides whether you are the one who may grant it. */
+    if (online() && Net.isLeader()) Net.setPace(instantMoves).catch(function () {});
   }
   Engine.onAnnounce(function (e) {
     if (e.kind !== 'move' || !e.route || e.route.length < 2) return;

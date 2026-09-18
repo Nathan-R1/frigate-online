@@ -45,6 +45,7 @@
  *   POST /api/release  {room, token}                                  -> give the seat up
  *   POST /api/kick     {room, token, seat}                             -> the leader frees a seat
  *   POST /api/seatkind {room, token, seat, kind}                       -> leader: human <-> computer
+ *   POST /api/pace     {room, token, instant}                          -> leader: how fast the AI plays
  *   POST /api/seat-setup {room, token, seat}                           -> that seat's ship
  *   POST /api/set-setup  {room, token, seat, setup, name?}             -> change it, in the lobby
  *   POST /api/start    {room, token}                                  -> deal and begin
@@ -396,6 +397,7 @@ function lobbyView(room) {
     /* set when the game cannot go on because the seat whose turn it is has nobody in it */
     waitingFor: (G && !G.over && emptySeat(room.seats[G.active])) ? G.active : null,
     staleRules: room.staleRules || null,
+    instant: !!room.instant,
     leader: leaderOf(room),
     seats: room.seats.map(function (s) {
       return { idx: s.idx, name: s.name, team: s.team, kind: s.kind,
@@ -498,9 +500,20 @@ function tickRooms() {
     if (!G || G.over) return;
     var seat = room.seats[G.active];
     if (!seat || !autoSeat(seat)) return;
-    var before = JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending]);
-    try { room.AI.tick(G.active); } catch (e) { console.error('[ai]', code, e.message); }
-    if (JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending]) === before) return;
+    /* Normally one decision per tick, at a pace a watcher can follow. "Instant" runs the seat's
+       whole turn out before anybody is told about it, which is the same choice the page has
+       always offered for a local game — it simply had nowhere to send it, because online the
+       computer plays here and not there. The guard is not a rule, it is a promise that a bug in
+       the commander cannot spin this process forever. */
+    var mine = seat.idx, acted = false, guard = 0;
+    do {
+      var before = JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending]);
+      try { room.AI.tick(G.active); }
+      catch (e) { console.error('[ai]', code, e.message); break; }
+      if (JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending]) === before) break;
+      acted = true;
+    } while (room.instant && !G.over && G.active === mine && guard++ < 4000);
+    if (!acted) return;
     if (G.over) room.status = 'over';
     touch(room);
     broadcast(room);
@@ -1223,6 +1236,17 @@ var server = http.createServer(function (req, res) {
         return flush(room, true).then(function () {
           sendJson(res, 200, { ok: true, seat: tgt.idx, lobby: lobbyView(room) });
         });
+      }
+
+      /* How fast the computer plays, for everybody in the room at once — it is one game and
+         one pace, so it belongs to the leader rather than to each watcher's settings. */
+      if (route === '/api/pace') {
+        if (!seat) return sendJson(res, 403, { ok: false, error: 'not seated' });
+        if (leaderOf(room) !== seat.idx)
+          return sendJson(res, 403, { ok: false, error: 'only the leader can do that' });
+        room.instant = !!body.instant;
+        broadcast(room);
+        return sendJson(res, 200, { ok: true, lobby: lobbyView(room) });
       }
 
       if (route === '/api/start') {
