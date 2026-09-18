@@ -46,7 +46,8 @@
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
-  .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab; }
+  .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab;
+             touch-action:none; }
   .g-board.dragging { cursor:grabbing; }
   .grid { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
   .cells, .pieces, .links { position:absolute; inset:0; }
@@ -2169,14 +2170,46 @@
     saveView();
   }, { passive: false });
 
-  /* dragging pans the board. A press that never moves far is a click, so the two do not
-     fight each other: the click is only swallowed once the drag actually starts. */
-  var pan = null, swallowClick = false;
-  boardEl.addEventListener('mousedown', function (e) {
-    if (e.button !== 0) return;
-    pan = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
+  /* dragging pans the board; a second finger pinches to zoom about the fingers' middle.
+     A press that never moves far is a click, so the two do not fight each other: the click
+     is only swallowed once the drag actually starts. Pointer events cover mouse and touch
+     with the one gesture, so a phone drags and zooms the same way a desktop does. */
+  var pointers = {}, pinch = null, pan = null, swallowClick = false;
+  /* the two fingers' middle and how far apart they are */
+  function fingerPts() {
+    var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+    var dx = a.x - b.x, dy = a.y - b.y;
+    return { mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: Math.sqrt(dx * dx + dy * dy) };
+  }
+  function beginPinch() {
+    var r = boardEl.getBoundingClientRect();
+    var f = fingerPts();
+    pinch = { d0: f.d, z0: view.zoom, mx0: f.mx - r.left, my0: f.my - r.top,
+              ox0: view.x, oy0: view.y };
+    pan = null;
+    boardEl.classList.remove('dragging');
+  }
+  boardEl.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (!pinch && Object.keys(pointers).length === 2) { beginPinch(); return; }
+    if (!pinch) pan = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
   });
-  window.addEventListener('mousemove', function (e) {
+  window.addEventListener('pointermove', function (e) {
+    if (!(e.pointerId in pointers)) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pinch) {
+      var r = boardEl.getBoundingClientRect();
+      var f = fingerPts();
+      var z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinch.z0 * f.d / pinch.d0));
+      /* keep the board square under the fingers' middle pinned there while it spreads */
+      view.x = (f.mx - r.left) - (pinch.mx0 - pinch.ox0) * (z / pinch.z0);
+      view.y = (f.my - r.top) - (pinch.my0 - pinch.oy0) * (z / pinch.z0);
+      view.zoom = z;
+      applyView();
+      saveView();
+      return;
+    }
     if (!pan) return;
     var dx = e.clientX - pan.sx, dy = e.clientY - pan.sy;
     if (!pan.moved && Math.abs(dx) + Math.abs(dy) > 5) {
@@ -2185,12 +2218,31 @@
     }
     if (pan.moved) { view.x = pan.ox + dx; view.y = pan.oy + dy; applyView(); }
   });
-  window.addEventListener('mouseup', function () {
-    if (!pan) return;
-    if (pan.moved) { swallowClick = true; saveView(); }
-    pan = null;
-    boardEl.classList.remove('dragging');
-  });
+  function endPointer(e) {
+    if (!(e.pointerId in pointers)) return;
+    delete pointers[e.pointerId];
+    if (pinch) {
+      var ids = Object.keys(pointers);
+      if (ids.length === 1) {
+        /* a finger lifted, one stays: carry on as a drag so the board never jerks */
+        pinch = null;
+        var p = pointers[ids[0]];
+        pan = { sx: p.x, sy: p.y, ox: view.x, oy: view.y, moved: true };
+        boardEl.classList.add('dragging');
+        return;
+      }
+      if (ids.length >= 2) { beginPinch(); return; }   /* re-baseline for what's left */
+      pinch = null;
+      return;
+    }
+    if (pan) {
+      if (pan.moved) { swallowClick = true; saveView(); }
+      pan = null;
+      boardEl.classList.remove('dragging');
+    }
+  }
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
   /* double-click the empty board to put the whole thing back in view */
   boardEl.addEventListener('dblclick', function (e) {
     if (e.target.closest('.piece')) return;
