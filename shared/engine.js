@@ -753,7 +753,17 @@ var Engine = (function () {
       if (ctx.module && m.id === ctx.module.id) return false;
       return origins.some(function (or) { return dist(or, m) <= reach && hasLos(or, m); });
     });
-    if (!targets.length) { log(s.name + ' has no target in range with line of sight.', s); return; }
+    if (!targets.length) {
+      /* Nothing in reach. Saying so and walking away spends the weapon on empty space, and the
+         cost was already paid on the way in — so the shot is offered as a prompt like any
+         other, with nothing to click. Taking it back refunds the activation; skipping leaves
+         it spent, which is what used to happen without being asked. */
+      log(s.name + ' has no target in range with line of sight.', s);
+      prompt({ kind: 'target', label: 'Nothing in range', targets: [],
+               envelope: firingEnvelope(origins, reach),
+               onResolve: function () {} });
+      return;
+    }
     var ids = targets.map(function (m) { return m.id; });
     /* An area weapon does not pick: everything it can see is already a target, so the only
        question left is whether to pull the trigger. Each one is then resolved in turn, in
