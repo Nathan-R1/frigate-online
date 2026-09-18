@@ -425,6 +425,11 @@
     padding:6px 6px; cursor:pointer; border-radius:4px;
     background:none; border:1px solid transparent; color:var(--ink-mid); }
   .set-item:hover { border-color:var(--cyan); color:var(--cyan); }
+  .copy-btn { margin-left:8px; font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+              padding:3px 8px; cursor:pointer; border-radius:4px; vertical-align:middle;
+              background:none; border:1px solid var(--line-bright); color:var(--ink-mid); }
+  .copy-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+  .copy-btn.copied { border-color:var(--cyan); color:var(--ink-strong); background:var(--cyan); }
   .set-exit { color:var(--amber); border-color:var(--amber-dim, var(--line)); }
   .set-exit:hover { border-color:var(--amber); color:var(--amber); }
   .hidden { display:none !important; }
@@ -627,7 +632,9 @@
   </p>
 </div></div>
 <div class="g-over g-full hidden" id="lobbyPick"><div class="box">
-  <h2>Room <span id="lobbyCode" style="font-family:var(--mono);color:var(--amber)"></span></h2>
+  <h2>Room <span id="lobbyCode" style="font-family:var(--mono);color:var(--amber)"></span><!--
+   --><button type="button" class="copy-btn" id="lobbyCopy" data-copy=""
+              title="Copy the room code" aria-label="Copy the room code">⧉</button></h2>
   <p class="rost-note">Anyone with the code can take a free seat. A seat stays yours until you
      leave it — close the tab, come back tomorrow, and it is still there. Games are saved, so
      the server restarting does not end one.</p>
@@ -1598,6 +1605,18 @@
     return p.cards.indexOf(id) >= 0 ? ' pickable' : ' unpickable';
   }
 
+  /* Why an Activate button is dead, in words, for its tooltip. A greyed-out button that will
+     not say what is wrong with it is the thing that actually gets complained about — the card
+     is right there with a charge on it, and nothing on screen explains the refusal. */
+  function whyNoActivate(G, s, obj, kind) {
+    if (G.over) return 'The game is over.';
+    if (!isMyTurn(G)) return 'Not this seat\'s turn.';
+    if (G.phase === 'play') return 'Finish the play phase first — activations happen in the action phase.';
+    if (obj.exhausted) return 'Already spent this turn. It refreshes at the start of your next turn.';
+    var why = Engine.shortfall ? Engine.shortfall(s, obj, kind) : null;
+    return why ? 'It ' + why + '.' : 'Not available right now.';
+  }
+
   function renderHand(G) {
     var s = G.players[meIdx()], html = '';
     var mine = isMyTurn(G) && !G.pending && !G.over;
@@ -1635,7 +1654,8 @@
         (passiveOnly
           ? '<div class="hb"><span class="passive-tag">In play</span></div>'
           : '<div class="hb"><button data-act="' + id + '"' +
-            (myTurn && cReady ? '' : ' disabled') + '>Activate</button></div>') +
+            (myTurn && cReady ? '' : ' disabled title="' + esc(whyNoActivate(G, s, c, 'tech')) + '"') +
+            '>Activate</button></div>') +
         '</div>';
     });
     Object.keys(s.deployables).forEach(function (id) {
@@ -1670,7 +1690,8 @@
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         (e.activate
           ? '<div class="hb"><button data-mact="' + id + '"' +
-            (myTurn && mReady ? '' : ' disabled') + '>Activate</button></div>'
+            (myTurn && mReady ? '' : ' disabled title="' + esc(whyNoActivate(G, s, m, 'mod')) + '"') +
+            '>Activate</button></div>'
           : '<div class="hb"><span class="passive-tag">In play</span></div>') + '</div>';
     });
     if (hidden) {
@@ -1781,9 +1802,19 @@
       meta.push({ text: cap(t.rarity), cls: 't-amber', tip: 'Rarity' });
     /* Storage, Capacity and the Starter Card mark are deck-building constraints, settled
        before the game starts. They tell you nothing once the card is on the table. */
-    if (num(t.charges) > 0 || card && card.charges)
-      meta.push({ text: CHARGES_ICON + ((card && card.charges) || t.charges), cls: 't-charge',
-                  tip: card ? 'Charges on this card now' : 'Charges it starts with' });
+    /* A real card in hand or in play is asked what it is holding now; only a card looked up
+       in the abstract falls back to what the preset starts with. Written as `card.charges ||
+       t.charges` this read the preset the moment a card was spent down to zero — so a Launcher
+       you had just fired still claimed a charge it no longer had, while the button beside it
+       correctly refused. Zero is an answer, not a missing one. */
+    var live = !!card && typeof card.charges === 'number';
+    /* A card that deals in charges says so by declaring the field at all, even as '0' — so an
+       empty Launcher still shows its empty slot, while a card with no charge mechanic shows
+       nothing rather than a pointless zero. */
+    var takesCharges = t.charges !== undefined && t.charges !== null && t.charges !== '';
+    if (live ? (takesCharges || card.charges > 0) : num(t.charges) > 0)
+      meta.push({ text: CHARGES_ICON + (live ? card.charges : num(t.charges)), cls: 't-charge',
+                  tip: live ? 'Charges on this card now' : 'Charges it starts with' });
     if (card && card.heat) meta.push({ text: '🔥' + card.heat, cls: 't-amber', tip: 'Heat' });
     var traits = String(t.traits || '').replace(/\s*start(?:er|ing)\s*card/ig, '')
                    .replace(/\s{2,}/g, ' ').trim();
@@ -1906,10 +1937,34 @@
   function cap(x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : ''; }
   function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
 
+  /* Two ways to read the log. Full is everything the engine says — every roll, every point of
+     damage — which is what you want when you are arguing with the dice. Short is only the
+     lines the engine marked as the story: a card played, an ability used. */
+  /* One control with three positions rather than a button here and a setting elsewhere: the
+     log is either all of it, the story of it, or out of the way, and that is a single question
+     about one pane, asked in one place. */
+  var LOG_MODES = ['full', 'short', 'off'];
+  var logMode = 'full';
+  try {
+    var kept = localStorage.getItem('frigateLogMode');
+    if (LOG_MODES.indexOf(kept) >= 0) logMode = kept;
+    /* whatever the old two-state switch was left on */
+    else if (localStorage.getItem('frigateLogHidden') === '1') logMode = 'off';
+  } catch (e) {}
+  /* What Short keeps: a card played, an ability used, and nothing else.
+     The engine marks those lines as it writes them, but a log that was written before it
+     started marking — a game already in progress, or a saved one coming back — has no marks on
+     it at all, and filtering on the mark alone showed an empty pane. So an unmarked line is
+     judged by its shape instead. New lines are still marked, and the mark is what is trusted
+     where it exists. */
+  var ACT_LINE = /\b(plays|activates)\b/;
+  function isAct(l) { return l.kind ? l.kind === 'act' : ACT_LINE.test(l.msg); }
+
   function renderLog(G) {
-    logEl.innerHTML = G.log.slice(-200).map(function (l) {
+    var lines = G.log.filter(function (l) { return logMode !== 'short' || isAct(l); });
+    logEl.innerHTML = lines.slice(-200).map(function (l) {
       return '<div class="t' + l.side + '">' + esc(l.msg) + '</div>';
-    }).join('');
+    }).join('') || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">Nothing yet.</div>';
     logEl.scrollTop = logEl.scrollHeight;
   }
 
@@ -1997,11 +2052,15 @@
                              : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
            '</div>';
     else if (p.kind === 'target')
+      /* Two different refusals, and only one of them was on offer. "Take it back" rewinds the
+         whole activation, which undoes the move that got you here — no use when the move was
+         the point and you simply do not like the shot. Skip resolves the prompt without
+         firing and leaves everything where it stands. */
       h += '<div style="font-size:11px;color:var(--ink-dim)">Shaded squares are in this ' +
            'weapon\'s line of fire. Click an outlined target.</div>' +
            '<div style="margin-top:6px">' +
-           (Engine.canUndo() ? cancelBtn('Cancel — take it back')
-                             : '<button class="g-btn ghost" data-done="1">Cancel</button>') +
+           '<button class="g-btn ghost" data-done="1">Skip — hold fire</button>' +
+           (Engine.canUndo() ? cancelBtn('Cancel — take it back') : '') +
            '</div>';
     promptEl.innerHTML = h;
   }
@@ -2290,6 +2349,57 @@
   document.getElementById('modPop').addEventListener('click', function (e) {
     if (e.target.id === 'modPop') closeModPopup();      /* click the backdrop to dismiss */
   });
+  /* ---------- copying the room code ----------
+     A room code exists to be sent to somebody, so it should not have to be read off the screen
+     and typed. The catch is where this game is actually played: two people on the same wifi
+     are on plain http, and navigator.clipboard simply does not exist outside a secure context
+     — it is not that it fails, it is not there. So the modern way is tried and the old
+     textarea-and-execCommand is kept behind it, which works anywhere. */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (ok, no) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      var done = false;
+      try { done = document.execCommand('copy'); } catch (e) { done = false; }
+      document.body.removeChild(ta);
+      done ? ok() : no(new Error('this browser would not copy'));
+    });
+  }
+
+  /* One listener for every copy button there is or will be, so a button drawn into a panel
+     that is rebuilt on each update needs no wiring of its own. */
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-copy]');
+    if (!b) return;
+    var text = b.getAttribute('data-copy');
+    if (!text) return;
+    copyText(text).then(function () { flash(b, '✓'); },
+                        function () { flash(b, '✗'); });
+  });
+
+  /* say so on the button itself, then put it back */
+  function flash(btn, word) {
+    if (btn._revert) clearTimeout(btn._revert);
+    if (!btn._was) btn._was = btn.textContent;
+    btn.textContent = word;
+    btn.classList.add('copied');
+    btn._revert = setTimeout(function () {
+      btn.textContent = btn._was;
+      btn.classList.remove('copied');
+      btn._revert = null;
+    }, 1400);
+  }
+
   /* ---------- settings menu ---------- */
   (function () {
     var cog = document.getElementById('cogBtn');
@@ -2483,9 +2593,7 @@
       if (started && Net.seat() !== null &&
           !window.confirm('Leave this game? Your seat goes back to the room and somebody else ' +
                           'can take it. The game carries on without you.')) return;
-      if (Net.seat() !== null) Net.release().catch(function () {});
-      Net.disconnect();
-      Net.forgetRoom();
+      Net.leave();          /* one act: seat back, stream closed, room forgotten */
     }
     askMode();
   }
@@ -2651,7 +2759,11 @@
 
     Net.onLobby(function (lobby) {
       if (!lobby) return;
+      /* Leaving a room is answered a moment later, and the answer still carries that room's
+         lobby. Acting on it would put the room back on screen after we had gone. */
+      if (!Net.room()) return;
       document.getElementById('lobbyCode').textContent = lobby.room;
+      document.getElementById('lobbyCopy').setAttribute('data-copy', lobby.room);
       document.getElementById('lobbySeats').innerHTML =
         lobby.seats.map(function (st) { return seatRow(st, lobby); }).join('');
       /* The Start button goes dead when this browser holds no seat, which is right and says
@@ -2673,7 +2785,9 @@
       var lead = (lobby.leader === null || lobby.leader === undefined)
         ? '' : '<br>Leader: <b>' + esc(lobby.seats[lobby.leader].name) +
                (lobby.leader === me ? ' (you)' : '') + '</b>';
-      setDetail('Room <b>' + esc(lobby.room) + '</b><br>' +
+      setDetail('Room <b>' + esc(lobby.room) + '</b> ' +
+                '<button type="button" class="copy-btn" data-copy="' + esc(lobby.room) +
+                '" title="Copy the room code" aria-label="Copy the room code">⧉</button><br>' +
                 (me === null ? 'Watching'
                              : 'Seat ' + (me + 1) + ' — <b>' + esc(lobby.seats[me].name) + '</b>') +
                 lead +
@@ -3098,20 +3212,27 @@
     if (isAI(G.active)) AICommander.tick(G.active);
   }, AI_TICK_MS);
 
-  /* ---------- the log pane shows or hides ---------- */
+  /* ---------- the log pane: everything, the gist, or nothing ---------- */
   (function () {
     var mid = document.querySelector('.g-mid');
     var btn = document.getElementById('logToggle');
-    function apply(hidden) {
-      mid.classList.toggle('nolog', hidden);
-      btn.textContent = hidden ? 'Show' : 'Hide';
-      btn.title = hidden ? 'Show the game log' : 'Hide the game log';
-      try { localStorage.setItem('frigateLogHidden', hidden ? '1' : '0'); } catch (e) {}
+    /* The button says where the next press goes, not where you are — a control that names its
+       own current state reads as a label and gets pressed by accident. */
+    var NEXT = { full: 'short', short: 'off', off: 'full' };
+    var SAYS = { full: ['Short', 'Show only plays and activations'],
+                 short: ['Hide', 'Hide the game log'],
+                 off: ['Show', 'Show the whole game log'] };
+    function apply(mode) {
+      logMode = LOG_MODES.indexOf(mode) >= 0 ? mode : 'full';
+      mid.classList.toggle('nolog', logMode === 'off');
+      btn.textContent = SAYS[logMode][0];
+      btn.title = SAYS[logMode][1];
+      try { localStorage.setItem('frigateLogMode', logMode); } catch (e) {}
+      var G = Engine.get();
+      if (G) renderLog(G);
     }
-    var start = false;
-    try { start = localStorage.getItem('frigateLogHidden') === '1'; } catch (e) {}
-    apply(start);
-    btn.addEventListener('click', function () { apply(!mid.classList.contains('nolog')); });
+    apply(logMode);
+    btn.addEventListener('click', function () { apply(NEXT[logMode]); });
   })();
 
   /* ---------- resizable hand ---------- */
@@ -3148,8 +3269,15 @@
      and a page that allows any of that has to allow all of it — which is the permission an
      injected string would need to become code. Keeping handlers in the script means the page
      can name the scripts it shipped and refuse the rest. */
+  /* Play Again used to reload the page, which was fine when a finished game was only ever a
+     local one: the reload built a fresh board and put the menu up. Online it is the opposite
+     of what it says — the reload lands back on the remembered room, rejoins the game that just
+     ended, and shows you the same final score. So it leaves the room properly, lays out a
+     fresh board so the result overlay has nothing to describe, and offers the menu. */
   document.getElementById('replayBtn').addEventListener('click', function () {
-    location.reload();
+    if (typeof Net !== 'undefined' && Net.room()) Net.leave();
+    start();
+    askMode();
   });
 
   Engine.onChange(render);

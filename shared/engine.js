@@ -47,10 +47,16 @@ var Engine = (function () {
   /* How much log a game carries. Clients are sent the last 200; the rest is only ever going to
      be written to disk, so the tail is kept and the head is let go. */
   var LOG_KEEP = 500;
-  function log(msg, who) {
+  /* `kind` marks the lines that are the story of a turn rather than its arithmetic — a card
+     played, an ability used. Everything else is detail: rolls, damage, draws. A reader who
+     only wants to know what happened can then be given exactly those, instead of the log
+     having to be guessed at by matching words in it. */
+  function log(msg, who, kind) {
     var idx = who == null ? (speaker === null ? G.active : speaker)
             : (typeof who === 'number' ? who : who.idx);
-    G.log.push({ turn: G.turn, side: idx, msg: msg });
+    var entry = { turn: G.turn, side: idx, msg: msg };
+    if (kind) entry.kind = kind;
+    G.log.push(entry);
     if (G.log.length > LOG_KEEP * 2) G.log.splice(0, G.log.length - LOG_KEEP);
   }
   function uid(p) { return p + '_' + (G.seq++); }
@@ -760,6 +766,25 @@ var Engine = (function () {
   OPS.__shot = function (o, ctx) { shoot(o.shot, ctx, o.targetId); };
 
   /* One target, start to finish. */
+  /* ---- point defence ----
+     Is this module standing under one of its owner's P.D. modules? Range 1, as the card says,
+     measured from the P.D. to the piece being shot at — so a P.D. covers itself and everything
+     immediately around it.
+
+     This is answered here rather than through the passive queue above, and deliberately. A
+     passive that has to stop an attack has to be consulted in the middle of resolving one, and
+     the queue only runs between actions — which is why the P.D.'s passive has never once
+     fired. Deciding it at the moment the dice would be rolled is the whole of the rule. */
+  function pointDefenceCovers(t) {
+    if (!t || t.kind !== 'module' || !t.owner) return false;
+    var mods = t.owner.modules, ids = Object.keys(mods);
+    for (var i = 0; i < ids.length; i++) {
+      var m = mods[ids[i]];
+      if (m.name === 'P.D.' && dist(m, t.obj) <= 1) return true;
+    }
+    return false;
+  }
+
   function shoot(o, ctx, targetId) {
     var s = ctx.side;
     var t = objectById(targetId);
@@ -778,6 +803,10 @@ var Engine = (function () {
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
     var friendly = !!t.owner && t.owner.team === s.team;
+    /* A deployable closing on somebody's hull is the exact thing point defence exists for, so
+       a module under that umbrella cannot be hit by one. Only deployables: a P.D. is close-in
+       defence, not a shield against the enemy fleet's guns. */
+    var swatted = !!ctx.deployable && !friendly && pointDefenceCovers(t);
     /* The dice are about to be cast, so the activation can no longer be taken back. A
        rider's prompt may still be cancelled, but that cancels only the rider — the cost
        stays paid and the card stays exhausted. */
@@ -791,6 +820,7 @@ var Engine = (function () {
     for (var i = 0; i < n; i++) {
       /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
       var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
+            : swatted ? { hit: false, text: 'P.D. covers the target — the shot is swatted down' }
             : o.check ? check(s, o.check, RULES.dc) : attackRoll();
       if (c.hit) {
         log('  ' + c.text + ' — hit.');
@@ -1157,6 +1187,23 @@ var Engine = (function () {
     return !costShortfall(a.cost, ctx);
   }
 
+  /* Why this cannot be activated, in words, or null when it can. affordable() answers the same
+     question with a boolean; a greyed-out button that will not say what is wrong with it is the
+     thing players actually complain about. */
+  function shortfall(s, obj, kind) {
+    var e = fx(obj.name, kind === 'tech' ? 'tech' : 'mod');
+    var a = e.activate;
+    if (!a) return 'has nothing to activate';
+    var ctx = kind === 'tech' ? { side: s, card: obj }
+            : kind === 'dep' ? { side: s, module: obj, deployable: obj }
+            : { side: s, module: obj };
+    if (a.mode === 'choice') {
+      var reasons = (a.options || []).map(function (opt) { return costShortfall(opt.cost, ctx); });
+      return reasons.every(Boolean) ? reasons[0] : null;
+    }
+    return costShortfall(a.cost, ctx) || null;
+  }
+
   /* Run an activation, but only if its cost can be met in full. */
   function activate(cost, effect, ctx, label, option) {
     var why = costShortfall(cost, ctx);
@@ -1167,7 +1214,7 @@ var Engine = (function () {
     }
     /* Announced before the ops run, so the log reads as cause then consequence: the
        activation, then what it cost and what it did. */
-    log(ctx.side.name + ' activates ' + label + (option ? ' — ' + option : '') + '.', ctx.side);
+    log(ctx.side.name + ' activates ' + label + (option ? ' — ' + option : '') + '.', ctx.side, 'act');
     run((cost || []).concat(effect || []), ctx);
     return true;
   }
@@ -1371,7 +1418,7 @@ var Engine = (function () {
     var card = s.cards[cardId];
     s.hand.splice(i, 1); s.played.push(cardId);
     s.playsLeft--;
-    log(s.name + ' plays ' + card.name + '.', s);
+    log(s.name + ' plays ' + card.name + '.', s, 'act');
     var e = fx(card.name, 'tech');
     run(e.onPlay || [], { side: s, card: card });
     return true;
@@ -1382,7 +1429,8 @@ var Engine = (function () {
     if (G.pending || G.over) return false;
     if (G.phase === 'play') { log('Finish the play phase first.'); emit(); return false; }
     var card = s.cards[cardId];
-    if (!card || card.exhausted) return false;
+    if (!card) return false;
+    if (card.exhausted) { log(card.name + ' is already spent this turn.', s); emit(); return false; }
     if (s.played.indexOf(cardId) < 0) { log('That card is not in play.'); emit(); return false; }
     var e = fx(card.name, 'tech');
     if (!e.activate) return false;
@@ -1404,7 +1452,8 @@ var Engine = (function () {
     if (G.pending || G.over) return false;
     if (G.phase === 'play') { log('Finish the play phase first.'); emit(); return false; }
     var m = s.modules[modId];
-    if (!m || m.exhausted) return false;
+    if (!m) return false;
+    if (m.exhausted) { log(m.name + ' is already spent this turn.', s); emit(); return false; }
     if (!meetsReq(s, m)) { log(m.name + ' is out of position and cannot be activated.'); emit(); return false; }
     var e = fx(m.name, 'mod');
     if (!e.activate) return false;
@@ -1427,7 +1476,8 @@ var Engine = (function () {
     if (G.pending || G.over) return false;
     if (G.phase === 'play') { log('Finish the play phase first.'); emit(); return false; }
     var d = s.deployables[depId];
-    if (!d || d.exhausted) return false;
+    if (!d) return false;
+    if (d.exhausted) { log(d.name + ' is already spent this turn.', s); emit(); return false; }
     var e = fx(d.name, 'mod');
     if (!e.activate) return false;
     var a = e.activate;
@@ -1754,7 +1804,7 @@ var Engine = (function () {
     hostileObjects: hostileObjects, objectById: objectById, stepObject: stepObject,
     connectedToCore: connectedToCore,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
-    costShortfall: costShortfall, affordable: affordable,
+    costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,

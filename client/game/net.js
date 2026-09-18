@@ -276,6 +276,24 @@ var Net = (function () {
     });
   }
 
+  /* Leave the room altogether, which is not the same as giving up a seat.
+     release() hands the chair back and leaves you standing in the room, still streaming, still
+     listed as present — which is right for "Leave seat" and wrong for "Exit". Exit has to stop
+     us being in the room at all, and it has to be one act rather than a sequence the page
+     stitches together: release answers a moment later and announces a lobby, and a page that
+     had already moved on would be dragged back into the room it just left. Clearing the room
+     here is what lets everything downstream recognise that announcement as the wake of
+     somewhere we are no longer. */
+  function leave() {
+    if (!ST.room) return Promise.resolve();
+    var going = ST.token ? release() : Promise.resolve();
+    disconnect();
+    forgetRoom();
+    ST.room = null; ST.lobby = null; ST.seat = null; ST.token = null;
+    ST.stateRoom = null; ST.rev = -1;
+    return going.catch(function () {});
+  }
+
   /* The leader empties somebody else's chair. The server is the one that decides whether you
      are the leader; this only asks. */
   function kick(seatIdx) {
@@ -402,7 +420,8 @@ var Net = (function () {
     lobby: function () { return ST.lobby; },
     /* true only when the board on screen is this room's game, as the server sent it */
     hasState: function () { return ST.stateRoom !== null && ST.stateRoom === ST.room; },
-    create: create, look: look, claim: claim, resume: resume, release: release, kick: kick,
+    create: create, look: look, claim: claim, resume: resume, release: release, leave: leave,
+    kick: kick,
     openGames: openGames, setSeatKind: setSeatKind,
     /* are you the one who sat down first, and so the one who can free a seat? */
     isLeader: function () {
