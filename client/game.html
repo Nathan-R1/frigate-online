@@ -725,7 +725,10 @@
      be, and it outranks a room this browser happens to remember. */
   var CAME_BACK = readStore(SETUP_RETURN_KEY, null);
   dropStore(SETUP_RETURN_KEY);
-  if (CAME_BACK !== 'online' && CAME_BACK !== 'local') CAME_BACK = null;
+  /* 'local' or 'online' means a table being set up; an object naming a room means a seat was
+     being edited from that room's lobby, and the way back is into the lobby itself. */
+  if (CAME_BACK && typeof CAME_BACK === 'object' && CAME_BACK.lobby) { /* keep as it is */ }
+  else if (CAME_BACK !== 'online' && CAME_BACK !== 'local') CAME_BACK = null;
 
   var seatSheets = readStore(GAME_SEATS_KEY, []);
   if (!Array.isArray(seatSheets)) seatSheets = [];
@@ -752,6 +755,27 @@
   })();
 
   function sheetOf(i) { return (seatSheets[i] && seatSheets[i].sheet) || null; }
+
+  /* A seat on the server keeps the deck the engine deals from and, beside it, the builder's
+     own document — so a ship edited twice does not lose the hull and core choices that made
+     it. Where an older room has only the deck, a bare sheet is reconstructed from it. */
+  function sheetFromSetup(su) {
+    if (su && su.sheet) return su.sheet;
+    if (!su || !su.deck || !su.deck.length) return null;
+    function entry(t) { return typeof t === 'string' ? { name: t } : { name: t.name, traits: t.traits }; }
+    return { shipName: '', tech: su.deck.map(entry), mods: (su.modules || []).map(entry) };
+  }
+  /* and the other way: what the server needs to deal this ship, plus the sheet to edit it by */
+  function setupFromSheet(sh) {
+    if (!sh) return null;
+    var deck = (sh.tech || []).filter(function (t) { return !!Engine.findTech(t.name); })
+      .map(function (t) { return { name: t.name, traits: t.traits }; });
+    var skills = {};
+    Object.keys(sh.skills || {}).forEach(function (k) {
+      skills[k] = parseInt((sh.skills[k] || {}).points, 10) || 0;
+    });
+    return { deck: deck, modules: [], skills: skills, sheet: sh };
+  }
 
   /* how much hull this sheet brings to the table before the first turn */
   function starterCount(sh) {
@@ -2565,14 +2589,19 @@
           '<option value="0"' + (seat.ai ? '' : ' selected') + '>Local player</option>' +
           '<option value="1"' + (seat.ai ? ' selected' : '') + '>Computer</option>' +
         '</select>' +
-        '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
-          (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
-          EDIT_ICON + '</button>' +
-        '<button type="button" class="rost-edit rost-trash" data-reset="' + i + '"' +
-          (sh ? '' : ' disabled') + ' title="' +
-          (sh ? 'Discard this build and go back to the default ship'
-              : 'This player is already flying the default ship') + '">' +
-          TRASH_ICON + '</button></div>';
+        /* Online, a ship is chosen in the lobby by whoever is going to fly it, so the table
+           screen does not offer to build one here — there is nobody sitting in these seats
+           yet. Locally the seats are all at this screen, so the buttons stay. */
+        (setupMode === 'online' ? '' :
+          '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
+            (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
+            EDIT_ICON + '</button>' +
+          '<button type="button" class="rost-edit rost-trash" data-reset="' + i + '"' +
+            (sh ? '' : ' disabled') + ' title="' +
+            (sh ? 'Discard this build and go back to the default ship'
+                : 'This player is already flying the default ship') + '">' +
+            TRASH_ICON + '</button>') +
+        '</div>';
     }).join('');
     /* one team means nobody to fight, so there is no game to start */
     var used = {};
@@ -2739,11 +2768,16 @@
               : seat.away ? 'empty — waiting for a player' : 'free';
       if (lobby && lobby.leader === seat.idx) who += ' · leader';
       var canTake = !mine && !seat.taken && seat.kind !== 'computer';
+      /* Your own ship is yours to choose; the leader arranges the table, so may choose any.
+         Only before the deal — after that a ship is on the board and cannot be swapped. */
+      var canEdit = !lobby.started && Net.seat() !== null && (mine || Net.isLeader());
       return '<div class="lb-seat' + (mine ? ' mine' : '') + '">' +
         '<span class="lb-dot" style="background:' + SEAT_HEX[seat.idx % 4] + '"></span>' +
         '<span class="lb-name">' + esc(seat.name) +
           ' <span style="color:var(--ink-dim)">Team ' + TEAM_LETTER[seat.team] + '</span></span>' +
         '<span class="lb-who">' + esc(who) + '</span>' +
+        (canEdit ? '<button type="button" class="g-btn ghost" data-editseat="' + seat.idx +
+                   '" style="padding:3px 9px;font-size:11px">Edit ship</button>' : '') +
         (canTake ? '<button type="button" class="g-btn ghost" data-take="' + seat.idx +
                    '" style="padding:3px 9px;font-size:11px">Take it</button>' : '') +
         '</div>';
@@ -2867,7 +2901,28 @@
       Net.kick(idx).then(drawKickList, function (err) { say('kickErr', err.message); });
     });
 
+    /* Off to the builder with this seat's ship, and a note saying to come back into this
+       lobby rather than to a table-setup screen nobody is looking at. */
+    function editLobbySeat(idx) {
+      say('lobbyErr', '');
+      Net.seatSetup(idx).then(function (info) {
+        var sheet = sheetFromSetup(info.setup);
+        writeStore(SETUP_RETURN_KEY, { lobby: Net.room(), seat: idx });
+        writeStore(SEAT_REQUEST_KEY, {
+          seat: idx,
+          label: info.name || ('Seat ' + (idx + 1)),
+          choices: null,
+          sheet: sheet || stockSheet(),
+          stock: !sheet,
+          ret: window.location.pathname + window.location.search
+        });
+        window.location.href = BUILDER_URL;
+      }, function (err) { say('lobbyErr', err.message); });
+    }
+
     document.getElementById('lobbySeats').addEventListener('click', function (e) {
+      var ed = e.target.closest('button[data-editseat]');
+      if (ed) { editLobbySeat(+ed.getAttribute('data-editseat')); return; }
       var b = e.target.closest('button[data-take]');
       if (!b) return;
       say('lobbyErr', '');
@@ -3017,6 +3072,24 @@
     /* A room in the address bar joins it straight away, so a host can paste a link. Failing
        that, a browser that was in a game goes back to it: reloading is how you reclaim a seat,
        and it should not cost you the room code to do it. */
+    /* The builder hands its work back through localStorage, the same way it always has. What
+       is different here is where it has to end up: on the server, against that seat, so that
+       everybody else sees the ship and the deal uses it. */
+    function sendEditedSeat(idx) {
+      var held = readStore(GAME_SEATS_KEY, []);
+      var entry = Array.isArray(held) ? held[idx] : null;
+      var sheet = entry && entry.sheet;
+      if (!sheet) return;
+      var setup = setupFromSheet(sheet);
+      if (!setup) return;
+      Net.setSeatSetup(idx, setup, sheet.shipName || '')
+        .then(function () {
+          /* it lives on the server now; this browser's copy is just a leftover */
+          if (Array.isArray(held)) { held[idx] = null; writeStore(GAME_SEATS_KEY, held); }
+          say('lobbyErr', '');
+        }, function (err) { say('lobbyErr', 'could not save that ship: ' + err.message); });
+    }
+
     function rejoin(code, loud) {
       return Net.look(code)
         .then(function () { return Net.resume(code); })
@@ -3027,7 +3100,11 @@
         });
     }
     var inUrl = (location.search.match(/[?&]room=([A-Za-z0-9]{6})/) || [])[1];
-    if (CAME_BACK) { /* you asked to be at the table, not back in your last room */ }
+    if (CAME_BACK && CAME_BACK.lobby) {
+      /* back from editing a seat: into that lobby, and the ship goes up with us */
+      rejoin(CAME_BACK.lobby, true).then(function () { sendEditedSeat(CAME_BACK.seat); });
+    }
+    else if (CAME_BACK) { /* you asked to be at the table, not back in your last room */ }
     else if (inUrl) rejoin(inUrl.toUpperCase(), true);
     else if (Net.lastRoom() && Net.hadSeatIn(Net.lastRoom())) rejoin(Net.lastRoom(), false);
   })();

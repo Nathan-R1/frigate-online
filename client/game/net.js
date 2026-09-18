@@ -301,6 +301,19 @@ var Net = (function () {
       .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
   }
 
+  /* A seat's ship, read and written while the room is still in its lobby. Your own seat, or
+     anybody's if you are the leader — the server decides, this only asks. Kept out of the
+     lobby everyone receives because a deck list is nobody else's business. */
+  function seatSetup(seatIdx) {
+    return api('/api/seat-setup', { room: ST.room, token: ST.token, seat: seatIdx })
+      .then(function (j) { return { seat: j.seat, name: j.name, setup: j.setup }; });
+  }
+  function setSeatSetup(seatIdx, setup, name) {
+    return api('/api/set-setup', { room: ST.room, token: ST.token, seat: seatIdx,
+                                   setup: setup, name: name })
+      .then(function (j) { ST.lobby = j.lobby; fireLobby(); return true; });
+  }
+
   /* The leader hands a seat to the computer, or takes it back for a person. */
   function setSeatKind(seatIdx, kind) {
     return api('/api/seatkind', { room: ST.room, token: ST.token, seat: seatIdx, kind: kind })
@@ -423,6 +436,7 @@ var Net = (function () {
     create: create, look: look, claim: claim, resume: resume, release: release, leave: leave,
     kick: kick,
     openGames: openGames, setSeatKind: setSeatKind,
+    seatSetup: seatSetup, setSeatSetup: setSeatSetup,
     /* are you the one who sat down first, and so the one who can free a seat? */
     isLeader: function () {
       return !!(ST.lobby && ST.seat !== null && ST.token && ST.lobby.leader === ST.seat);
