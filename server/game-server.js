@@ -547,7 +547,10 @@ function sweepTickets(now) {
    everything else is arithmetic. The buckets are swept, because a map keyed on something the
    caller chooses is itself a way to spend our memory. */
 var buckets = Object.create(null);
-var RATE_CAP = num(process.env.FRIGATE_RATE_CAP, 120);      /* credits held at most */
+/* Credits held at most. The burst matters more than the rate: several players behind one
+   household address all joining at once, or all reconnecting after a deploy, should not be
+   mistaken for an attack. The sustained allowance below is what actually bounds abuse. */
+var RATE_CAP = num(process.env.FRIGATE_RATE_CAP, 240);
 var RATE_FILL = num(process.env.FRIGATE_RATE_FILL, 2);      /* credits back per second */
 var COST = { '/api/create': 30, '/api/stream': 5, '/api/ticket': 2, other: 1 };
 
