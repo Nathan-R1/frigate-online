@@ -2,15 +2,15 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Frigate — Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/frigate.css">
 <style>
-  body { margin:0; padding:0; height:100vh; overflow:hidden; font-family:var(--body); }
-  .g-wrap { display:grid; grid-template-rows:auto auto 1fr auto; height:100vh; }
+  body { margin:0; padding:0; height:100vh; height:100dvh; overflow:hidden; font-family:var(--body); }
+  .g-wrap { display:grid; grid-template-rows:auto auto 1fr auto; height:100vh; height:100dvh; }
   .g-top { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel);
            border-bottom:1px solid var(--line-bright); flex-wrap:wrap; }
   .g-turn { font-family:var(--disp); font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--cyan); }
@@ -249,8 +249,9 @@
   .g-log .t2 { color:var(--p2); } .g-log .t3 { color:var(--p3); }
   /* the hand is a user-resizable row; --hand-h is written by the drag grip */
   .g-handwrap { display:flex; flex-direction:column; height:var(--hand-h, 132px);
-                min-height:64px; max-height:72vh; background:var(--panel);
-                border-top:1px solid var(--line-bright); }
+                min-height:64px; max-height:72vh; max-height:72dvh; background:var(--panel);
+                border-top:1px solid var(--line-bright);
+                padding-bottom:env(safe-area-inset-bottom, 0px); }
   .hand-grip { flex:none; height:9px; cursor:ns-resize; display:flex; align-items:center;
                justify-content:center; background:var(--panel); touch-action:none; }
   .hand-grip span { display:block; width:46px; height:3px; border-radius:2px; background:var(--line-bright); }
