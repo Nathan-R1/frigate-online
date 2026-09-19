@@ -148,6 +148,7 @@ var Engine = (function () {
   function placeModule(s, modName, x, y) {
     var m = findMod(modName); if (!m) return null;
     if (!inBounds(x, y) || cellAt(x, y)) return null;
+    shapeFallback(s.idx, modName);
     var id = uid('m');
     var hull = num(m.hull, 1);
     s.modules[id] = { id: id, name: modName, x: x, y: y, hull: hull, hullMax: hull,
@@ -160,6 +161,7 @@ var Engine = (function () {
   function placeDeployable(s, depName, x, y) {
     var m = findMod(depName); if (!m) return null;
     if (!inBounds(x, y) || cellAt(x, y)) return null;
+    shapeFallback(s.idx, depName);
     var id = uid('d');
     s.deployables[id] = { id: id, name: depName, x: x, y: y, hull: num(m.hull, 1),
                           speed: num(m.speed, 0), charges: num(m.charges, 0), owner: s.idx };
@@ -173,6 +175,45 @@ var Engine = (function () {
       var t = a[i]; a[i] = a[j]; a[j] = t;
     }
     return a;
+  }
+
+  var MOD_SHAPES = ['hex', 'triangle', 'square', 'diamond', 'circle'];
+
+  function creationNames(v, out) {
+    if (Array.isArray(v)) { v.forEach(function (x) { creationNames(x, out); }); return out; }
+    if (v && typeof v === 'object') {
+      if (v.op === 'createModule' && v.module) out[v.module] = true;
+      if (v.op === 'createDeployable' && v.deployable) out[v.deployable] = true;
+      Object.keys(v).forEach(function (k) { creationNames(v[k], out); });
+    }
+    return out;
+  }
+
+  function dealShapes(idx, cfg) {
+    var names = { Core: true };
+    (cfg.modules || []).forEach(function (mn) { names[mn] = true; });
+    (cfg.deck || []).forEach(function (d) {
+      var t = (d && d.name) || d;
+      creationNames(CARD_EFFECTS.tech[t], names);
+    });
+    var items = Object.keys(names);
+    shuffle(items);
+    var pool = MOD_SHAPES.slice();
+    shuffle(pool);
+    G.shapes[idx] = {};
+    items.forEach(function (name, k) { G.shapes[idx][name] = pool[k % pool.length]; });
+  }
+
+  function shapeFallback(idx, name) {
+    if (idx === undefined || idx === null) return;
+    if (!G.shapes) G.shapes = G.players.map(function () { return {}; });
+    var map = G.shapes[idx] || (G.shapes[idx] = {});
+    if (map[name]) return;
+    var used = {};
+    Object.keys(map).forEach(function (k) { used[map[k]] = true; });
+    var free = MOD_SHAPES.filter(function (s) { return !used[s]; });
+    map[name] = free.length ? free[Math.floor(rand() * free.length)]
+                            : MOD_SHAPES[Math.floor(rand() * MOD_SHAPES.length)];
   }
 
   /* two sides face off across the middle; three or four take corners */
@@ -191,7 +232,7 @@ var Engine = (function () {
     configs = configs.slice(0, 4);
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
-          log: [], seq: 1, over: null, queue: [], asteroids: {},
+          log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
           seed: s0, rng: s0 };
     var pts = spawnPoints(configs.length);
     configs.forEach(function (cfg, i) {
@@ -201,6 +242,7 @@ var Engine = (function () {
       s.ai = !!cfg.ai;
       s.dead = false;
       G.players.push(s);
+      dealShapes(i, cfg);
       var p = pts[i] || pts[0];
       s.coreId = placeModule(s, 'Core', p.x, p.y);
       (cfg.modules || []).forEach(function (mn, k) {
@@ -1799,6 +1841,7 @@ var Engine = (function () {
     if (!G) return null;
     var out = { replica: true, turn: G.turn, active: G.active, phase: G.phase, seq: G.seq,
                 over: G.over, cells: copy(G.cells), asteroids: copy(G.asteroids),
+                shapes: copy(G.shapes),
                 log: G.log.slice(-200), pending: promptData(), canUndo: canUndo(),
                 players: [] };
     G.players.forEach(function (s, i) {
@@ -1835,6 +1878,7 @@ var Engine = (function () {
     /* trimmed: the log is most of the bytes and only the recent lines are ever read */
     var out = copy({ turn: G.turn, active: G.active, phase: G.phase, seq: G.seq, over: G.over,
                      cells: G.cells, asteroids: G.asteroids, players: G.players,
+                     shapes: G.shapes,
                      seed: G.seed, rng: G.rng, setup: G.setup });
     out.log = G.log.slice(-LOG_KEEP);
     return out;

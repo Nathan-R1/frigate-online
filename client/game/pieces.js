@@ -1,12 +1,12 @@
 /* Board piece graphics.
 
    The silhouettes, the slow rotations and the blinking lights are lifted from the tabletop
-   tabletop battle map this game grew out of, so a piece carries no text: its
-   shape says what class of module it is, and everything else — selection, exhaustion, a
-   broken connection, movement left — is a class or a floating badge.
+   battle map this game grew out of, so a piece carries no text: its shape says what class of
+   module it is, and everything else — selection, exhaustion, a broken connection, movement
+   left — is a class or a floating badge.
 
-   hex = Core, triangle = Offense, square = Defense/Armor, diamond = Movement,
-   circle = Science, and anything unrecognised falls back to the hex. */
+   Shapes are dealt per seat when a game starts, so the class clues above are only the fallback
+   for a shape the deal has not assigned. Everything unrecognised falls back to the hex. */
 var GamePieces = (function () {
   'use strict';
 
@@ -219,9 +219,15 @@ var GamePieces = (function () {
     });
   }
 
-  /* the module's own type decides its silhouette; the Core is special-cased because its
-     preset type is 'movement' and it must not read as an engine */
-  function shapeOf(name, isCore) {
+  /* the shape a piece wears. Dealt per seat when the game is dealt (Engine.get().shapes),
+     so a Cannon is not recognisably a triangle from across the board; the Core shuffles like
+     any other name. Only when the game has no deal — an old save, the setup screens — does the
+     shape fall back to the module's class: hex for Core, offense triangle, defence square,
+     movement diamond, science circle. */
+  function shapeOf(owner, name, isCore) {
+    var g = (typeof Engine !== 'undefined' && Engine.get) ? Engine.get() : null;
+    var map = g && g.shapes && g.shapes[owner];
+    if (map && map[name]) return map[name];
     if (isCore || countsAsCore(name)) return 'hex';
     var m = (typeof Engine !== 'undefined' && Engine.findMod) ? Engine.findMod(name) : null;
     var tt = m && m.tt;
