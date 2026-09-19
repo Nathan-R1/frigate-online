@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/frigate.css">
 <style>
   body { margin:0; padding:0; height:100vh; height:100dvh; overflow:hidden; font-family:var(--body); }
-  .g-wrap { display:grid; grid-template-rows:auto auto 1fr auto; height:100vh; height:100dvh; }
+  .g-wrap { display:grid; grid-template-rows:auto 1fr auto; height:100vh; height:100dvh; }
   .g-top { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel);
            border-bottom:1px solid var(--line-bright); flex-wrap:wrap; }
   .g-turn { font-family:var(--disp); font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--cyan); }
@@ -54,7 +54,7 @@
      comes back here */
   @media (max-width: 700px) { .stats-drop .side-bar .sb-name { display:inline; } }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
-  .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
+  .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; position:relative; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
   .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab;
              touch-action:none; }
@@ -234,11 +234,16 @@
   .log-head button:hover { border-color:var(--cyan); color:var(--cyan); }
   .g-mid.nolog { grid-template-columns:1fr; }
   .g-mid.nolog .g-right { display:none; }
-  /* the prompt, when the log is put away, leaves the right column and becomes its own bar
-     under the top menu. Empty — log showing — the row collapses to nothing. */
-  .g-promptbar { display:flex; align-items:stretch; min-height:0; }
-  .g-promptbar .g-prompt { flex:1; min-width:0; }
-  .g-promptbar #logToggle { flex:none; margin:0 12px 0 auto; font-family:var(--mono); font-size:10px;
+  /* the prompt, with the log put away, floats over the board instead of sharing its row —
+     whatever the play-phase words or the move pad grow to, the board underneath never moves */
+  .g-promptbar { position:absolute; left:8px; right:8px; bottom:8px; z-index:30;
+                 display:flex; align-items:flex-start; gap:4px;
+                 max-height:calc(100% - 16px); overflow-y:auto;
+                 background:rgba(10,16,24,.95); border:1px solid var(--line-bright);
+                 border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.5); }
+  .g-promptbar:empty { display:none; }
+  .g-promptbar .g-prompt { flex:1; min-width:0; border-bottom:0; }
+  .g-promptbar #logToggle { flex:none; margin:0 10px; font-family:var(--mono); font-size:10px;
     letter-spacing:.1em; text-transform:uppercase; padding:6px 10px; cursor:pointer; border-radius:4px;
     background:none; border:1px solid var(--line-bright); color:var(--ink-mid); align-self:center; }
   .g-promptbar #logToggle:hover { border-color:var(--cyan); color:var(--cyan); }
@@ -266,6 +271,7 @@
      min before the row starts scrolling. */
   .hcard { flex:0 1 auto; width:100cqh; min-width:112px; height:100%;
            border:1px solid var(--line); border-radius:8px;
+           user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
            padding:clamp(4px, 5cqh, 10px) clamp(5px, 6cqh, 12px);
            background:var(--panel-alt); display:flex; flex-direction:column;
            gap:clamp(2px, 3cqh, 6px); overflow:hidden; }
@@ -556,8 +562,8 @@
       </div>
     </span>
   </div>
-  <div class="g-promptbar" id="promptBar"></div>
   <div class="g-mid">
+    <div class="g-promptbar" id="promptBar"></div>
     <div class="g-board" id="boardWrap"><div class="grid" id="grid"></div>
       <div class="move-counter hidden" id="moveCounter">
         <span class="mc-label">Move</span><span class="mc-val" id="mcVal">0</span>
@@ -3487,7 +3493,8 @@
       var G = Engine.get();
       if (G) renderLog(G);
       /* with the log away the right column is gone, so the prompt — and the button that
-         brings the log back — move up into a bar of their own under the top menu */
+         brings the log back — move into the panel floating over the board, which sizes
+         itself without ever budging the board underneath */
       if (logMode === 'off') {
         bar.appendChild(promptEl);
         bar.appendChild(btn);
