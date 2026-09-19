@@ -43,6 +43,16 @@
   /* tight bar: the phase buttons keep only their mark, and the seats only their team and stats */
   @media (max-width: 900px) { .btn-label { display:none; } }
   @media (max-width: 700px) { .side-bar .sb-name { display:none; } }
+  /* Very small screens swap the seat bars themselves for a chart button that pops them
+     down — the top bar keeps room for the buttons that actually play the game. */
+  .stats-wrap { display:none; }
+  @media (max-width: 600px) {
+    .stats-wrap { display:flex; }
+    #barRow { display:none; }
+  }
+  /* the drop-down shows the bars in full, so a name the inline row would have dropped
+     comes back here */
+  @media (max-width: 700px) { .stats-drop .side-bar .sb-name { display:inline; } }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
@@ -412,6 +422,16 @@
   .settings-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
     background:var(--panel-alt); border:1px solid var(--line-bright); border-radius:8px;
     box-shadow:0 8px 24px rgba(0,0,0,.6); min-width:210px; padding:8px; }
+  /* the seat stats drop-down, in the settings menu's shape */
+  .stats-wrap { position:relative; align-items:center; }
+  .stats-cog { font-size:15px; line-height:1; padding:6px 10px; }
+  .stats-drop { position:fixed; left:8px; right:8px; z-index:70;
+    background:var(--panel-alt); border:1px solid var(--line-bright); border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.6); box-sizing:border-box;
+    padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .stats-drop .side-bar { min-width:0; }
+  .stats-drop .sb-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .g-btn.on { background:var(--cyan); color:var(--ink-strong); }
   .set-group { font-family:var(--disp); font-size:10.5px; letter-spacing:.1em;
     text-transform:uppercase; color:var(--ink-dim); padding:2px 4px 6px; }
   .set-row { display:flex; align-items:center; gap:10px; padding:3px 4px; }
@@ -470,6 +490,11 @@
   <div class="g-top">
     <span class="g-turn" id="turnLabel">—</span>
     <span id="barRow"></span>
+    <span class="stats-wrap" id="statsWrap">
+      <button type="button" class="g-btn ghost stats-cog" id="statsBtn" title="Player stats"
+              aria-haspopup="true" aria-expanded="false">📊</button>
+      <div class="stats-drop hidden" id="statsDrop" role="menu"></div>
+    </span>
     <span style="flex:1"></span>
     <button type="button" class="g-btn" id="playPhaseBtn">
       <svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7V5Z"
@@ -1020,10 +1045,14 @@
     document.getElementById('turnLabel').textContent =
       'Turn ' + G.turn + ' — ' + G.players[G.active].name;
     document.getElementById('turnLabel').style.color = SEAT_HEX[G.active % 4];
-    document.getElementById('barRow').innerHTML = G.players.map(function (s, i) {
+    var bars = G.players.map(function (s, i) {
       return '<span class="side-bar' + (G.active === i ? ' turn' : '') + (s.dead ? ' out' : '') +
              '" style="--sc:' + SEAT_HEX[i % 4] + '">' + bar(s, G) + '</span>';
     }).join('');
+    document.getElementById('barRow').innerHTML = bars;
+    document.getElementById('statsDrop').innerHTML = bars;
+    /* bars can change width with the roster, so a pop-up that is open is re-kept in view */
+    placeStatsDrop();
     var mine = isMyTurn(G) && !G.pending && !G.over;
     /* the two are never both useful, so only the one for this phase is on screen */
     var inPlay = G.phase === 'play';
@@ -1032,6 +1061,16 @@
     pb.classList.toggle('hidden', !inPlay);
     eb.disabled = !mine;
     pb.disabled = !mine;
+  }
+
+  /* the stats readable-out is pinned to the button, but sized to the window — it can
+     never poke past the edge of a phone screen, whatever the label or roster does */
+  function placeStatsDrop() {
+    var btn = document.getElementById('statsBtn');
+    var drop = document.getElementById('statsDrop');
+    if (!btn || drop.classList.contains('hidden')) return;
+    var r = btn.getBoundingClientRect();
+    drop.style.top = (r.bottom + 6) + 'px';
   }
 
   /* ---------- board ----------
@@ -2592,6 +2631,31 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !menu.classList.contains('hidden')) { e.preventDefault(); open(false); }
     });
+  })();
+  /* the seat-stats button pops the bars down; press again, click away, or press Escape to
+     put them back. The bars only take to the drop-down on very small screens — on anything
+     bigger the button is hidden and the row stays where it was. */
+  (function () {
+    var wrap = document.getElementById('statsWrap');
+    var btn = document.getElementById('statsBtn');
+    var drop = document.getElementById('statsDrop');
+    function open(on) {
+      drop.classList.toggle('hidden', !on);
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (on) placeStatsDrop();
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      open(drop.classList.contains('hidden'));
+    });
+    document.addEventListener('click', function (e) {
+      if (!drop.classList.contains('hidden') && !wrap.contains(e.target)) open(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !drop.classList.contains('hidden')) open(false);
+    });
+    window.addEventListener('resize', placeStatsDrop);
   })();
   (function () {
     var keys = document.getElementById('keysPop'), card = document.getElementById('cardPop');
