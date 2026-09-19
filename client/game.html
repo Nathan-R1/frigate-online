@@ -1473,12 +1473,12 @@
       Object.keys(s.modules).forEach(function (id) {
         var m = s.modules[id];
         out.push({ id: id, o: m, kind: 'mod', side: s, si: si,
-                   shape: GamePieces.shapeOf(m.name, id === s.coreId), color: SEAT_HEX[si % 4] });
+                   shape: GamePieces.shapeOf(si, m.name, id === s.coreId), color: SEAT_HEX[si % 4] });
       });
       Object.keys(s.deployables).forEach(function (id) {
         var d = s.deployables[id];
         out.push({ id: id, o: d, kind: 'dep', side: s, si: si,
-                   shape: GamePieces.shapeOf(d.name, false), color: SEAT_HEX[si % 4] });
+                   shape: GamePieces.shapeOf(si, d.name, false), color: SEAT_HEX[si % 4] });
       });
     });
     return out;
@@ -1582,7 +1582,7 @@
     [['modules', 'mod'], ['deployables', 'dep']].forEach(function (pair) {
       var byShape = {};
       Object.keys(s[pair[0]]).forEach(function (id) {
-        var o = s[pair[0]][id], sh = GamePieces.shapeOf(o.name, id === s.coreId);
+        var o = s[pair[0]][id], sh = GamePieces.shapeOf(s.idx, o.name, id === s.coreId);
         (byShape[sh] = byShape[sh] || {})[o.name] = true;
       });
       Object.keys(byShape).forEach(function (sh) {
@@ -1705,7 +1705,7 @@
         (livePassive(s, d, 'dep') ? ' watching' : '') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
-        pieceIcon(d.name, false) + esc(d.name) + '</div>' +
+        pieceIcon(s.idx, d.name, false) + esc(d.name) + '</div>' +
         '<div class="hmeta">deployable ' + hullPip(d) + tokenPips(d) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
         (e.activate
@@ -1727,7 +1727,7 @@
         (livePassive(s, m, 'mod') ? ' watching' : '') + pickClass(G, id) +
         '" data-card="' + id + '">' +
         '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
-        pieceIcon(m.name, id === s.coreId) + esc(m.name) + '</div>' +
+        pieceIcon(s.idx, m.name, id === s.coreId) + esc(m.name) + '</div>' +
         '<div class="hmeta">' + hullPip(m) + tokenPips(m) + '</div>' +
         '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
         (e.activate
@@ -1748,8 +1748,8 @@
   }
   /* the piece's own silhouette, in your colour, so a card is easy to match to the board */
   var ICON_CACHE = {};
-  function pieceIcon(name, isCore) {
-    var shape = GamePieces.shapeOf(name, isCore), col = SEAT_HEX[meIdx() % 4];
+  function pieceIcon(owner, name, isCore) {
+    var shape = GamePieces.shapeOf(owner, name, isCore), col = SEAT_HEX[meIdx() % 4];
     var k = shape + col;
     if (!ICON_CACHE[k]) ICON_CACHE[k] = GamePieces.markup(shape, col);
     return '<span class="ci" style="--pc:' + col + '">' + ICON_CACHE[k] + '</span>';
@@ -1940,7 +1940,7 @@
     if (!m) return;
     var isDep = m.type === 'deployable';
     var col = rec ? SEAT_HEX[rec.si % 4] : SEAT_HEX[meIdx() % 4];
-    popHead(m.name, GamePieces.markup(rec ? rec.shape : GamePieces.shapeOf(m.name, false), col),
+    popHead(m.name, GamePieces.markup(rec ? rec.shape : GamePieces.shapeOf(meIdx(), m.name, false), col),
             col, rec ? rec.side.name : '', isDep ? DEPLOYABLE_ICON : MODULE_ICON);
     /* an icon and its value per box, the way the sheet draws them; the title says which
        number you are looking at, since a bare 12 beside an arrow is not self-evident */
