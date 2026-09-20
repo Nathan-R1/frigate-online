@@ -2,15 +2,15 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Frigate — Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/frigate.css">
 <style>
-  body { margin:0; padding:0; height:100vh; overflow:hidden; font-family:var(--body); }
-  .g-wrap { display:grid; grid-template-rows:auto 1fr auto; height:100vh; }
+  body { margin:0; padding:0; height:100vh; height:100dvh; overflow:hidden; font-family:var(--body); }
+  .g-wrap { display:grid; grid-template-rows:auto 1fr auto; height:100vh; height:100dvh; }
   .g-top { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel);
            border-bottom:1px solid var(--line-bright); flex-wrap:wrap; }
   .g-turn { font-family:var(--disp); font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--cyan); }
@@ -43,12 +43,26 @@
   /* tight bar: the phase buttons keep only their mark, and the seats only their team and stats */
   @media (max-width: 900px) { .btn-label { display:none; } }
   @media (max-width: 700px) { .side-bar .sb-name { display:none; } }
+  /* Very small screens swap the seat bars themselves for a chart button that pops them
+     down — the top bar keeps room for the buttons that actually play the game. */
+  .stats-wrap { display:none; }
+  @media (max-width: 600px) {
+    .stats-wrap { display:flex; }
+    #barRow { display:none; }
+  }
+  /* the drop-down shows the bars in full, so a name the inline row would have dropped
+     comes back here */
+  @media (max-width: 700px) { .stats-drop .side-bar .sb-name { display:inline; } }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
-  .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; }
+  .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; position:relative; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
-  .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab; }
+  .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab;
+             touch-action:none; -webkit-tap-highlight-color:transparent; }
   .g-board.dragging { cursor:grabbing; }
   .grid { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
+  /* no Android tap-highlight flash on the board itself: a tap that pans instead of acting
+     should not read as the piece having taken focus */
+  .piece, .cell { -webkit-tap-highlight-color:transparent; }
   .cells, .pieces, .links { position:absolute; inset:0; }
   /* hull connectors */
   .links { pointer-events:none; }
@@ -230,10 +244,21 @@
               text-transform:uppercase; padding:3px 8px; cursor:pointer; border-radius:4px;
               background:none; border:1px solid var(--line-bright); color:var(--ink-mid); }
   .log-head button:hover { border-color:var(--cyan); color:var(--cyan); }
-  /* with the log gone the column only has to fit the prompt, so the board takes the rest */
-  .g-mid.nolog { grid-template-columns:1fr 220px; }
-  .g-mid.nolog .g-log { display:none; }
-  .g-mid.nolog .g-right { flex:none; }
+  .g-mid.nolog { grid-template-columns:1fr; }
+  .g-mid.nolog .g-right { display:none; }
+  /* the prompt, with the log put away, floats over the board instead of sharing its row —
+     whatever the play-phase words or the move pad grow to, the board underneath never moves */
+  .g-promptbar { position:absolute; left:8px; right:8px; bottom:8px; z-index:30;
+                 display:flex; align-items:flex-start; gap:4px;
+                 max-height:calc(100% - 16px); overflow-y:auto;
+                 background:rgba(10,16,24,.95); border:1px solid var(--line-bright);
+                 border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.5); }
+  .g-promptbar:empty { display:none; }
+  .g-promptbar .g-prompt { flex:1; min-width:0; border-bottom:0; }
+  .g-promptbar #logToggle { flex:none; margin:0 10px; font-family:var(--mono); font-size:10px;
+    letter-spacing:.1em; text-transform:uppercase; padding:6px 10px; cursor:pointer; border-radius:4px;
+    background:none; border:1px solid var(--line-bright); color:var(--ink-mid); align-self:center; }
+  .g-promptbar #logToggle:hover { border-color:var(--cyan); color:var(--cyan); }
   .g-log { flex:1; overflow-y:auto; padding:8px 12px; font-family:var(--mono); font-size:10.5px;
            line-height:1.6; color:var(--ink-mid); }
   .g-log div { padding:1px 0; white-space:pre-wrap; }   /* keeps the roll lines indented under their attack */
@@ -241,8 +266,9 @@
   .g-log .t2 { color:var(--p2); } .g-log .t3 { color:var(--p3); }
   /* the hand is a user-resizable row; --hand-h is written by the drag grip */
   .g-handwrap { display:flex; flex-direction:column; height:var(--hand-h, 132px);
-                min-height:64px; max-height:72vh; background:var(--panel);
-                border-top:1px solid var(--line-bright); }
+                min-height:64px; max-height:72vh; max-height:72dvh; background:var(--panel);
+                border-top:1px solid var(--line-bright);
+                padding-bottom:env(safe-area-inset-bottom, 0px); }
   .hand-grip { flex:none; height:9px; cursor:ns-resize; display:flex; align-items:center;
                justify-content:center; background:var(--panel); touch-action:none; }
   .hand-grip span { display:block; width:46px; height:3px; border-radius:2px; background:var(--line-bright); }
@@ -257,6 +283,7 @@
      min before the row starts scrolling. */
   .hcard { flex:0 1 auto; width:100cqh; min-width:112px; height:100%;
            border:1px solid var(--line); border-radius:8px;
+           user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
            padding:clamp(4px, 5cqh, 10px) clamp(5px, 6cqh, 12px);
            background:var(--panel-alt); display:flex; flex-direction:column;
            gap:clamp(2px, 3cqh, 6px); overflow:hidden; }
@@ -420,6 +447,16 @@
   .settings-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
     background:var(--panel-alt); border:1px solid var(--line-bright); border-radius:8px;
     box-shadow:0 8px 24px rgba(0,0,0,.6); min-width:210px; padding:8px; }
+  /* the seat stats drop-down, in the settings menu's shape */
+  .stats-wrap { position:relative; align-items:center; }
+  .stats-cog { font-size:15px; line-height:1; padding:6px 10px; }
+  .stats-drop { position:fixed; left:8px; right:8px; z-index:70;
+    background:var(--panel-alt); border:1px solid var(--line-bright); border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.6); box-sizing:border-box;
+    padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .stats-drop .side-bar { min-width:0; }
+  .stats-drop .sb-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .g-btn.on { background:var(--cyan); color:var(--ink-strong); }
   .set-group { font-family:var(--disp); font-size:10.5px; letter-spacing:.1em;
     text-transform:uppercase; color:var(--ink-dim); padding:2px 4px 6px; }
   .set-row { display:flex; align-items:center; gap:10px; padding:3px 4px; }
@@ -478,6 +515,11 @@
   <div class="g-top">
     <span class="g-turn" id="turnLabel">—</span>
     <span id="barRow"></span>
+    <span class="stats-wrap" id="statsWrap">
+      <button type="button" class="g-btn ghost stats-cog" id="statsBtn" title="Player stats"
+              aria-haspopup="true" aria-expanded="false">📊</button>
+      <div class="stats-drop hidden" id="statsDrop" role="menu"></div>
+    </span>
     <span style="flex:1"></span>
     <button type="button" class="g-btn" id="playPhaseBtn">
       <svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7V5Z"
@@ -533,6 +575,7 @@
     </span>
   </div>
   <div class="g-mid">
+    <div class="g-promptbar" id="promptBar"></div>
     <div class="g-board" id="boardWrap"><div class="grid" id="grid"></div>
       <div class="move-counter hidden" id="moveCounter">
         <span class="mc-label">Move</span><span class="mc-val" id="mcVal">0</span>
@@ -1028,10 +1071,14 @@
     document.getElementById('turnLabel').textContent =
       'Turn ' + G.turn + ' — ' + G.players[G.active].name;
     document.getElementById('turnLabel').style.color = SEAT_HEX[G.active % 4];
-    document.getElementById('barRow').innerHTML = G.players.map(function (s, i) {
+    var bars = G.players.map(function (s, i) {
       return '<span class="side-bar' + (G.active === i ? ' turn' : '') + (s.dead ? ' out' : '') +
              '" style="--sc:' + SEAT_HEX[i % 4] + '">' + bar(s, G) + '</span>';
     }).join('');
+    document.getElementById('barRow').innerHTML = bars;
+    document.getElementById('statsDrop').innerHTML = bars;
+    /* bars can change width with the roster, so a pop-up that is open is re-kept in view */
+    placeStatsDrop();
     var mine = isMyTurn(G) && !G.pending && !G.over;
     /* the two are never both useful, so only the one for this phase is on screen */
     var inPlay = G.phase === 'play';
@@ -1040,6 +1087,16 @@
     pb.classList.toggle('hidden', !inPlay);
     eb.disabled = !mine;
     pb.disabled = !mine;
+  }
+
+  /* the stats readable-out is pinned to the button, but sized to the window — it can
+     never poke past the edge of a phone screen, whatever the label or roster does */
+  function placeStatsDrop() {
+    var btn = document.getElementById('statsBtn');
+    var drop = document.getElementById('statsDrop');
+    if (!btn || drop.classList.contains('hidden')) return;
+    var r = btn.getBoundingClientRect();
+    drop.style.top = (r.bottom + 6) + 'px';
   }
 
   /* ---------- board ----------
@@ -2178,28 +2235,85 @@
     saveView();
   }, { passive: false });
 
-  /* dragging pans the board. A press that never moves far is a click, so the two do not
-     fight each other: the click is only swallowed once the drag actually starts. */
-  var pan = null, swallowClick = false;
-  boardEl.addEventListener('mousedown', function (e) {
-    if (e.button !== 0) return;
-    pan = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
+  /* dragging pans the board; a second finger pinches to zoom about the fingers' middle.
+     A press that never moves far is a click, so the two do not fight each other: the click
+     is only swallowed once the drag actually starts. Pointer events cover mouse and touch
+     with the one gesture, so a phone drags and zooms the same way a desktop does. */
+  var pointers = {}, pinch = null, pan = null, swallowClick = false;
+  /* the two fingers' middle and how far apart they are */
+  function fingerPts() {
+    var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+    var dx = a.x - b.x, dy = a.y - b.y;
+    return { mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: Math.sqrt(dx * dx + dy * dy) };
+  }
+  function beginPinch() {
+    var r = boardEl.getBoundingClientRect();
+    var f = fingerPts();
+    pinch = { d0: f.d, z0: view.zoom, mx0: f.mx - r.left, my0: f.my - r.top,
+              ox0: view.x, oy0: view.y };
+    pan = null;
+    boardEl.classList.remove('dragging');
+  }
+  boardEl.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    /* a fresh press is never the echo of an old drag: the last pan's cancel that Chrome
+       skipped must not be able to eat this tap's click */
+    swallowClick = false;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (!pinch && Object.keys(pointers).length === 2) { beginPinch(); return; }
+    if (!pinch) pan = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
   });
-  window.addEventListener('mousemove', function (e) {
+  window.addEventListener('pointermove', function (e) {
+    if (!(e.pointerId in pointers)) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pinch) {
+      var r = boardEl.getBoundingClientRect();
+      var f = fingerPts();
+      var z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinch.z0 * f.d / pinch.d0));
+      /* keep the board square under the fingers' middle pinned there while it spreads */
+      view.x = (f.mx - r.left) - (pinch.mx0 - pinch.ox0) * (z / pinch.z0);
+      view.y = (f.my - r.top) - (pinch.my0 - pinch.oy0) * (z / pinch.z0);
+      view.zoom = z;
+      applyView();
+      saveView();
+      return;
+    }
     if (!pan) return;
     var dx = e.clientX - pan.sx, dy = e.clientY - pan.sy;
-    if (!pan.moved && Math.abs(dx) + Math.abs(dy) > 5) {
+    /* a fingertip on a small cell wobbles more than fine 5px of drift, so a deliberate tap
+       must clear a fatter bar to count as a drag; a mouse does not wobble */
+    var drift = Math.abs(dx) + Math.abs(dy);
+    if (!pan.moved && drift > (e.pointerType === 'touch' ? 10 : 5)) {
       pan.moved = true;
       boardEl.classList.add('dragging');
     }
     if (pan.moved) { view.x = pan.ox + dx; view.y = pan.oy + dy; applyView(); }
   });
-  window.addEventListener('mouseup', function () {
-    if (!pan) return;
-    if (pan.moved) { swallowClick = true; saveView(); }
-    pan = null;
-    boardEl.classList.remove('dragging');
-  });
+  function endPointer(e) {
+    if (!(e.pointerId in pointers)) return;
+    delete pointers[e.pointerId];
+    if (pinch) {
+      var ids = Object.keys(pointers);
+      if (ids.length === 1) {
+        /* a finger lifted, one stays: carry on as a drag so the board never jerks */
+        pinch = null;
+        var p = pointers[ids[0]];
+        pan = { sx: p.x, sy: p.y, ox: view.x, oy: view.y, moved: true };
+        boardEl.classList.add('dragging');
+        return;
+      }
+      if (ids.length >= 2) { beginPinch(); return; }   /* re-baseline for what's left */
+      pinch = null;
+      return;
+    }
+    if (pan) {
+      if (pan.moved) { swallowClick = true; saveView(); }
+      pan = null;
+      boardEl.classList.remove('dragging');
+    }
+  }
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
   /* double-click the empty board to put the whole thing back in view */
   boardEl.addEventListener('dblclick', function (e) {
     if (e.target.closest('.piece')) return;
@@ -2549,6 +2663,31 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !menu.classList.contains('hidden')) { e.preventDefault(); open(false); }
     });
+  })();
+  /* the seat-stats button pops the bars down; press again, click away, or press Escape to
+     put them back. The bars only take to the drop-down on very small screens — on anything
+     bigger the button is hidden and the row stays where it was. */
+  (function () {
+    var wrap = document.getElementById('statsWrap');
+    var btn = document.getElementById('statsBtn');
+    var drop = document.getElementById('statsDrop');
+    function open(on) {
+      drop.classList.toggle('hidden', !on);
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (on) placeStatsDrop();
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      open(drop.classList.contains('hidden'));
+    });
+    document.addEventListener('click', function (e) {
+      if (!drop.classList.contains('hidden') && !wrap.contains(e.target)) open(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !drop.classList.contains('hidden')) open(false);
+    });
+    window.addEventListener('resize', placeStatsDrop);
   })();
   (function () {
     var keys = document.getElementById('keysPop'), card = document.getElementById('cardPop');
@@ -3353,6 +3492,10 @@
   (function () {
     var mid = document.querySelector('.g-mid');
     var btn = document.getElementById('logToggle');
+    var promptEl = document.getElementById('promptPanel');
+    var bar = document.getElementById('promptBar');
+    var right = document.querySelector('.g-right');
+    var head = document.querySelector('.log-head');
     /* The button says where the next press goes, not where you are — a control that names its
        own current state reads as a label and gets pressed by accident. */
     var NEXT = { full: 'short', short: 'off', off: 'full' };
@@ -3367,6 +3510,16 @@
       try { localStorage.setItem('frigateLogMode', logMode); } catch (e) {}
       var G = Engine.get();
       if (G) renderLog(G);
+      /* with the log away the right column is gone, so the prompt — and the button that
+         brings the log back — move into the panel floating over the board, which sizes
+         itself without ever budging the board underneath */
+      if (logMode === 'off') {
+        bar.appendChild(promptEl);
+        bar.appendChild(btn);
+      } else {
+        right.insertBefore(promptEl, head);
+        head.appendChild(btn);
+      }
     }
     apply(logMode);
     btn.addEventListener('click', function () { apply(NEXT[logMode]); });
