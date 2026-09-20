@@ -57,9 +57,12 @@
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; position:relative; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
   .g-board { position:relative; overflow:hidden; background:var(--void); cursor:grab;
-             touch-action:none; }
+             touch-action:none; -webkit-tap-highlight-color:transparent; }
   .g-board.dragging { cursor:grabbing; }
   .grid { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; }
+  /* no Android tap-highlight flash on the board itself: a tap that pans instead of acting
+     should not read as the piece having taken focus */
+  .piece, .cell { -webkit-tap-highlight-color:transparent; }
   .cells, .pieces, .links { position:absolute; inset:0; }
   /* hull connectors */
   .links { pointer-events:none; }
@@ -2244,6 +2247,9 @@
   }
   boardEl.addEventListener('pointerdown', function (e) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    /* a fresh press is never the echo of an old drag: the last pan's cancel that Chrome
+       skipped must not be able to eat this tap's click */
+    swallowClick = false;
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (!pinch && Object.keys(pointers).length === 2) { beginPinch(); return; }
     if (!pinch) pan = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
@@ -2265,7 +2271,10 @@
     }
     if (!pan) return;
     var dx = e.clientX - pan.sx, dy = e.clientY - pan.sy;
-    if (!pan.moved && Math.abs(dx) + Math.abs(dy) > 5) {
+    /* a fingertip on a small cell wobbles more than fine 5px of drift, so a deliberate tap
+       must clear a fatter bar to count as a drag; a mouse does not wobble */
+    var drift = Math.abs(dx) + Math.abs(dy);
+    if (!pan.moved && drift > (e.pointerType === 'touch' ? 10 : 5)) {
       pan.moved = true;
       boardEl.classList.add('dragging');
     }
