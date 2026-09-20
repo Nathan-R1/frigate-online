@@ -43,7 +43,7 @@ var GamePieces = (function () {
 
   function addRotate(node, dur, reverse) {
     if (lowGfx) return;
-    node.style.animation = 'piece-rot ' + dur + 's linear infinite';
+    node.style.animation = 'piece-rot ' + dur + ' linear infinite';
     node.style.animationDirection = reverse ? 'reverse' : 'normal';
   }
   function addPing(node) {
