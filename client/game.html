@@ -142,14 +142,23 @@
   @keyframes shimmer { 0%,100% { opacity:.3; } 50% { opacity:1; } }
   @keyframes astro-spin { from { transform:rotate(var(--astro-start,0deg)); }
                           to { transform:rotate(calc(var(--astro-start,0deg) + 360deg)); } }
+  /* the piece rotations and pings, set as CSS so removing a piece never leaks animation
+     state the way SMIL did */
+  @keyframes piece-rot { from { transform:rotate(0); } to { transform:rotate(360deg); } }
+  @keyframes ping-scale { 0% { transform:scale(.45); } 100% { transform:scale(1.12); } }
+  @keyframes ping-fade { 0%,100% { opacity:0; } 35% { opacity:.9; } }
   @media (prefers-reduced-motion: reduce) {
     .piece *, .piece { animation:none !important; }
   }
   /* Low graphics, as the tabletop board does it: every CSS animation and transition off.
-     The SMIL side is handled in pieces.js, which stops building the moving parts at all. */
+     The piece animations are the same way, so stopping building them is enough. The piece
+     and route glows come off too, so a still board is also a flat one — no offscreen
+     filter surfaces in the compositor to pay for while nothing is moving. */
   html.gfx-low *,
   html.gfx-low *::before,
   html.gfx-low *::after { animation:none !important; transition:none !important; }
+  html.gfx-low .piece .module-svg,
+  html.gfx-low .move-path { filter:none !important; }
 
   /* ===== move phase =====
      The route preview, the beacon, the landing ping and the blocked flash are the tabletop
@@ -3408,7 +3417,22 @@
     askMode();
   });
 
-  Engine.onChange(render);
+  /* One render per animation frame, however many times the engine changed in between.
+     A computer turn advances the state dozens of times in one burst, and each change used
+     to repaint the whole page — display-list churn in the compositor for states the frame
+     never shows. Coalescing drops the intermediate paints and paints only the state the
+     next frame is about to display. A queued paint covers the latest look while it is pending,
+     so hiding the tab just delays the single catch-up paint until it is visible again. */
+  var paintQueued = false;
+  function scheduleRender() {
+    if (paintQueued) return;
+    paintQueued = true;
+    requestAnimationFrame(function () {
+      paintQueued = false;
+      render(Engine.get());
+    });
+  }
+  Engine.onChange(scheduleRender);
   start();          /* build a board so the page is not blank behind the picker */
   /* Coming back from the sheet builder is a reload, not a fresh arrival: land where the trip
      started rather than at the first menu, which would throw away a half-arranged table.

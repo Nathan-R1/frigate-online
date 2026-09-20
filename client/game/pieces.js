@@ -33,26 +33,23 @@ var GamePieces = (function () {
     for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
     return (h >>> 0) / 4294967296;
   }
-  /* Low-graphics mode: the SMIL rotates and pulses are simply not built, so a piece has no
-     moving parts at all. The CSS side kills the keyframe animations via html.gfx-low. */
+  /* The rotates and pulses are CSS animations, not SMIL, so a detached piece node is dropped
+     with nothing left behind — SMIL keeps a gone piece's animation state alive and the board
+     leaks memory every time a piece is removed. The CSS side kills the keyframes via
+     html.gfx-low. The groups these attach to are centred on their own origin, so a CSS rotate
+     about (0 0) spins them in place exactly like the SMIL rotate did. */
   var lowGfx = false;
   function setLowGfx(on) { lowGfx = !!on; }
 
   function addRotate(node, dur, reverse) {
     if (lowGfx) return;
-    node.appendChild(svgEl('animateTransform', {
-      attributeName: 'transform', type: 'rotate',
-      from: reverse ? '360' : '0', to: reverse ? '0' : '360',
-      dur: dur, repeatCount: 'indefinite' }));
+    node.style.animation = 'piece-rot ' + dur + 's linear infinite';
+    node.style.animationDirection = reverse ? 'reverse' : 'normal';
   }
   function addPing(node) {
     if (lowGfx) return;
-    node.appendChild(svgEl('animateTransform', {
-      attributeName: 'transform', type: 'scale', values: '.45;1.12', dur: '2.8s',
-      repeatCount: 'indefinite', calcMode: 'spline', keySplines: '0.2 0 0.6 1' }));
-    node.appendChild(svgEl('animate', {
-      attributeName: 'opacity', values: '0;.9;0', keyTimes: '0;.35;1',
-      dur: '2.8s', repeatCount: 'indefinite' }));
+    node.style.animation = 'ping-scale 2.8s cubic-bezier(.2,0,.6,1) infinite,' +
+                           ' ping-fade 2.8s linear infinite';
   }
 
   /* ---------- shapes ---------- */
