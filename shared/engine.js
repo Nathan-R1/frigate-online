@@ -177,7 +177,7 @@ var Engine = (function () {
     return a;
   }
 
-  var MOD_SHAPES = ['hex', 'triangle', 'square', 'diamond', 'circle'];
+  var MOD_SHAPES = ['hex', 'triangle', 'square', 'diamond', 'circle', 'frigate'];
 
   function creationNames(v, out) {
     if (Array.isArray(v)) { v.forEach(function (x) { creationNames(x, out); }); return out; }
