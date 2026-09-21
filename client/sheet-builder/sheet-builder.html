@@ -525,7 +525,6 @@
       <button type="button" class="b-btn" id="resumeBtn" data-act="resumeRun" style="display:none;">Continue run in progress</button>
     </div>
     <div class="land-opts">
-      <label class="dl-row"><input type="checkbox" id="statBlocksBox"> Customise stat-blocks</label>
       <label class="dl-row"><input type="checkbox" id="limitsBox"> Disable limits</label>
       <label class="dl-row"><input type="checkbox" id="showAllDrawBox"> Show all on card draw</label>
     </div>
@@ -561,7 +560,12 @@
     <div class="eyebrow"><span class="eb-text">Review &amp; Export</span></div>
     <div class="win-nav">
       <button type="button" class="b-btn" id="expBackBtn">← Back</button>
-      <button type="button" class="b-btn primary ready" id="exportBtn" data-act="exportSheet">⇩ Export</button>
+      <div style="display:flex;gap:12px">
+        <button type="button" class="b-btn" id="downloadBtn" data-act="downloadSheet"
+                style="display:none">⇩ Download</button>
+        <button type="button" class="b-btn primary ready" id="exportBtn"
+                data-act="exportSheet">⇩ Export</button>
+      </div>
     </div>
     <div class="exp-grid" id="expSummary"></div>
     <div class="exp-field">
@@ -749,7 +753,7 @@
         c.mod = s.mod || null;
         c.shipName = s.shipName || '';
         c.disableLimits = !!s.disableLimits;
-        c.statBlocks = !!s.statBlocks;
+        c.statBlocks = false; /* the stat-block section is gone; old saves must not resurrect it */
         c.showAllDraw = !!s.showAllDraw;
         if (s.removed && typeof s.removed === 'object') {
           Object.keys(s.removed).forEach(function (rn) {
@@ -1198,17 +1202,28 @@
     exp.classList.toggle('builder-hidden', s !== 'exp');
     if (s === 'landing') refreshLanding();
     if (s === 'exp') renderExport();
+    refreshSeatBanner(s);
     window.scrollTo(0, 0);
+  }
+
+  /* The banner names who the build belongs to. The sentence about Assign and Download only
+     belongs on the export screen, where the two buttons are actually sitting. */
+  function refreshSeatBanner(s) {
+    if (!seatReq) return;
+    var el = document.getElementById('seatBannerText');
+    el.textContent = (s === 'exp')
+      ? 'Build for ' + seatLabel() + ' — Assign sends this sheet back to the game; ' +
+        'Download saves a copy here.'
+      : 'Build for ' + seatLabel();
   }
 
   function refreshLanding() {
     document.getElementById('limitsBox').checked = !!choices.disableLimits;
-    document.getElementById('statBlocksBox').checked = !!choices.statBlocks;
     document.getElementById('showAllDrawBox').checked = !!choices.showAllDraw;
     var hint = document.getElementById('landingHint');
     var resumeBtn = document.getElementById('resumeBtn');
     if (choicesHaveAny()) {
-      hint.textContent = 'Saved choices are ready to continue — resume, or start fresh.';
+      hint.textContent = '';
       resumeBtn.style.display = '';
     } else {
       hint.textContent = 'No saved choices yet.';
@@ -1727,9 +1742,11 @@
   }
 function skillsOptions() {
     var out = [];
-    var remaining = 13 - skillsTotal();
+    var remaining = choices.disableLimits ? null : (13 - skillsTotal());
     out.push('<div class="sk-top"><button type="button" class="recbtn" data-skrec="1" title="Auto-distribute points based on the traits and costs of your deck">Recommend skills</button></div>');
-    out.push('<div class="sk-total">Total Points remaining: <b>' + remaining + '</b></div>');
+    out.push(choices.disableLimits
+      ? '<div class="sk-total">Total Points: <b>' + skillsTotal() + '</b></div>'
+      : '<div class="sk-total">Total Points remaining: <b>' + remaining + '</b></div>');
     out.push('<div class="sk-grid">');
     for (var i = 0; i < SKILL_DISPLAY_ORDER.length; i++) {
       var n = SKILL_DISPLAY_ORDER[i];
@@ -1737,7 +1754,7 @@ function skillsOptions() {
       var base = parseInt(v.points, 10);
       if (isNaN(base)) base = 0;
       var eff = skillEffective(n);
-      var canPlus = remaining > 0 && (choices.disableLimits || base < 4);
+      var canPlus = choices.disableLimits || (remaining > 0 && base < 4);
       var canMinus = base > -1;
       var desc = SKILL_DESCRIPTIONS[n] || '';
       var infoOpen = skillInfoOpen === n && !!desc;
@@ -1968,7 +1985,7 @@ function skillsOptions() {
     if (k === 'tech') return choices.disableLimits ? hasPick('tech') : deckPointsLeft() <= 0;
     if (k === 'core') return coreComplete();
     if (k === 'mod') return hasPick('mod');
-    if (k === 'skills') return skillsTotal() >= 13;
+    if (k === 'skills') return choices.disableLimits ? skillsTotal() > 0 : skillsTotal() >= 13;
     return hasPick(k);
   }
   /* why Continue is greyed out, said in the step's own terms */
@@ -2160,7 +2177,7 @@ function skillsOptions() {
       var cur = parseInt(choices.skills[name].points, 10);
       if (isNaN(cur)) cur = 0;
       var d = parseInt(sbtn.getAttribute('data-d'), 10) || 0;
-      var nv = Math.max(-1, Math.min(choices.disableLimits ? 13 : 4, cur + d));
+      var nv = Math.max(-1, choices.disableLimits ? (cur + d) : Math.min(4, cur + d));
       choices.skills[name].points = String(nv);
       saveChoices();
       renderOptions();
@@ -2323,11 +2340,6 @@ function skillsOptions() {
 
   document.getElementById('limitsBox').addEventListener('change', function () {
     choices.disableLimits = this.checked;
-    saveChoices();
-  });
-  document.getElementById('statBlocksBox').addEventListener('change', function () {
-    choices.statBlocks = this.checked;
-    rebuildSteps();
     saveChoices();
   });
   document.getElementById('showAllDrawBox').addEventListener('change', function () {
@@ -2703,8 +2715,10 @@ function skillsOptions() {
     }
     window.location.href = GAME_URL;
   }
-  function exportSheet() {
-    var data = buildSheet();
+  /* A sheet to a file, and nothing else. The assign button sends the build back to the
+     game; this is the same sheet saved somewhere you can keep it. */
+  function downloadSheet(data) {
+    data = data || buildSheet();
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -2715,15 +2729,20 @@ function skillsOptions() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+  function exportSheet() {
+    var data = buildSheet();
     /* Launched from the game to build for a seat? Then Export means "this is the one":
-       the file is still downloaded, and the build goes straight back to that player. */
+       the build goes straight back to that player, and downloading is the button beside it. */
     if (seatReq) { saveToSeat(); return; }
+    downloadSheet(data);
     /* the confirm blocks here while the download finishes in the background */
     if (confirm('Load in-game?')) loadInGame(data);
   }
 
   /* expose export for the inline onclick */
   window.exportSheet = exportSheet;
+  window.downloadSheet = downloadSheet;
   window.buildSheet = buildSheet;
 
   /* ===== init ===== */
@@ -2737,13 +2756,11 @@ function skillsOptions() {
     else { choices = emptyChoices(); if (seatReq.sheet) applyLoadedSheet(seatReq.sheet); }
     saveChoices();
     var eb = document.getElementById('exportBtn');
-    if (eb) eb.textContent = '⇩ Export & assign to ' + seatLabel();
+    if (eb) eb.textContent = 'Assign to ' + seatLabel();
+    var db = document.getElementById('downloadBtn');
+    if (db) db.style.display = '';
     var bn = document.getElementById('seatBanner');
-    if (bn) {
-      bn.style.display = '';
-      document.getElementById('seatBannerText').textContent =
-        'Building for ' + seatLabel() + ' — Export sends this sheet back to the game.';
-    }
+    if (bn) bn.style.display = '';
   }
   rebuildSteps();
   document.getElementById('shipName').value = choices.shipName;
@@ -2756,7 +2773,8 @@ function skillsOptions() {
      it — which is exactly the door an injected string would need. One listener, a name per
      button, and the page can then name the scripts it shipped and refuse everything else. */
   var ACTIONS = { closeBuilder: closeBuilder, startNew: startNew, loadExisting: loadExisting,
-                  resumeRun: resumeRun, scrapSeatBuild: scrapSeatBuild, exportSheet: exportSheet };
+                  resumeRun: resumeRun, scrapSeatBuild: scrapSeatBuild,
+                  exportSheet: exportSheet, downloadSheet: downloadSheet };
   document.addEventListener('click', function (ev) {
     var el = ev.target.closest && ev.target.closest('[data-act],[data-step]');
     if (!el) return;
@@ -2766,22 +2784,10 @@ function skillsOptions() {
     if (step !== null && step !== undefined) goStep(parseInt(step, 10));
   });
 
-  /* A seat that has never been built still arrives with a complete sheet — the default ship,
-     hull and core and deck all answered — so "resume at the first unfinished step" would drop
-     you on the export screen with nothing left to decide. The deck is the part anybody
-     actually wants to change about the default, so that is where it opens. */
-  function openAtTech() {
-    var at = 0;
-    for (var i = 0; i < steps.length; i++) if (steps[i].key === 'tech') { at = i; break; }
-    step = at;
-    goToWin(step);
-  }
-
-  /* A seat arrives with a build to work on, so drop straight into the run at the first step
-     that still needs an answer instead of asking whether to start one. */
-  if (seatReq && seatReq.stock) openAtTech();
-  else if (seatReq) resumeRun();
-  else show('landing');
+  /* Every entry lands on the Build a Character screen — a seat sent here from the game's
+     roster included. From there "Continue run in progress" walks into the seat's saved run,
+     "Create new character" starts it over, and nothing about the build is assumed. */
+  show('landing');
   renderProgressDots();
 })();
 </script>
