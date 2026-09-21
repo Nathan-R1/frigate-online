@@ -735,13 +735,10 @@ function csp(nonce) {
     "default-src 'self'",
     "script-src 'self'" + (nonce ? " 'nonce-" + nonce + "'" : ''),
     /* inline style attributes are how the board is coloured, so this one cannot be a nonce:
-       a nonce in style-src would switch 'unsafe-inline' off and take the board with it.
-       Google Fonts needs naming twice and in two different directives, which is what makes it
-       easy to half-fix: googleapis serves the stylesheet, gstatic serves the .woff2 files
-       that stylesheet then asks for. Allow one without the other and the fonts still fail. */
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+       a nonce in style-src would switch 'unsafe-inline' off and take the board with it. */
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    "font-src 'self' https://fonts.gstatic.com",
+    "font-src 'self'",
     "connect-src " + ["'self'"].concat(ALLOWED).join(' '),
     "base-uri 'none'",
     "object-src 'none'",
