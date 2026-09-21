@@ -1,0 +1,759 @@
+# performance-impr.ai
+## GPU-process memory investigation — fserver / frigate game (`client/game.html`)
+
+- Date: 2026-09-21
+- App under investigation: `fserver/client/game.html` (board game; "Graphics" setting High/Low; also `client/game/pieces.js`)
+- Subject: GPU (pid 15100) process memory in Firefox, specifically growth driven by High-detail animations.
+
+This file records the investigation evidence verbatim (user messages exactly as provided) and a
+summary of the analysis that followed, so the evidence can be re-analyzed in future.
+
+---
+
+# PART 1 — VERBATIM USER MESSAGES (evidence)
+
+The following are the user's messages recorded exactly as they were provided. No corrections have
+been made (typos and all), so the raw evidence can be re-analyzed.
+
+---
+
+## User msg 1 (opening report)
+
+> Okay so memory usage on the app specifically from the animations (graphics detail = high), for example GPU (pid 15100)
+>
+> Explicit Allocations
+>
+> 37.52 MB (100.0%) -- explicit
+> ├──20.50 MB (54.64%) ── heap-unclassified
+> ├──10.30 MB (27.44%) -- gfx
+> │  ├──10.30 MB (27.44%) -- webrender
+> │  │  ├───7.00 MB (18.66%) ── upload-stagin-memory
+> │  │  ├───1.63 MB (04.34%) ── texture-cache/structures
+> │  │  ├───0.77 MB (02.04%) ── shader-cache
+> │  │  ├───0.49 MB (01.30%) ++ interning
+> │  │  └───0.42 MB (01.11%) ++ (6 tiny)
+> │  └───0.00 MB (00.00%) ++ (3 tiny)
+> ├───4.00 MB (10.66%) ── ac2d/heap-resources
+> ├───2.15 MB (05.74%) -- threads
+> │   ├──1.52 MB (04.04%) ++ stacks
+> │   └──0.64 MB (01.70%) -- overhead
+> │      ├──0.61 MB (01.62%) ── kernel
+> │      └──0.03 MB (00.08%) ++ (2 tiny)
+> └───0.57 MB (01.52%) ++ (9 tiny)
+>
+> Other Measurements
+>
+> 134,217,727.94 MB (100.0%) -- address-space
+> ├───98,557,152.86 MB (73.43%) ── free(segments=400)
+> ├───35,657,131.17 MB (26.57%) -- reserved
+> │   ├──33,560,013.34 MB (25.00%) ── private(segments=1681)
+> │   ├───2,097,116.51 MB (01.56%) ── mapped(segments=13)
+> │   └───────────1.32 MB (00.00%) ── image(segments=84)
+> └────────3,443.90 MB (00.00%) ++ commit
+>
+> 173.94 MB (100.0%) -- decommitted
+> └──173.94 MB (100.0%) -- heap
+>    ├──164.58 MB (94.62%) ── decommitted
+>    └────9.36 MB (05.38%) -- unused-pages
+>         ├──9.36 MB (05.38%) ── fresh
+>         └──0.00 MB (00.00%) ── madvised
+>
+> 283.36 MB (100.0%) -- gfx
+> └──283.36 MB (100.0%) -- webrender
+>    ├──264.61 MB (93.38%) -- textures
+>    │  ├──120.00 MB (42.35%) ── render-targets
+>    │  ├───41.43 MB (14.62%) -- texture-cache
+>    │  │   ├──36.00 MB (12.70%) ── atlas
+>    │  │   └───5.43 MB (01.92%) ── standalone
+>    │  ├───27.19 MB (09.59%) ── swap-chains
+>    │  ├───24.13 MB (08.51%) ── picture-tiles
+>    │  ├───20.43 MB (07.21%) ── render-texture-hosts
+>    │  ├───17.13 MB (06.04%) ── depth-targets
+>    │  ├───13.75 MB (04.85%) ── upload-staging-textures
+>    │  └────0.56 MB (00.20%) ++ (2 tiny)
+>    └───18.75 MB (06.62%) -- images/mapped_from_owner
+>        ├──17.39 MB (06.14%) -- pid=9792
+>        │  ├───8.38 MB (02.96%) ++ (9 tiny)
+>        │  ├───5.44 MB (01.92%) ── image(365x650, compositor_ref:1, creator_ref:0)/decoded-nonheap [6]
+>        │  └───3.57 MB (01.26%) ── image(366x512, compositor_ref:1, creator_ref:0)/decoded-nonheap [5]
+>        └───1.36 MB (00.48%) ++ (2 tiny)
+>
+> 216.00 MB (100.0%) -- heap
+> ├──173.94 MB (80.53%) -- decommitted
+> │  ├──164.58 MB (76.20%) ── unmapped
+> │  └────9.36 MB (04.33%) -- unused-pages
+> │       ├──9.36 MB (04.33%) ── fresh
+> │       └──0.00 MB (00.00%) ── madvised
+> └───42.06 MB (19.47%) -- committed
+>     ├──35.93 MB (16.63%) ── allocated
+>     ├───4.45 MB (02.06%) ++ bin-unused
+>     └───1.68 MB (00.78%) ++ (2 tiny)
+>
+> 46 (100.0%) -- ipc-channels
+> ├───9 (19.57%) ── PCompositorManagerParent
+> ├───9 (19.57%) ── PImageBridgeParent
+> ├───9 (19.57%) ── PVRManagerParent
+> ├───8 (17.39%) ── PRemoteMediaManagerParent
+> ├───5 (10.87%) ── PCanvasManagerParent
+> ├───2 (04.35%) ── PVideoBridgeParent
+> ├───1 (02.17%) ── PAPZInputBridgeParent
+> ├───1 (02.17%) ── PGPUParent
+> ├───1 (02.17%) ── PProfilerChild
+> └───1 (02.17%) ── PVsyncBridgeParent
+>
+> 82 (100.0%) -- ipc-channels-peak
+> ├──17 (20.73%) ── PCompositorManagerParent
+> ├──17 (20.73%) ── PImageBridgeParent
+> ├──17 (20.73%) ── PVRManagerParent
+> ├──16 (19.51%) ── PRemoteMediaManagerParent
+> ├───8 (09.76%) ── PCanvasManagerParent
+> ├───2 (02.44%) ── PAPZInputBridgeParent
+> ├───2 (02.44%) ── PVideoBridgeParent
+> ├───1 (01.22%) ── PGPUParent
+> ├───1 (01.22%) ── PProfilerChild
+> └───1 (01.22%) ── PVsyncBridgeParent
+>
+> 20 (100.0%) -- observer-service
+> └──20 (100.0%) -- referent
+>    ├──17 (85.00%) ── strong
+>    └───3 (15.00%) -- weak
+>        ├──3 (15.00%) ── alive
+>        └──0 (00.00%) ── dead
+>
+> 1 (100.0%) -- preference-service
+> └──1 (100.0%) -- referent
+>    ├──1 (100.0%) ── strong
+>    └──0 (00.00%) ++ weak
+>
+>                1 ── ac2d-context-count
+>                0 ── ac2d-target-count
+>          4.00 MB ── ac2d-texture-memory
+>          6.15 MB ── d3d11-shared-textures
+>      2,575.14 MB ── gpu-committed
+>          0.00 MB ── gpu-dedicated
+>      2,613.95 MB ── gpu-shared
+>         35.93 MB ── heap-allocated
+>          1.00 MB ── heap-chunksize
+>      2,751.50 MB ── private
+>      2,766.71 MB ── resident
+>      2,682.68 MB ── resident-unique
+>         61.13 MB ── system-heap-allocated
+> 35,660,575.07 MB ── vsize
+> 96,523,639.44 MB ── vsize-max-contiguous
+>                0 ── webgl-buffer-count
+>          0.00 MB ── webgl-buffer-memory
+>                0 ── webgl-context-count
+>                0 ── webgl-renderbuffer-count
+>          0.00 MB ── webgl-renderbuffer-memory
+>                0 ── webgl-shader-count
+>                0 ── webgl-texture-count
+>          0.00 MB ── webgl-texture-memory
+>
+> End of GPU (pid 15100)
+
+---
+
+## User msg 2 (second snapshot, given in answer to a scope question)
+
+> See another snapshot here: GPU (pid 15100)
+> Explicit Allocations
+>
+> 35.07 MB (100.0%) -- explicit
+> ├──14.75 MB (42.06%) ── heap-unclassified
+> ├──13.59 MB (38.74%) -- gfx
+> │  ├──13.59 MB (38.74%) -- webrender
+> │  │  ├───9.00 MB (25.66%) ── upload-stagin-memory
+> │  │  ├───1.65 MB (04.72%) ── texture-cache/structures
+> │  │  ├───1.31 MB (03.73%) -- resource-cache
+> │  │  │   ├──1.31 MB (03.73%) ── fonts
+> │  │  │   └──0.00 MB (00.00%) ++ (3 tiny)
+> │  │  ├───0.77 MB (02.18%) ── shader-cache
+> │  │  ├───0.70 MB (02.00%) ++ interning
+> │  │  └───0.16 MB (00.44%) ++ (5 tiny)
+> │  └───0.00 MB (00.00%) ++ (3 tiny)
+> ├───4.00 MB (11.41%) ── ac2d/heap-resources
+> ├───2.16 MB (06.16%) -- threads
+> │   ├──1.52 MB (04.34%) ++ stacks
+> │   └──0.64 MB (01.82%) -- overhead
+> │      ├──0.61 MB (01.74%) ── kernel
+> │      └──0.03 MB (00.08%) ++ (2 tiny)
+> └───0.57 MB (01.63%) ++ (9 tiny)
+>
+> Other Measurements
+>
+> 134,217,727.94 MB (100.0%) -- address-space
+> ├───98,552,791.51 MB (73.43%) ── free(segments=462)
+> ├───35,657,266.84 MB (26.57%) -- reserved
+> │   ├──33,560,149.01 MB (25.00%) ── private(segments=2839)
+> │   ├───2,097,116.51 MB (01.56%) ── mapped(segments=13)
+> │   └───────────1.32 MB (00.00%) ── image(segments=84)
+> └────────7,669.59 MB (00.01%) ++ commit
+>
+> 177.82 MB (100.0%) -- decommitted
+> └──177.82 MB (100.0%) -- heap
+>    ├──168.41 MB (94.71%) ── decommitted
+>    └────9.41 MB (05.29%) -- unused-pages
+>         ├──9.41 MB (05.29%) ── fresh
+>         └──0.00 MB (00.00%) ── madvised
+>
+> 391.81 MB (100.0%) -- gfx
+> └──391.81 MB (100.0%) -- webrender
+>    ├──361.15 MB (92.18%) -- textures
+>    │  ├──192.00 MB (49.00%) ── render-targets
+>    │  ├───38.50 MB (09.83%) -- texture-cache
+>    │  │   ├──38.50 MB (09.83%) ── atlas
+>    │  │   └───0.00 MB (00.00%) ── standalone
+>    │  ├───34.00 MB (08.68%) ── depth-targets
+>    │  ├───32.16 MB (08.21%) ── render-texture-hosts
+>    │  ├───27.31 MB (06.97%) ── swap-chains
+>    │  ├───26.00 MB (06.64%) ── picture-tiles
+>    │  ├───10.25 MB (02.62%) ── upload-staging-textures
+>    │  └────0.94 MB (00.24%) ++ (2 tiny)
+>    └───30.66 MB (07.82%) -- images/mapped_from_owner
+>        ├──29.21 MB (07.45%) -- pid=9792
+>        │  ├──18.33 MB (04.68%) ++ (19 tiny)
+>        │  ├───5.44 MB (01.39%) ── image(365x649, compositor_ref:1, creator_ref:1)/decoded-nonheap [6]
+>        │  └───5.44 MB (01.39%) ── image(365x650, compositor_ref:2, creator_ref:1)/decoded-nonheap [6]
+>        └───1.45 MB (00.37%) ++ (2 tiny)
+>
+> 218.00 MB (100.0%) -- heap
+> ├──177.82 MB (81.57%) -- decommitted
+> │  ├──168.41 MB (77.25%) ── unmapped
+> │  └────9.41 MB (04.32%) -- unused-pages
+> │       ├──9.41 MB (04.32%) ── fresh
+> │       └──0.00 MB (00.00%) ── madvised
+> └───40.17 MB (18.43%) -- committed
+>     ├──33.84 MB (15.52%) ── allocated
+>     ├───4.26 MB (01.96%) ++ bin-unused
+>     └───2.07 MB (00.95%) ++ (2 tiny)
+>
+> 53 (100.0%) -- ipc-channels
+> ├──10 (18.87%) ── PCompositorManagerParent
+> ├──10 (18.87%) ── PImageBridgeParent
+> ├──10 (18.87%) ── PVRManagerParent
+> ├───9 (16.98%) ── PRemoteMediaManagerParent
+> ├───6 (11.32%) ── PCanvasManagerParent
+> ├───3 (05.66%) ── PAPZInputBridgeParent
+> ├───2 (03.77%) ── PVideoBridgeParent
+> ├───1 (01.89%) ── PGPUParent
+> ├───1 (01.89%) ── PProfilerChild
+> └───1 (01.89%) ── PVsyncBridgeParent
+>
+> 83 (100.0%) -- ipc-channels-peak
+> ├──17 (20.48%) ── PCompositorManagerParent
+> ├──17 (20.48%) ── PImageBridgeParent
+> ├──17 (20.48%) ── PVRManagerParent
+> ├──16 (19.28%) ── PRemoteMediaManagerParent
+> ├───8 (09.64%) ── PCanvasManagerParent
+> ├───3 (03.61%) ── PAPZInputBridgeParent
+> ├───2 (02.41%) ── PVideoBridgeParent
+> ├───1 (01.20%) ── PGPUParent
+> ├───1 (01.20%) ── PProfilerChild
+> └───1 (01.20%) ── PVsyncBridgeParent
+>
+> 22 (100.0%) -- observer-service
+> └──22 (100.0%) -- referent
+>    ├──19 (86.36%) ── strong
+>    └───3 (13.64%) -- weak
+>        ├──3 (13.64%) ── alive
+>        └──0 (00.00%) ── dead
+>
+> 1 (100.0%) -- preference-service
+> └──1 (100.0%) -- referent
+>    ├──1 (100.0%) ── strong
+>    └──0 (00.00%) ++ weak
+>
+>                1 ── ac2d-context-count
+>                0 ── ac2d-target-count
+>          4.00 MB ── ac2d-texture-memory
+>          6.15 MB ── d3d11-shared-textures
+>      6,742.34 MB ── gpu-committed
+>          0.00 MB ── gpu-dedicated
+>      6,654.55 MB ── gpu-shared
+>         33.84 MB ── heap-allocated
+>          1.00 MB ── heap-chunksize
+>      6,974.23 MB ── private
+>      6,844.65 MB ── resident
+>      6,793.77 MB ── resident-unique
+>       103.36 MB ── system-heap-allocated
+> 35,664,936.43 MB ── vsize
+> 96,519,412.94 MB ── vsize-max-contiguous
+>                0 ── webgl-buffer-count
+>          0.00 MB ── webgl-buffer-memory
+>                0 ── webgl-context-count
+>                0 ── webgl-renderbuffer-count
+>          0.00 MB ── webgl-renderbuffer-memory
+>                0 ── webgl-shader-count
+>                0 ── webgl-texture-count
+>          0.00 MB ── webgl-texture-memory
+>
+> End of GPU (pid 15100)
+
+---
+
+## User msg 3 (third snapshot — swgl appeared, memory exploded)
+
+> And now: GPU (pid 15100)
+> Explicit Allocations
+>
+> 340.44 MB (100.0%) -- explicit
+> ├──253.30 MB (74.40%) -- gfx
+> │  ├──253.30 MB (74.40%) -- webrender
+> │  │  ├──250.79 MB (73.67%) ── swgl
+> │  │  └────2.51 MB (00.74%) ++ (9 tiny)
+> │  └────0.00 MB (00.00%) ++ (3 tiny)
+> ├───80.25 MB (23.57%) ── heap-unclassified
+> ├────4.00 MB (01.17%) ── ac2d/heap-resources
+> └────2.89 MB (00.85%) ++ (10 tiny)
+>
+> Other Measurements
+>
+> 134,217,727.94 MB (100.0%) -- address-space
+> ├───98,543,665.50 MB (73.42%) ── free(segments=484)
+> ├───35,656,843.55 MB (26.57%) -- reserved
+> │   ├──33,559,725.72 MB (25.00%) ── private(segments=2833)
+> │   ├───2,097,116.51 MB (01.56%) ── mapped(segments=13)
+> │   └───────────1.32 MB (00.00%) ── image(segments=84)
+> └───────17,218.88 MB (00.01%) ++ commit
+>
+> 228.98 MB (100.0%) -- decommitted
+> └──228.98 MB (100.0%) -- heap
+>    ├──218.69 MB (95.51%) ── decommitted
+>    └───10.29 MB (04.49%) -- unused-pages
+>        ├──10.29 MB (04.49%) ── fresh
+>        └───0.00 MB (00.00%) ── madvised
+>
+> 305.90 MB (100.0%) -- gfx
+> └──305.90 MB (100.0%) -- webrender
+>    ├──274.77 MB (89.83%) -- textures
+>    │  ├──144.00 MB (47.07%) ── render-targets
+>    │  ├───37.50 MB (12.26%) -- texture-cache
+>    │  │   ├──37.50 MB (12.26%) ── atlas
+>    │  │   └───0.00 MB (00.00%) ── standalone
+>    │  ├───32.77 MB (10.71%) ── render-texture-hosts
+>    │  ├───32.00 MB (10.46%) ── depth-targets
+>    │  ├───27.61 MB (09.03%) ── swap-chains
+>    │  └────0.89 MB (00.29%) ++ (4 tiny)
+>    └───31.12 MB (10.17%) -- images/mapped_from_owner
+>        ├──29.21 MB (09.55%) -- pid=9792
+>        │  ├──15.66 MB (05.12%) ++ (20 tiny)
+>        │  ├───5.44 MB (01.78%) ── image(365x650, compositor_ref:2, creator_ref:1)/decoded-nonheap [6]
+>        │  ├───4.53 MB (01.48%) ── image(365x649, compositor_ref:2, creator_ref:1)/decoded-nonheap [5]
+>        │  └───3.57 MB (01.17%) ── image(366x512, compositor_ref:2, creator_ref:1)/decoded-nonheap [5]
+>        └───1.91 MB (00.63%) ++ (2 tiny)
+>
+> 578.00 MB (100.0%) -- heap
+> ├──349.01 MB (60.38%) -- committed
+> │  ├──338.81 MB (58.62%) ── allocated
+> │  └───10.20 MB (01.77%) ++ (3 tiny)
+> └──228.98 MB (39.62%) -- decommitted
+>    ├──218.69 MB (37.84%) ── unmapped
+>    └───10.29 MB (01.78%) -- unused-pages
+>        ├──10.29 MB (01.78%) ── fresh
+>        └───0.00 MB (00.00%) ── madvised
+>
+> 48 (100.0%) -- ipc-channels
+> ├───9 (18.75%) ── PCompositorManagerParent
+> ├───9 (18.75%) ── PImageBridgeParent
+> ├───9 (18.75%) ── PVRManagerParent
+> ├───8 (16.67%) ── PRemoteMediaManagerParent
+> ├───6 (12.50%) ── PCanvasManagerParent
+> ├───2 (04.17%) ── PAPZInputBridgeParent
+> ├───2 (04.17%) ── PVideoBridgeParent
+> ├───1 (02.08%) ── PGPUParent
+> ├───1 (02.08%) ── PProfilerChild
+> └───1 (02.08%) ── PVsyncBridgeParent
+>
+> 83 (100.0%) -- ipc-channels-peak
+> ├──17 (20.48%) ── PCompositorManagerParent
+> ├──17 (20.48%) ── PImageBridgeParent
+> ├──17 (20.48%) ── PVRManagerParent
+> ├──16 (19.28%) ── PRemoteMediaManagerParent
+> ├───8 (09.64%) ── PCanvasManagerParent
+> ├───3 (03.61%) ── PAPZInputBridgeParent
+> ├───2 (02.41%) ── PVideoBridgeParent
+> ├───1 (01.20%) ── PGPUParent
+> ├───1 (01.20%) ── PProfilerChild
+> └───1 (01.20%) ── PVsyncBridgeParent
+>
+> 21 (100.0%) -- observer-service
+> └──21 (100.0%) -- referent
+>    ├──18 (85.71%) ── strong
+>    └───3 (14.29%) -- weak
+>        ├──3 (14.29%) ── alive
+>        └──0 (00.00%) ── dead
+>
+> 1 (100.0%) -- preference-service
+> └──1 (100.0%) -- referent
+>    ├──1 (100.0%) ── strong
+>    └──0 (00.00%) ++ weak
+>
+>                1 ── ac2d-context-count
+>                0 ── ac2d-target-count
+>          4.00 MB ── ac2d-texture-memory
+>          6.15 MB ── d3d11-shared-textures
+>          0.00 MB ── gpu-committed
+>          0.00 MB ── gpu-dedicated
+>          0.00 MB ── gpu-shared
+>        338.81 MB ── heap-allocated
+>          1.00 MB ── heap-chunksize
+>     16,526.18 MB ── private
+>     16,114.80 MB ── resident
+>     16,088.48 MB ── resident-unique
+>         39.58 MB ── system-heap-allocated
+> 35,674,062.44 MB ── vsize
+> 96,510,062.44 MB ── vsize-max-contiguous
+>                0 ── webgl-buffer-count
+>          0.00 MB ── webgl-buffer-memory
+>                0 ── webgl-context-count
+>                0 ── webgl-renderbuffer-count
+>          0.00 MB ── webgl-renderbuffer-memory
+>                0 ── webgl-shader-count
+>                0 ── webgl-texture-count
+>          0.00 MB ── webgl-texture-memory
+>
+> End of GPU (pid 15100)
+
+---
+
+## User msg 4
+
+> how can I pin down what exactly the 15.5 GB is caused by
+
+---
+
+## User msg 5
+
+> Okay I changed graphics settings from High to Low and the 15.5 GB is still there. So apparently turning down graphics doesnt resolve it
+
+---
+
+## User msg 6 (fourth snapshot — after Minimize memory usage)
+
+> I did minimise memory usage and it didnt reduce things: GPU (pid 15100)
+> Explicit Allocations
+>
+> 292.31 MB (100.0%) -- explicit
+> ├──259.67 MB (88.83%) -- gfx
+> │  ├──259.67 MB (88.83%) -- webrender
+> │  │  ├──257.30 MB (88.02%) ── swgl
+> │  │  └────2.37 MB (00.81%) ++ (9 tiny)
+> │  └────0.00 MB (00.00%) ++ (3 tiny)
+> ├───25.67 MB (08.78%) ── heap-unclassified
+> ├────4.00 MB (01.37%) ── ac2d/heap-resources
+> └────2.97 MB (01.02%) ++ (10 tiny)
+>
+> Other Measurements
+>
+> 134,217,727.94 MB (100.0%) -- address-space
+> ├───98,543,759.43 MB (73.42%) ── free(segments=401)
+> ├───35,656,847.81 MB (26.57%) -- reserved
+> │   ├──33,559,735.26 MB (25.00%) ── private(segments=2756)
+> │   ├───2,097,111.23 MB (01.56%) ── mapped(segments=13)
+> │   └───────────1.32 MB (00.00%) ── image(segments=84)
+> └───────17,120.70 MB (00.01%) ++ commit
+>
+> 214.06 MB (100.0%) -- decommitted
+> └──214.06 MB (100.0%) -- heap
+>    ├──202.06 MB (94.39%) ── decommitted
+>    └───12.00 MB (05.61%) -- unused-pages
+>        ├──12.00 MB (05.61%) ── fresh
+>        └───0.00 MB (00.00%) ── madvised
+>
+> 246.37 MB (100.0%) -- gfx
+> └──246.37 MB (100.0%) -- webrender
+>    ├──244.99 MB (99.44%) -- textures
+>    │  ├──141.00 MB (57.23%) ── render-targets
+>    │  ├───39.50 MB (16.03%) -- texture-cache
+>    │  │   ├──39.50 MB (16.03%) ── atlas
+>    │  │   └───0.00 MB (00.00%) ── standalone
+>    │  ├───34.50 MB (14.00%) ── depth-targets
+>    │  ├───27.61 MB (11.21%) ── swap-chains
+>    │  └────2.38 MB (00.96%) ++ (5 tiny)
+>    └────1.38 MB (00.56%) ++ images/mapped_from_owner
+>
+> 512.00 MB (100.0%) -- heap
+> ├──297.93 MB (58.19%) -- committed
+> │  ├──290.73 MB (56.78%) ── allocated
+> │  ├────5.23 MB (01.02%) ++ bin-unused
+> │  └────1.97 MB (00.39%) ++ (2 tiny)
+> └──214.06 MB (41.81%) -- decommitted
+>    ├──202.06 MB (39.47%) ── unmapped
+>    └───12.00 MB (02.34%) -- unused-pages
+>        ├──12.00 MB (02.34%) ── fresh
+>        └───0.00 MB (00.00%) ── madvised
+>
+> 36 (100.0%) -- ipc-channels
+> ├───9 (25.00%) ── PRemoteMediaManagerParent
+> ├───5 (13.89%) ── PCanvasManagerParent
+> ├───5 (13.89%) ── PCompositorManagerParent
+> ├───5 (13.89%) ── PImageBridgeParent
+> ├───5 (13.89%) ── PVRManagerParent
+> ├───2 (05.56%) ── PAPZInputBridgeParent
+> ├───2 (05.56%) ── PVideoBridgeParent
+> ├───1 (02.78%) ── PGPUParent
+> ├───1 (02.78%) ── PProfilerChild
+> └───1 (02.78%) ── PVsyncBridgeParent
+>
+> 83 (100.0%) -- ipc-channels-peak
+> ├──17 (20.48%) ── PCompositorManagerParent
+> ├──17 (20.48%) ── PImageBridgeParent
+> ├──17 (20.48%) ── PVRManagerParent
+> ├──16 (19.28%) ── PRemoteMediaManagerParent
+> ├───8 (09.64%) ── PCanvasManagerParent
+> ├───3 (03.61%) ── PAPZInputBridgeParent
+> ├───2 (02.41%) ── PVideoBridgeParent
+> ├───1 (01.20%) ── PGPUParent
+> ├───1 (01.20%) ── PProfilerChild
+> └───1 (01.20%) ── PVsyncBridgeParent
+>
+> 21 (100.0%) -- observer-service
+> └──21 (100.0%) -- referent
+>    ├──18 (85.71%) ── strong
+>    └───3 (14.29%) -- weak
+>        ├──3 (14.29%) ── alive
+>        └──0 (00.00%) ── dead
+>
+> 1 (100.0%) -- preference-service
+> └──1 (100.0%) -- referent
+>    ├──1 (100.0%) ── strong
+>    └──0 (00.00%) ++ weak
+>
+>                1 ── ac2d-context-count
+>                0 ── ac2d-target-count
+>          4.00 MB ── ac2d-texture-memory
+>          0.00 MB ── gpu-committed
+>          0.00 MB ── gpu-dedicated
+>          0.00 MB ── gpu-shared
+>        290.73 MB ── heap-allocated
+>          1.00 MB ── heap-chunksize
+>     16,483.96 MB ── private
+>     16,076.02 MB ── resident
+>     16,046.43 MB ── resident-unique
+>         39.61 MB ── system-heap-allocated
+> 35,673,968.51 MB ── vsize
+> 96,510,092.44 MB ── vsize-max-contiguous
+>                0 ── webgl-buffer-count
+>          0.00 MB ── webgl-buffer-memory
+>                0 ── webgl-context-count
+>                0 ── webgl-renderbuffer-count
+>          0.00 MB ── webgl-renderbuffer-memory
+>                0 ── webgl-shader-count
+>                0 ── webgl-texture-count
+>          0.00 MB ── webgl-texture-memory
+>
+> End of GPU (pid 15100)
+
+---
+
+## User msg 7
+
+> Event ID: 4101, Number of Events: 0
+
+---
+
+## User msg 8 (about:support failure log)
+
+> Btw I went to about:support in firefox: Failure Log
+> (#0) 	GP+[GFX1-]: Present1 failed: 0x887a0005 reason 0x887a0020
+> (#1) 	GP+[GFX1-]: Handle DeviceReset
+> (#2) 	GP+[GFX1]: Crash during D3D11 device creation
+> (#3) Error	Detect DeviceReset DeviceResetReason::DRIVER_ERROR DeviceResetDetectPlace::WR_POST_UPDATE in GPU process
+> (#4) Error	Failed to connect WebRenderBridgeChild. isParent=true
+> (#5) Error	Fallback WR to SW-WR
+> (#6) 	GP+[GFX1-]: RcANGLE(no compositor device for EGLDisplay)(Create)
+> (#7) 	GP+[GFX1-]: CompositorDevice does not exist
+
+---
+
+## User msg 9
+
+> This happens ever time I run my game, is there no correlation at all?
+
+---
+
+## User msg 10 (cold-start controlled experiments)
+
+> Control: firefox nothing open except about:memory -> GPU 281 MB\nControl: firefox 1 tab github.com pages, simple JS page -> GPU 300MB\nTest 1: Game running on low graphics, 30secs in -> GPU 700 MB (no GPU fialures)\n1.5min in -> GPU 682 MB (no GPU failures)\n5min in -> GPU 658 MB (no GPU failures)\nTest 2: Game running on high graphics, 30secs in -> GPU 954 MB (no GPU failures)\n1.5min in -> GPU 900 MB (no GPU failures)\n 3min in -> GPU 3400 MB (no GPU failures).\n5min in -> GPU 4000 MB (no GPU failures)
+
+---
+
+## User msg 11 (this request)
+
+> Can you write this whole chat history to a file in this folder called performance-impr.ai. Make sure to record my messages exactly, as they include evidence that can be re-analysed in future. Summarise your messages back to me and include the important stuff
+
+---
+
+# PART 2 — SUMMARY OF ASSISTANT ANALYSIS
+
+What follows is a condensed summary of the analysis provided in response to the above evidence, so
+the reasoning chain survives without the full prose.
+
+## 2.1 Identification of the app
+
+- The app is **`fserver/client/game.html`** — the only project with a "Graphics" High/Low setting
+  (`data-gfx="high"/"low"`, `setLowGfx`→`html.gfx-low`).
+- `images/mapped_from_owner` under `pid=9792` does NOT come from this app: fserver has zero `<img>`
+  anywhere (only `net.js:102` matches "img" and it is unrelated). pid 9792 is another open content
+  process/page; its decoded bitmaps (365x650 / 365x649 / 366x512 card-sized) appeared in every
+  snapshot and grew (17→29→31 MB), then fell to 1.38 MB after a memory purge. Do not attribute
+  these to the game.
+
+## 2.2 What the snapshots showed (notation: S1 = msg1, S2 = msg2, S3 = msg3, S4 = msg6)
+
+Key GPU-process figures:
+
+| metric | S1 | S2 | S3 (swgl) | S4 (after minimize) |
+|---|---|---|---|---|
+| explicit total | 37.5 MB | 35.1 MB | 340.4 MB | 292.3 MB |
+| swgl | — | — | 250.8 MB | 257.3 MB |
+| render-targets | 120 MB | 192 MB | 144 MB | 141 MB |
+| texture-cache (atlas) | 41.4 (36) | 38.5 (38.5) | 37.5 (37.5) | 39.5 (39.5) |
+| depth-targets | 17.1 | 34.0 | 32.0 | 34.5 |
+| render-texture-hosts | 20.4 | 32.2 | 32.8 | (merged/tiny) |
+| swap-chains | 27.2 | 27.3 | 27.6 | 27.6 |
+| picture-tiles | 24.1 | 26.0 | — | — |
+| gpu-committed | 2,575 | 6,742 | 0 | 0 |
+| gpu-shared | 2,614 | 6,655 | 0 | 0 |
+| resident | 2,767 | 6,845 | 16,115 | 16,076 |
+| private | 2,752 | 6,974 | 16,526 | 16,484 |
+| commit | 3,444 | 7,670 | 17,219 | 17,121 |
+| heap-allocated | 35.9 | 33.8 | 338.8 | 290.7 |
+| images pid 9792 | 17.4 | 29.2 | 29.2 | ~1.4 |
+
+Reading:
+- S1→S2: the **growing buckets** are the ones behind continuous SVG re-rasterization:
+  render-targets 120→192 (+72), depth-targets 17→34 (+17), render-texture-hosts 20→32 (+12);
+  atlas is essentially flat. gpu-shared/committed ballooned 2.6→6.7 GB. So the app **grows over
+  time during animated play**.
+- S3: **renderer fell back to Software WebRender (swgl)** inside the SAME GPU process (same pid
+  15100): all `gpu-*` counters → 0, explicit `swgl` bucket 250.8 MB, system heap-allocated
+  34→339 MB, and resident/private/commit exploded to ~16-17 GB.
+- S4: "Minimize memory usage" (GC/CC/purge) shrank everything Firefox attributes
+  (heap-unclassified 80→25 MB, mapped images 31→1.4 MB) but the ~16 GB ghost did not move at
+  all. Conclusion: the ghost is **not under about:memory's jurisdiction** — it is private,
+  committed, resident virtual memory that no Firefox memory reporter can see, allocate, or free.
+
+## 2.3 Root causes in the app code (addressable pool = the explicit ~245-260 MB)
+
+1. **Hull connectors animate forever.** `renderConnections`/`drawConnGlow`
+   (game.html:1470-1479) plus CSS `.conn-base` (`conn-march` 2.4s) and `.conn-pulse`
+   (`conn-pulse-flow` 3.2s) at game.html:69-72: infinite `stroke-dashoffset` animations on every
+   orthogonally adjacent hull pair, re-rasterized by WebRender every frame, even when the board is
+   idle. This is the largest single feed into render-targets / render-texture-hosts /
+   upload-staging.
+2. **Always-on heavy filters.** `.piece .module-svg` carries a double `drop-shadow`
+   (game.html:87-89) per piece → one filter surface per piece retained in the texture-cache atlas
+   (~36-40 MB), rebuilt every frame the filtered pixels change (the per-piece inner animations).
+3. **Too many simultaneous inner animations per piece** (pieces.js): triangle 14s + 6s
+   counter-rotate; circle 9s + 6.5s counter-rotate; diamond 12s rotate + shimmer; square 4 blink
+   LEDs + scan + shimmer; core-pulse on hex/circle (2.6s); ping on hex. Each is an animated
+   sub-group → more rasterized sub-groups changing per frame.
+4. **No invalidation isolation.** All pieces live in one shared `.grid` transform layer; a dirty
+   animated sub-element can invalidate larger board tiles than its own box → picture-tiles pool
+   (24-26 MB).
+5. Bounded/transient animations (route `.move-path` `path-flow`/`path-pulse-flow`, ping,
+   blockflash, found-pulse) only run while hovering/acting — kept.
+
+Note: the board uses CSS keyframes (moved off SMIL deliberately per pieces.js:36-40) precisely to
+avoid SMIL leak-on-remove, which previously leaked memory every time a piece node was dropped.
+
+## 2.4 The driver failure (decisive evidence, msg 8)
+
+`about:support` failure log decoded:
+- `Present1 failed: 0x887a0005 reason 0x887a0020` = DXGI_ERROR_DEVICE_REMOVED, reason
+  **DRIVER_INTERNAL_ERROR**, occurring at `WR_POST_UPDATE` (while composing/presenting).
+- Then `Handle DeviceReset`, `Crash during D3D11 device creation`, `Detect DeviceReset ...
+  DRIVER_ERROR`, `Failed to connect WebRenderBridgeChild`, `Fallback WR to SW-WR`,
+  `RcANGLE(no compositor device)`, `CompositorDevice does not exist`.
+- Meaning: the D3D11 device was removed by a driver internal error, Firefox could not recreate a
+  device (creation itself crashed), and fell back to software WebRender **in the same GPU
+  process** (which is why pid never changed and gpu-* counters went to 0 while swgl appeared).
+- **No Event ID 4101 does not contradict this**: 4101 is the WDDM TDR-timeout event; the
+  DXGI_ERROR_DRIVER_INTERNAL_ERROR device-removal path frequently concludes without a TDR event.
+  The about:support failure log IS the reset record.
+
+## 2.5 The full causal chain (final understanding)
+
+1. Game on High produces sustained, never-idle compositor/present load (per-frame SVG raster,
+   filters, connectors, many animated sub-groups) on a marginal D3D11 driver.
+2. This reliably trips `Present1 ... DRIVER_INTERNAL_ERROR` over sustained play (reproducible
+   every session of the game).
+3. Device reset → device re-creation crash → **Fallback WR to SW-WR** in-process.
+4. The failed recreation leaves a ~15-16 GB private/commit allocation attributed to the GPU
+   process that no Firefox reporter can purge (the "ghost").
+5. Therefore: **the game is the trigger; the 16 GB is the fallout.** App-side High→Low or
+   about:memory Minimize cannot undo step 4 once it has happened (which is why msg 5 and msg 6
+   showed it "unaffected").
+
+## 2.6 Cold-start experiments (msg 10) proved the High layer leaks GPU memory
+
+| scenario | ~30 s | 1.5 min | 3 min | 5 min | failures |
+|---|---|---|---|---|---|
+| about:memory only | 281 MB | — | — | — | none |
+| github + simple JS | 300 MB | — | — | — | none |
+| Game, Low | 700 | 682 | — | 658 | none |
+| Game, High | 954 | 900 | 3,400 | 4,000 | none |
+
+- **Low: flat** (~658-700 MB, no growth).
+- **High: monotonically growing** (~0.9 → 4.0 GB in 5 min, burst between 1.5-3 min). Extended, this
+  is exactly the accumulation that reached 16 GB and tripped the device error / swgl fallback.
+- Conclusion: the High-detail animation layer **leaks/accumulates GPU-process memory monotonically**;
+  the Low tier does not reproduce it. Correlation confirmed and app-attributable to the High
+  animation rendering.
+
+## 2.7 Plan of fixes (Phases, measurement-first)
+
+Pass criterion: cold-start High stops growing — stays under ~1.2 GB total with <200 MB growth over
+5 min; Low unchanged (~660-700 MB).
+
+- **Phase 0 — baseline protocol.** Fresh Firefox; cold-start game on High; sample about:memory GPU
+  at 30s/1.5min/3min/5min (user already has the numbers). Also take a full save-to-file snapshot
+  at 1 min and 4 min on High to identify the *growing* bucket (gfx/webrender/textures subtrees vs
+  gpu-shared/gpu-committed) so Phases target the right pool.
+- **Phase 1 — kill idle connector raster.** `drawConnGlow` (game.html:1470-1479): make `conn-base`
+  a static dashed line (remove `conn-march`, :69-70); keep a single `conn-pulse` line gated to
+  active play (add a grid/root class while `G.pending`/telegraph/move is in flight, mirroring the
+  `gfx-low` idiom). Board that is still = genuinely static in the compositor. Biggest expected win
+  on render-targets/render-texture-hosts.
+- **Phase 2 — filters only when they earn it.** Base `.piece .module-svg` double drop-shadow
+  (game.html:87-89) → none; move the glow to state classes only (`.sel`, `.ready`, `.moving`,
+  `.targetable`, `.found`, `.dep` when active; keep `.ast` saturate). Removes per-piece filter
+  surfaces and per-frame filter rebuild churn (texture-cache atlas + depth-targets).
+- **Phase 3 — trim redundant per-piece motion at High.** Drop the second counter-rotate on
+  triangle/circle/diamond and the blink/scan/shimmer groups (pieces.js); keep one signature
+  rotation + `core-pulse`/`ping` (opacity/scale animate on the compositor, near-free).
+- **Phase 4 — isolate invalidation.** `contain: layout style` on `.piece` (NOT `paint` — paint
+  clips asteroids' floating companions and scaled deployables). Measure; revert if no win.
+- **Phase 5 — conditional.** If Phases 1-4 do not flatten the High growth, the remaining
+  accumulation is a Firefox WebRender texture-cache/pool eviction issue → build a minimal repro +
+  keep the failure log, file a Mozilla bug; app fallback = a "Medium" tier that reuses Low's
+  connector behavior.
+- **Verification of invariants.** `renderConnections` restarts animations on rebuild and
+  `paintPieces` reuses nodes so rotations continue; `setLowGfx` rebuilds the board. Changes must
+  preserve the diff-reuse behavior (game.html:1503-1506, 1661-1688, 1433-1442).
+
+## 2.8 Environment / out-of-scope items
+
+- The ~16 GB ghost is bound to the *broken device session*; a fresh Firefox restart should restore
+  a sane GPU baseline. If it reproduces only after the failure recurs, driver/platform fault is the
+  root and the end state is a driver update and/or a Mozilla bug report (grab the bp-ID from
+  `about:crashes` for the device-creation crash).
+- Whether the machine is a VM / remote-desktop session is **still unanswered** — RDP/VM setups hit
+  DRIVER_INTERNAL_ERROR routinely (no real D3D adapter) and would make swgl the permanent end
+  state for any heavy page.
+- `gpu-committed`/`gpu-shared`/`resident` are OS/commit counters; the physical, reusable store the
+  app can influence is the WebRender texture pool (~245-260 MB explicit). WebRender holds it until
+  memory pressure — fixes target the pool and the per-frame churn feeding it.
+
+## 2.9 Open items / next actions
+
+- Confirm machine is VM/RDP or not.
+- Capture the 1-min/4-min full snapshot on High to identify the growing bucket (recommended before
+  coding so Phases target the right pool).
+- Update GPU driver; check `about:crashes` for a bp-ID.
+- Implement Phases 1-4 after plan approval; re-run the cold-start 5-min High test after each phase
+  to verify the growth flattens; keep Low as the control.
+
+---
+*End of record.*
