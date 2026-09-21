@@ -151,12 +151,14 @@
   .module-svg .scan { animation:scan-sweep 3.2s ease-in-out infinite; }
   .module-svg .scan.scan-in { animation-name:scan-sweep-in; }
   .module-svg .mod-shimmer { animation:shimmer 2.2s ease-in-out infinite; }
+  .module-svg .engine { animation:engine-flicker 1.1s steps(1, end) infinite; }
   @keyframes core-pulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
   @keyframes blink-led { 0%,22% { opacity:1; } 30%,88% { opacity:.22; } 96%,100% { opacity:1; } }
   @keyframes scan-sweep { 0%,100% { transform:translateX(8px); } 50% { transform:translateX(36px); } }
   @keyframes scan-sweep-in { 0%,100% { transform:translateX(8px); } 50% { transform:translateX(18px); } }
   @keyframes move-corner-pulse { 0%,100% { opacity:.25; } 50% { opacity:1; } }
   @keyframes shimmer { 0%,100% { opacity:.3; } 50% { opacity:1; } }
+  @keyframes engine-flicker { 0%,100% { opacity:1; } 6%,88% { opacity:.4; } 92% { opacity:1; } }
   @keyframes astro-spin { from { transform:rotate(var(--astro-start,0deg)); }
                           to { transform:rotate(calc(var(--astro-start,0deg) + 360deg)); } }
   /* the piece rotations and pings, set as CSS so removing a piece never leaks animation

@@ -140,6 +140,23 @@ var GamePieces = (function () {
     svg.appendChild(g);
   }
 
+  /* The ship itself, carried over from the tabletop board's frigate token: a hull with a
+     lit bridge and two engines that flicker out of step with each other. */
+  function buildFrigate(svg, c) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    g.appendChild(svgEl('path', { d: 'M0 -29 L14 -9 L17 18 L22 22 L22 28 L-22 28 L-22 22 L-17 18 L-14 -9 Z',
+      fill: shade(c, 0.18), stroke: c, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    g.appendChild(svgEl('path', { d: 'M0 -14 L6 -2 L-6 -2 Z', fill: shade(c, 1.3), stroke: 'none' }));
+    var e1 = svgEl('rect', { x: -15, y: 23, width: 7, height: 5, rx: 1, fill: shade(c, 1.5) });
+    e1.setAttribute('class', 'engine');
+    var e2 = svgEl('rect', { x: 8, y: 23, width: 7, height: 5, rx: 1, fill: shade(c, 1.5) });
+    e2.setAttribute('class', 'engine');
+    e2.setAttribute('style', 'animation-delay:.45s');
+    g.appendChild(e1);
+    g.appendChild(e2);
+    svg.appendChild(g);
+  }
+
   /* a lumpy rock, seeded off the asteroid's id so each one keeps its own silhouette */
   function buildAsteroid(svg, seed) {
     var g = svgEl('g', { transform: 'translate(36 36)' });
@@ -202,7 +219,7 @@ var GamePieces = (function () {
   }
 
   var BUILDERS = { hex: buildHex, triangle: buildTriangle, square: buildSquare,
-                   diamond: buildDiamond, circle: buildCircle };
+                   diamond: buildDiamond, circle: buildCircle, frigate: buildFrigate };
 
   /* Does this module stand in for the Core? The Citadel says so in its own rules text — it
      shares the Core's hull and counts as a Core Module — so it wears the Core's silhouette
