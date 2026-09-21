@@ -406,6 +406,10 @@
   .mp-meta span.t-hull { background:rgba(232,169,74,.12); color:var(--amber); border-color:var(--amber); }
   .mp-meta span.t-charge { color:var(--icon-charged); border-color:var(--icon-charged);
     background:rgba(156,63,102,.12); }
+  /* Power reads as charge's sibling here too, so the chip and the badge on the board are
+     recognisably the same thing */
+  .mp-meta span.t-power { color:var(--icon-power); border-color:rgba(167,114,240,.6);
+    background:rgba(167,114,240,.12); }
   .mp-meta .ticon { width:11px; height:11px; flex:none; display:block; }
   .mp-desc { color:var(--ink-mid); font-size:12.5px; line-height:1.55; white-space:pre-line; }
   /* debug: the keybind sheet and the card conjurer */
@@ -2041,6 +2045,15 @@
            (o.heat ? '<span class="tokpip" title="Heat">🔥' + o.heat + '</span>' : '');
   }
 
+  /* Power diverted to a piece, as a chip. The board already shows this to everyone on the
+     piece itself, so a popup that left it out was the odd one out rather than a secret kept. */
+  function powerChip(o) {
+    var n = (o && o.tokens && o.tokens.Power) || 0;
+    return n ? { text: POWER_ICON + n, cls: 't-power',
+                 tip: 'Power diverted to it — each token is +1 Hull, Move, Range and Damage' }
+             : null;
+  }
+
   /* A Citadel has no hull of its own — it is part of the Core — so anything reporting its
      hull reports the ship's. The engine owns that rule; this only asks it where to read. */
   function sharesCoreHull(side, o) {
@@ -2158,6 +2171,12 @@
     var meta = [];
     if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
                           tip: 'Its silhouette gives away this much' });
+    /* Charges and Power are painted on the piece for everyone to read, so withholding them
+       here told you less than the board already had. Nothing else about it is given away. */
+    if (rec.o.charges) meta.push({ text: CHARGES_ICON + rec.o.charges, cls: 't-charge',
+                                   tip: 'Charges on it now — the board shows this much' });
+    var upw = powerChip(rec.o);
+    if (upw) meta.push(upw);
     meta.push(atChip(rec.o));
     document.getElementById('modPopMeta').innerHTML = chipsHtml(meta);
     document.getElementById('modPopDesc').innerHTML =
@@ -2191,9 +2210,11 @@
     if (num(m.duration) > 0) meta.push({ text: DURATION_ICON + esc(m.duration), cls: '', tip: 'Duration' });
     /* the live figure on the piece, as a tech card shows its own; the preset's number only
        when there is no piece to read */
-    if (rec && (rec.o.charges || rec.o.heat)) {
+    var pw = rec ? powerChip(rec.o) : null;
+    if (rec && (rec.o.charges || rec.o.heat || pw)) {
       if (rec.o.charges) meta.push({ text: CHARGES_ICON + rec.o.charges, cls: 't-charge',
                                      tip: 'Charges on it now' });
+      if (pw) meta.push(pw);
       if (rec.o.heat) meta.push({ text: '🔥' + rec.o.heat, cls: 't-amber', tip: 'Heat on it now' });
     } else if (!rec && num(m.charges) > 0) {
       meta.push({ text: CHARGES_ICON + esc(m.charges), cls: 't-charge',
