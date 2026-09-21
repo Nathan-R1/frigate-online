@@ -9,9 +9,14 @@
 <style>
   body { margin:0; padding:0; height:100vh; height:100dvh; overflow:hidden; font-family:var(--body); }
   .g-wrap { display:grid; grid-template-rows:auto 1fr auto; height:100vh; height:100dvh; }
+  /* the bar is one row, always: it drops what it holds rather than wrapping */
   .g-top { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel);
-           border-bottom:1px solid var(--line-bright); flex-wrap:wrap; }
-  .g-turn { font-family:var(--disp); font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--cyan); }
+           border-bottom:1px solid var(--line-bright); flex-wrap:nowrap; min-width:0; }
+  /* nothing on the bar may shrink, or fitTopBar() would read a squeezed width as a fit */
+  .g-top > * { flex:none; }
+  .g-top .g-spacer { flex:1 1 0; min-width:0; }
+  .g-turn { font-family:var(--disp); font-size:15px; letter-spacing:.08em; text-transform:uppercase;
+            color:var(--cyan); white-space:nowrap; }
   .g-btn { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
            padding:7px 14px; cursor:pointer; background:var(--panel-alt);
            border:1px solid var(--cyan); color:var(--cyan); border-radius:6px; }
@@ -24,7 +29,7 @@
   /* one colour per seat, so up to four ships stay distinguishable on the board */
   :root { --p0:#4fd8c9; --p1:#e8762e; --p2:#e0a93f; --p3:#9a7ce0;
           --pass-green:#46d176; }
-  #barRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #barRow { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
   .side-bar { display:flex; align-items:center; gap:9px; padding:4px 10px;
               border:1px solid var(--sc, var(--line)); color:var(--ink);
               border-radius:6px; font-family:var(--mono); font-size:11px; }
@@ -38,19 +43,19 @@
   .side-bar .sb-hull, .side-bar .sb-sh { display:inline-flex; align-items:center; gap:4px; }
   .sb-ico { width:13px; height:13px; flex:none; display:block; }
 
-  /* tight bar: the phase buttons keep only their mark, and the seats only their team and stats */
-  @media (max-width: 900px) { .btn-label { display:none; } }
-  @media (max-width: 700px) { .side-bar .sb-name { display:none; } }
-  /* Very small screens swap the seat bars themselves for a chart button that pops them
-     down — the top bar keeps room for the buttons that actually play the game. */
+  /* Tight bar. A width breakpoint cannot say when the row stops fitting — the roster, the
+     seat names and the turn label all change what the bar holds — so fitTopBar() measures it
+     and hangs these on, one step at a time, until the row fits:
+       tight-text  the phase buttons keep only their mark, and the seats only team and stats
+       tight-bars  the seat bars give way to the chart button that pops them down in full
+       tight-label the turn label, last to go, is let go to an ellipsis
+     The drop-down is not on the row, so it keeps the names the row had to drop. */
+  .g-top.tight-text .btn-label { display:none; }
+  .g-top.tight-text #barRow .sb-name { display:none; }
   .stats-wrap { display:none; }
-  @media (max-width: 600px) {
-    .stats-wrap { display:flex; }
-    #barRow { display:none; }
-  }
-  /* the drop-down shows the bars in full, so a name the inline row would have dropped
-     comes back here */
-  @media (max-width: 700px) { .stats-drop .side-bar .sb-name { display:inline; } }
+  .g-top.tight-bars #barRow { display:none; }
+  .g-top.tight-bars .stats-wrap { display:flex; }
+  .g-top.tight-label .g-turn { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
   .sb-hull b { color:var(--icon-hull); } .sb-sh b { color:var(--icon-shield); }
   .g-mid { display:grid; grid-template-columns:1fr 300px; min-height:0; position:relative; }
   /* the board pans and zooms under a fixed window, as the tabletop board does */
@@ -510,7 +515,7 @@
 </head>
 <body>
 <div class="g-wrap">
-  <div class="g-top">
+  <div class="g-top" id="gTop">
     <span class="g-turn" id="turnLabel">—</span>
     <span id="barRow"></span>
     <span class="stats-wrap" id="statsWrap">
@@ -518,7 +523,7 @@
               aria-haspopup="true" aria-expanded="false">📊</button>
       <div class="stats-drop hidden" id="statsDrop" role="menu"></div>
     </span>
-    <span style="flex:1"></span>
+    <span class="g-spacer"></span>
     <button type="button" class="g-btn" id="playPhaseBtn">
       <svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7V5Z"
         fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
@@ -1071,8 +1076,6 @@
     }).join('');
     document.getElementById('barRow').innerHTML = bars;
     document.getElementById('statsDrop').innerHTML = bars;
-    /* bars can change width with the roster, so a pop-up that is open is re-kept in view */
-    placeStatsDrop();
     var mine = isMyTurn(G) && !G.pending && !G.over;
     /* the two are never both useful, so only the one for this phase is on screen */
     var inPlay = G.phase === 'play';
@@ -1081,7 +1084,55 @@
     pb.classList.toggle('hidden', !inPlay);
     eb.disabled = !mine;
     pb.disabled = !mine;
+    /* the roster and the phase both change what the row has to hold, so it is re-fitted
+       once everything on it is in its final shape */
+    fitTopBar(bars);
+    /* bars can change width with the roster, so a pop-up that is open is re-kept in view */
+    placeStatsDrop();
   }
+
+  /* ---------- keeping the top bar on one row ----------
+     The row is measured rather than guessed at a breakpoint: what it has to hold depends on
+     the roster, on names that come from the sheets, and on the turn label, none of which a
+     media query can see. Each step is tried in turn and kept only if the row still does not
+     fit, so the least is given up that will do. See .tight-* in the stylesheet. */
+  var FIT_STEPS = ['tight-text', 'tight-bars', 'tight-label'];
+  /* what the row needs at its natural width — children that cannot shrink measure their own
+     width, and the spacer contributes nothing but the gaps either side of it */
+  function topBarNeeds(top) {
+    var cs = getComputedStyle(top);
+    var gap = parseFloat(cs.columnGap) || 0;
+    var need = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    var shown = 0;
+    for (var i = 0; i < top.children.length; i++) {
+      var el = top.children[i];
+      if (el.offsetParent === null) continue;   /* display:none takes no room and no gap */
+      shown++;
+      if (!el.classList.contains('g-spacer')) need += el.offsetWidth;
+    }
+    return need + (shown > 1 ? gap * (shown - 1) : 0);
+  }
+  /* measuring forces a layout, so a row whose contents and width are unchanged is left alone */
+  var fitSig = null, fitBars = '';
+  function fitTopBar(bars) {
+    var top = document.getElementById('gTop');
+    if (!top) return;
+    if (bars != null) fitBars = bars;
+    var sig = top.clientWidth + '\u0001' + fitBars + '\u0001' +
+              document.getElementById('turnLabel').textContent + '\u0001' +
+              document.getElementById('endBtn').classList.contains('hidden');
+    if (sig === fitSig) return;
+    fitSig = sig;
+    top.classList.remove.apply(top.classList, FIT_STEPS);
+    for (var i = 0; i < FIT_STEPS.length; i++) {
+      if (topBarNeeds(top) <= top.clientWidth) break;
+      top.classList.add(FIT_STEPS[i]);
+    }
+    /* the drop-down belongs to a button that is no longer on the row */
+    if (!top.classList.contains('tight-bars')) closeStatsDrop();
+  }
+  /* assigned by the stats button below; called from the fit before that code has run */
+  var closeStatsDrop = function () {};
 
   /* the stats readable-out is pinned to the button, but sized to the window — it can
      never poke past the edge of a phone screen, whatever the label or roster does */
@@ -2783,6 +2834,7 @@
       btn.setAttribute('aria-expanded', on ? 'true' : 'false');
       if (on) placeStatsDrop();
     }
+    closeStatsDrop = function () { if (!drop.classList.contains('hidden')) open(false); };
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
       open(drop.classList.contains('hidden'));
@@ -2793,7 +2845,27 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !drop.classList.contains('hidden')) open(false);
     });
-    window.addEventListener('resize', placeStatsDrop);
+  })();
+  /* One re-fit per frame at most: a drag of the window edge fires resize far faster than a
+     measurement is worth, and each one costs a layout. */
+  (function () {
+    var pending = false;
+    function onResize() {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function () {
+        pending = false;
+        fitTopBar();
+        placeStatsDrop();
+      });
+    }
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    /* a webfont landing late re-cuts every label on the row, so the fit is taken again */
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { fitSig = null; fitTopBar(); });
+    }
+    fitTopBar();
   })();
   (function () {
     var keys = document.getElementById('keysPop'), card = document.getElementById('cardPop');
