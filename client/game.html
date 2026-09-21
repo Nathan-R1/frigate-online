@@ -852,7 +852,7 @@
 
   /* Hand the seat's build over to the builder and go there. The choices travel, not the
      sheet: they are the builder's own state, so the run picks up exactly where it stopped
-     and "Create new character" still scraps it cleanly. */
+     and "Create New" still scraps it cleanly. */
   function editSeat(i) {
     writeStore(GAME_ROSTER_KEY, SEATS);
     writeStore(SETUP_RETURN_KEY, 'host');   /* so the way back is the way we came */

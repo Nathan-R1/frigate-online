@@ -416,6 +416,8 @@
     font-size: 13px; font-family: var(--body); padding: 8px 12px; border-radius: 6px; min-width: 240px;
   }
   .exp-field input:focus { outline: none; border-color: var(--cyan); }
+  .exp-name { justify-self: end; }
+  .exp-name .exp-field { margin-top: 0; }
 
   /* skills window */
   .dl-row {
@@ -520,15 +522,14 @@
       be exported to a full frigate sheet JSON.
     </p>
     <div class="land-btns">
-      <button type="button" class="b-btn primary" data-act="startNew">Create new character</button>
-      <button type="button" class="b-btn" data-act="loadExisting">Load existing character</button>
-      <button type="button" class="b-btn" id="resumeBtn" data-act="resumeRun" style="display:none;">Continue run in progress</button>
+      <button type="button" class="b-btn primary" data-act="startNew">Create New</button>
+      <button type="button" class="b-btn" data-act="loadExisting">Import</button>
+      <button type="button" class="b-btn primary ready" id="resumeBtn" data-act="resumeRun" style="display:none;">Continue editing</button>
     </div>
     <div class="land-opts">
       <label class="dl-row"><input type="checkbox" id="limitsBox"> Disable limits</label>
       <label class="dl-row"><input type="checkbox" id="showAllDrawBox"> Show all on card draw</label>
     </div>
-    <div class="hint-text" id="landingHint">No saved choices yet.</div>
   </section>
 
   <!-- SEAT BANNER: shown when the game sent us here to build for one of its players -->
@@ -568,10 +569,6 @@
       </div>
     </div>
     <div class="exp-grid" id="expSummary"></div>
-    <div class="exp-field">
-      <label for="shipName">Ship Name</label>
-      <input type="text" id="shipName" maxlength="40" placeholder="e.g. The Inevitable">
-    </div>
   </section>
 
   <!-- MODULE / DEPLOYABLE DETAIL POPUP -->
@@ -1220,15 +1217,8 @@
   function refreshLanding() {
     document.getElementById('limitsBox').checked = !!choices.disableLimits;
     document.getElementById('showAllDrawBox').checked = !!choices.showAllDraw;
-    var hint = document.getElementById('landingHint');
     var resumeBtn = document.getElementById('resumeBtn');
-    if (choicesHaveAny()) {
-      hint.textContent = '';
-      resumeBtn.style.display = '';
-    } else {
-      hint.textContent = 'No saved choices yet.';
-      resumeBtn.style.display = 'none';
-    }
+    resumeBtn.style.display = choicesHaveAny() ? '' : 'none';
   }
 
   /* ===== option cards (click-select + expandable detail) ===== */
@@ -2347,9 +2337,11 @@ function skillsOptions() {
     saveChoices();
   });
 
-  document.getElementById('shipName').addEventListener('input', function () {
-    choices.shipName = this.value;
-    saveChoices();
+  document.getElementById('expSummary').addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'shipName') {
+      choices.shipName = e.target.value;
+      saveChoices();
+    }
   });
 
   /* ===== landing actions ===== */
@@ -2491,7 +2483,6 @@ function skillsOptions() {
 
   /* ===== export ===== */
   function renderExport() {
-    document.getElementById('shipName').value = choices.shipName;
     var html = '';
 
     /* The last screen before a sheet leaves is the right place to be told what is wrong with
@@ -2508,6 +2499,12 @@ function skillsOptions() {
         }).join('') +
         '</ul></div>';
     }
+
+    /* the ship's name sits at the top right, right under the fix list and above the hull */
+    html += '<div class="exp-pick exp-wide exp-name"><div class="exp-field">' +
+      '<label for="shipName">Ship Name</label>' +
+      '<input type="text" id="shipName" maxlength="40" placeholder="e.g. The Inevitable">' +
+      '</div></div>';
 
     function pickList(t, invArr) {
       var names = [];
@@ -2548,6 +2545,7 @@ function skillsOptions() {
       skPts.map(function (x) { return '<span class="exp-skill">' + esc(x) + '</span>'; }).join('') +
       '</div></div>';
     document.getElementById('expSummary').innerHTML = html;
+    document.getElementById('shipName').value = choices.shipName;
   }
 
   function buildSheet() {
@@ -2639,7 +2637,7 @@ function skillsOptions() {
   /* ===== editing a seat in the game's new-game roster =====
      The game parks a request here and sends the browser over. We adopt that seat's saved
      choices as the working state — so the build can be picked up where it was left, or
-     scrapped with "Create new character" — and hand the finished sheet back on the way out.
+     scrapped with "Create New" — and hand the finished sheet back on the way out.
      Only the choices travel, because they are the builder's own state and round-trip exactly;
      the sheet is derived from them when we return. */
   var SEAT_REQUEST_KEY = 'frigateBuilderRequest';
@@ -2763,7 +2761,6 @@ function skillsOptions() {
     if (bn) bn.style.display = '';
   }
   rebuildSteps();
-  document.getElementById('shipName').value = choices.shipName;
   window.startNew = function () { startNew(); };
   window.loadExisting = function () { loadExisting(); };
   window.resumeRun = function () { resumeRun(); };
@@ -2785,8 +2782,8 @@ function skillsOptions() {
   });
 
   /* Every entry lands on the Build a Character screen — a seat sent here from the game's
-     roster included. From there "Continue run in progress" walks into the seat's saved run,
-     "Create new character" starts it over, and nothing about the build is assumed. */
+     roster included. From there "Continue editing" walks into the seat's saved run,
+     "Create New" starts it over, and nothing about the build is assumed. */
   show('landing');
   renderProgressDots();
 })();
