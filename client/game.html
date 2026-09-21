@@ -1653,7 +1653,7 @@
     var yours = rec.side && rec.side.team === G.players[meIdx()].team;
     d.title = rec.kind === 'ast' ? 'Asteroid — hull ' + o.hull
             : rec.kind === 'anom' ? 'Anomaly'
-            : yours ? rec.side.name + ' — ' + o.name + ' — hull ' + o.hull + '/' + (o.hullMax || o.hull)
+            : yours ? rec.side.name + ' — ' + o.name + ' — hull ' + hullText(rec.side, o)
             /* someone else's: the shape is public, the rest is not */
             : rec.side.name + ' — Unknown ' + (rec.kind === 'dep' ? 'Deployable' : 'Module');
     var tg = d.querySelector('.pc-tag');
@@ -2041,6 +2041,16 @@
            (o.heat ? '<span class="tokpip" title="Heat">🔥' + o.heat + '</span>' : '');
   }
 
+  /* A Citadel has no hull of its own — it is part of the Core — so anything reporting its
+     hull reports the ship's. The engine owns that rule; this only asks it where to read. */
+  function sharesCoreHull(side, o) {
+    return !!(side && Engine.sharesHullWithCore && Engine.sharesHullWithCore(side, o));
+  }
+  function hullText(side, o) {
+    var h = (side && Engine.hullHolder) ? Engine.hullHolder(side, o) : o;
+    return h.hull + ' / ' + (h.hullMax || h.hull);
+  }
+
   /* hull as the heart icon and the number, with the full figure on hover once it is damaged */
   function hullPip(o) {
     var max = o.hullMax || o.hull;
@@ -2172,8 +2182,10 @@
     var meta = [];
     if (m.tt) meta.push({ text: (TYPE_ICONS[m.tt] || '⚔') + ' ' + cap(m.tt), cls: 't-cyan',
                           tip: cap(m.tt) + ' technology' });
-    if (rec) meta.push({ text: HULL_ICON + rec.o.hull + ' / ' + (rec.o.hullMax || rec.o.hull),
-                         cls: 't-hull', tip: 'Hull remaining' });
+    if (rec) meta.push({ text: HULL_ICON + hullText(rec.side, rec.o),
+                         cls: 't-hull',
+                         tip: sharesCoreHull(rec.side, rec.o) ? 'Hull remaining — shared with the Core'
+                                                              : 'Hull remaining' });
     else if (num(m.hull) > 0) meta.push({ text: HULL_ICON + esc(m.hull), cls: 't-hull', tip: 'Hull HP' });
     if (num(m.speed) > 0) meta.push({ text: SPEED_ICON + esc(m.speed), cls: '', tip: 'Speed' });
     if (num(m.duration) > 0) meta.push({ text: DURATION_ICON + esc(m.duration), cls: '', tip: 'Duration' });

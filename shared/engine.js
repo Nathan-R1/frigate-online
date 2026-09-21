@@ -150,10 +150,16 @@ var Engine = (function () {
     if (!inBounds(x, y) || cellAt(x, y)) return null;
     shapeFallback(s.idx, modName);
     var id = uid('m');
-    var hull = num(m.hull, 1);
-    s.modules[id] = { id: id, name: modName, x: x, y: y, hull: hull, hullMax: hull,
-                      exhausted: false, tokens: {}, charges: num(m.charges, 0),
-                      moveLeft: 0, owner: s.idx };
+    var rec = { id: id, name: modName, x: x, y: y,
+                exhausted: false, tokens: {}, charges: num(m.charges, 0),
+                moveLeft: 0, owner: s.idx };
+    /* A module that shares the Core's hull carries no hull fields at all. Leaving it a pool
+       nothing reads is how the Citadel came to own a second, private 5 HP. */
+    if (!sharesHullWithCore(s, rec)) {
+      rec.hull = num(m.hull, 1);
+      rec.hullMax = rec.hull;
+    }
+    s.modules[id] = rec;
     occupy(x, y, { kind: 'module', owner: s.idx, id: id });
     return id;
   }
@@ -494,13 +500,17 @@ var Engine = (function () {
     var absorbed = Math.min(targetSide.shield, amount);
     targetSide.shield -= absorbed;
     var rest = amount - absorbed;
-    mod.hull -= rest;
+    /* A Citadel is the Core wearing another silhouette: the damage lands in the Core's pool,
+       and it is the Core that dies when that pool runs out — the Citadel goes with the wreck. */
+    var hit = hullHolder(targetSide, mod);
+    hit.hull -= rest;
     if (absorbed) {
       log(targetSide.name + "'s shields absorb " + absorbed + '.', targetSide);
       fire(targetSide, 'onShieldDamaged', { amount: absorbed });
     }
-    if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage.', targetSide);
-    if (mod.hull <= 0) destroyModule(targetSide, mod);
+    if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage' +
+                  (hit === mod ? '' : ' — off the Core') + '.', targetSide);
+    if (hit.hull <= 0) destroyModule(targetSide, hit);
     dealtDamage(mod);
     checkWin();
     return rest;
@@ -1050,6 +1060,8 @@ var Engine = (function () {
        permanent rather than something a later repair would clamp away. */
     function give(m, owner) {
       if (!m) return;
+      /* reinforcing a Citadel is reinforcing the Core; there is only the one pool */
+      m = hullHolder(owner || s, m);
       m.hull += n;
       if (o.mayExceed) m.hullMax = Math.max(m.hullMax || 0, m.hull);
       else m.hull = Math.min(m.hull, m.hullMax || m.hull);
@@ -1493,7 +1505,10 @@ var Engine = (function () {
     function give(m) {
       m.tokens = m.tokens || {};
       m.tokens[token] = (m.tokens[token] || 0) + 1;
-      if (token === 'Power') { m.hull += 1; m.hullMax += 1; }
+      if (token === 'Power') {
+        var h = hullHolder(s, m);
+        h.hull += 1; h.hullMax += 1;
+      }
       log(s.name + ' diverts power to ' + m.name + '.', s);
       emit();
     }
@@ -1721,6 +1736,23 @@ var Engine = (function () {
     return (e.passive || []).some(function (pas) {
       return (pas.effect || []).some(function (o) { return o.op === 'countsAsCore'; });
     });
+  }
+  /* A module with no hull of its own: it is a piece of the Core, so damage to it comes off
+     the ship's hull and it reports that number. The Citadel says so in its own static passive
+     — read here the way isCoreLike reads countsAsCore, rather than hardcoded against a name. */
+  function sharesHullWithCore(s, m) {
+    if (!m || !s || m.id === s.coreId) return false;
+    var e = fx(m.name, 'mod');
+    if (e.shareHullWithCore) return true;
+    return (e.passive || []).some(function (pas) {
+      return (pas.effect || []).some(function (o) { return o.op === 'shareHullWithCore'; });
+    });
+  }
+  /* Where a module's hull actually lives. Every read and every write goes through this, so a
+     shared pool is one number in one place and nothing can drift out of step with it. */
+  function hullHolder(s, m) {
+    if (!sharesHullWithCore(s, m)) return m;
+    return s.modules[s.coreId] || m;
   }
   /* Everything joined to the Core by a chain of adjacent modules. This is the rule beneath
      every card's own requirement: a module may satisfy "adjacent to any" against a neighbour
@@ -2000,6 +2032,8 @@ var Engine = (function () {
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
     isCoreLike: function (s2, m) { return isCoreLike(s2, m); },
+    sharesHullWithCore: function (s2, m) { return sharesHullWithCore(s2, m); },
+    hullHolder: function (s2, m) { return hullHolder(s2, m); },
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,
