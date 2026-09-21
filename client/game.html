@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Frigate — Game</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/frigate.css">
 <style>
@@ -633,18 +631,16 @@
 <div class="net-badge hidden" id="netBadge"></div>
 <div class="g-over g-full hidden" id="modePick"><div class="box">
   <h2>New Game</h2>
-  <p class="rost-note">Three ways in. Who is playing, and what they fly, comes next.</p>
+  <p class="rost-note">Who is playing, and what they fly, comes next.</p>
   <p style="margin:16px 0 0">
-    <button type="button" class="g-btn" id="localBtn">Local</button>
-    <button type="button" class="g-btn ghost" id="onlineBtn" style="margin-left:8px">Online</button>
+    <button type="button" class="g-btn" id="modeHostBtn">Host</button>
     <button type="button" class="g-btn ghost" id="joinBtn" style="margin-left:8px">Join</button>
   </p>
-  <p class="rost-note"><b>Local</b> is one screen passed around — people and computers at the
-     same table. <b>Online</b> puts the table on the server and gives you a code to hand out.
-     <b>Join</b> is for when somebody has given you one.</p>
+  <p class="rost-note"><b>Host</b> sets up the table — then play it here on this screen, or put
+     it on the server and hand out a code. <b>Join</b> is for when somebody has given you one.</p>
 </div></div>
 <div class="g-over g-full hidden" id="setupPick"><div class="box">
-  <h2 id="setupTitle">Local game</h2>
+  <h2 id="setupTitle">Host a game</h2>
   <div class="rost-count" id="rostCount">
     <button type="button" class="g-btn" data-count="2">2 Players</button>
     <button type="button" class="g-btn ghost" data-count="3">3 Players</button>
@@ -656,15 +652,16 @@
   <p class="rost-note">Seats sharing a team win and lose together. Give everyone their own
      team for a free-for-all — the game ends when only one team still has a Core.</p>
   <p style="margin:16px 0 0">
-    <button type="button" class="g-btn" id="startBtn">Start</button>
-    <button type="button" class="g-btn hidden" id="hostBtn">Host online…</button>
+    <button type="button" class="g-btn" id="hostOnlineBtn">Host Online</button>
+    <button type="button" class="g-btn ghost" id="hostLocalBtn" style="margin-left:8px">Host Local</button>
     <button type="button" class="g-btn ghost" id="setupBack" style="margin-left:8px">Back</button>
   </p>
   <p class="rost-note hidden" id="netErr" style="color:var(--red)"></p>
-  <p class="rost-note hidden" id="hostNote">Hosting puts this table on the server and gives you
-     a code. Everyone else opens the same address, enters the code and takes a seat. Seats set
-     to Computer are played by the computer; a seat set to Local player is held for a person,
-     and if it empties the game waits until somebody takes it.</p>
+  <p class="rost-note"><b>Host Local</b> plays here on this screen, handed around the table —
+     people and computers. <b>Host Online</b> puts the table on the server and gives you a code:
+     everyone else opens the same address, enters the code and takes a seat. A seat set to
+     Computer is played by the computer; a seat set to Local player is held for a person, and
+     if it empties the game waits until somebody takes it.</p>
 </div></div>
 <div class="g-over g-full hidden" id="roomPick"><div class="box">
   <h2>Join a game</h2>
@@ -752,11 +749,10 @@
      remembered too, so sending the browser off to the builder and back does not lose a
      four-player setup. */
   /* Going to the sheet builder leaves this page entirely and comes back by reloading it, so
-     anything the screen knew is gone unless it was written down. Which kind of game was being
-     set up is one of those things: without it, editing a ship while hosting drops you back at
-     the very first menu, having forgotten you were arranging an online table. */
+     anything the screen knew is gone unless it was written down. That the table was being
+     arranged is one of those things: without it, editing a ship while hosting drops you back at
+     the very first menu, having forgotten you were setting a table up. */
   var SETUP_RETURN_KEY = 'frigateSetupReturn';
-  var setupMode = 'local';
   var GAME_SEATS_KEY = 'frigateGameSeats';
   var GAME_ROSTER_KEY = 'frigateGameRoster';
   var SEAT_REQUEST_KEY = 'frigateBuilderRequest';
@@ -783,10 +779,10 @@
      be, and it outranks a room this browser happens to remember. */
   var CAME_BACK = readStore(SETUP_RETURN_KEY, null);
   dropStore(SETUP_RETURN_KEY);
-  /* 'local' or 'online' means a table being set up; an object naming a room means a seat was
+  /* 'host' means a table being set up; an object naming a room means a seat was
      being edited from that room's lobby, and the way back is into the lobby itself. */
   if (CAME_BACK && typeof CAME_BACK === 'object' && CAME_BACK.lobby) { /* keep as it is */ }
-  else if (CAME_BACK !== 'online' && CAME_BACK !== 'local') CAME_BACK = null;
+  else if (CAME_BACK !== 'host') CAME_BACK = null;
 
   var seatSheets = readStore(GAME_SEATS_KEY, []);
   if (!Array.isArray(seatSheets)) seatSheets = [];
@@ -854,18 +850,17 @@
 
   /* Hand the seat's build over to the builder and go there. The choices travel, not the
      sheet: they are the builder's own state, so the run picks up exactly where it stopped
-     and "Create new character" still scraps it cleanly. */
+     and "Create New" still scraps it cleanly. */
   function editSeat(i) {
     writeStore(GAME_ROSTER_KEY, SEATS);
-    writeStore(SETUP_RETURN_KEY, setupMode);   /* so the way back is the way we came */
+    writeStore(SETUP_RETURN_KEY, 'host');   /* so the way back is the way we came */
     writeStore(SEAT_REQUEST_KEY, {
       seat: i, label: 'Player ' + (i + 1),
       choices: (seatSheets[i] && seatSheets[i].choices) || null,
       /* A seat that has never been built still opens on something: the stock frigate it
          would otherwise fly, so the builder has a sheet to modify rather than a blank run. */
       sheet: sheetOf(i) || stockSheet(),
-      /* a seat nobody has built opens on the deck: the default ship is already a whole sheet,
-         and the deck is the part anybody actually wants to change about it */
+      /* the builder opens a seat's build on its Build a Character screen, whatever this says */
       stock: !sheetOf(i),
       ret: window.location.pathname + window.location.search
     });
@@ -878,10 +873,9 @@
      core picks it can show as already answered, and the whole deck. The builder works out for
      itself which of those cards its picks granted and which were drawn on top. */
   function stockSheet() {
-    /* isStock marks a ship nobody has built yet. It rides along so that opening one for
-       editing can go straight to the deck — every earlier step of the default is already
-       answered, and resuming "at the first unfinished step" would sail past all of them to
-       the export screen. A sheet that comes back from the builder carries no such mark. */
+/* isStock marks a ship nobody has built yet. It rides along so that a returning sheet can be
+          told apart from a fresh default; the builder itself decides where it opens. A sheet
+          that comes back from the builder carries no such mark. */
     return { shipName: '', level: STOCK_LEVEL, hulls: STOCK_HULLS, coreOptions: STOCK_CORE,
              tech: starterDeck(), mods: [], isStock: true };
   }
@@ -2873,26 +2867,25 @@
           '<option value="0"' + (seat.ai ? '' : ' selected') + '>Local player</option>' +
           '<option value="1"' + (seat.ai ? ' selected' : '') + '>Computer</option>' +
         '</select>' +
-        /* Online, a ship is chosen in the lobby by whoever is going to fly it, so the table
-           screen does not offer to build one here — there is nobody sitting in these seats
-           yet. Locally the seats are all at this screen, so the buttons stay. */
-        (setupMode === 'online' ? '' :
-          '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
-            (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
-            EDIT_ICON + '</button>' +
-          '<button type="button" class="rost-edit rost-trash" data-reset="' + i + '"' +
-            (sh ? '' : ' disabled') + ' title="' +
-            (sh ? 'Discard this build and go back to the default ship'
-                : 'This player is already flying the default ship') + '">' +
-            TRASH_ICON + '</button>') +
+        /* Whether the game then plays here or on the server, this is the table it starts as,
+           so the ships are built at this screen. Online, whoever sits in a seat can still
+           edit that ship for themselves in the lobby — before the deal. */
+        '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
+          (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
+          EDIT_ICON + '</button>' +
+        '<button type="button" class="rost-edit rost-trash" data-reset="' + i + '"' +
+          (sh ? '' : ' disabled') + ' title="' +
+          (sh ? 'Discard this build and go back to the default ship'
+              : 'This player is already flying the default ship') + '">' +
+          TRASH_ICON + '</button>' +
         '</div>';
     }).join('');
     /* one team means nobody to fight, so there is no game to start */
     var used = {};
     SEATS.forEach(function (x) { used[x.team] = true; });
     var ok = Object.keys(used).length >= 2;
-    document.getElementById('startBtn').disabled = !ok;
-    document.getElementById('hostBtn').disabled = !ok;    /* the rule is the rules', not the screen's */
+    document.getElementById('hostOnlineBtn').disabled = !ok;
+    document.getElementById('hostLocalBtn').disabled = !ok;    /* the rule is the rules', not the screen's */
     document.getElementById('rostWarn').classList.toggle('hidden', ok);
   }
   var PICKERS = ['modePick', 'setupPick', 'roomPick', 'lobbyPick'];
@@ -2930,23 +2923,17 @@
   }
 
   /* Setting the table is the same job whether the game is going to be played on this screen or
-     on the server — the same seats, teams and ships — so it is one screen, and only the button
-     at the bottom differs. Which one you came through is the only thing it remembers. */
-  function openSetup(mode) {
-    var online = mode === 'online';
-    setupMode = online ? 'online' : 'local';
-    document.getElementById('setupTitle').textContent = online ? 'Online game' : 'Local game';
-    document.getElementById('startBtn').classList.toggle('hidden', online);
-    document.getElementById('hostBtn').classList.toggle('hidden', !online);
-    document.getElementById('hostNote').classList.toggle('hidden', !online);
+     on the server — the same seats, teams and ships — so it is one screen, and the two buttons
+     at the bottom decide where it is laid: here, or on the server. */
+  function openSetup() {
+    document.getElementById('setupTitle').textContent = 'Host a game';
     document.getElementById('netErr').classList.add('hidden');
     renderRoster();
     showPick('setupPick');
   }
 
   document.getElementById('newBtn').addEventListener('click', exitToMenu);
-  document.getElementById('localBtn').addEventListener('click', function () { openSetup('local'); });
-  document.getElementById('onlineBtn').addEventListener('click', function () { openSetup('online'); });
+  document.getElementById('modeHostBtn').addEventListener('click', function () { openSetup(); });
   document.getElementById('setupBack').addEventListener('click', askMode);
   rostCount.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-count]');
@@ -2964,7 +2951,7 @@
     if (t.dataset.ai !== undefined) SEATS[+t.dataset.ai].ai = t.value === '1';
     renderRoster();
   });
-  document.getElementById('startBtn').addEventListener('click', function () { start(); });
+  document.getElementById('hostLocalBtn').addEventListener('click', function () { start(); });
 
   /* ---------- online play ----------
      The host puts this table on the server and hands out the code; everyone else opens the
@@ -3197,7 +3184,7 @@
           label: info.name || ('Seat ' + (idx + 1)),
           choices: null,
           sheet: sheet || stockSheet(),
-          /* straight to the deck for a ship nobody has built yet, wherever it came from */
+          /* the builder opens a seat's build on its Build a Character screen, whatever this says */
           stock: !sheet || !!sheet.isStock,
           ret: window.location.pathname + window.location.search
         });
@@ -3214,7 +3201,7 @@
       Net.claim(+b.getAttribute('data-take')).catch(function (err) { say('lobbyErr', err.message); });
     });
 
-    document.getElementById('hostBtn').addEventListener('click', function () {
+    document.getElementById('hostOnlineBtn').addEventListener('click', function () {
       /* The roster on screen becomes the table: its decks, teams and computer seats. It has
          to be committed first, the same way starting a local game commits it, because a seat's
          name is built from what it is — and until then that still reads from the last game. */
@@ -3702,8 +3689,8 @@
   /* Coming back from the sheet builder is a reload, not a fresh arrival: land where the trip
      started rather than at the first menu, which would throw away a half-arranged table.
      CAME_BACK was read at the top, before the rejoin had a chance to act on it. */
-  if (CAME_BACK) openSetup(CAME_BACK);
-  else if (ADOPTED_SHEET) openSetup('local');
+  if (CAME_BACK) openSetup();
+  else if (ADOPTED_SHEET) openSetup();
   else askMode();
 })();
 </script>
