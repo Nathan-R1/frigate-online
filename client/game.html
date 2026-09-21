@@ -3324,6 +3324,16 @@
       });
       say('lobbyErr', '');
       netTrouble('');
+      /* The address is normally known before anybody presses this, so the button does not
+         change. It changes on the one press that still has to go looking — a page opened
+         straight onto this screen, or a server that was not running when we looked — because
+         a button that has plainly been pressed and is plainly doing something is the whole of
+         what is needed for well under a second. renderRoster puts it back rather than a bare
+         re-enable: whether this button may be pressed at all is the roster's business, not
+         this handler's, and it must not be handed back on in a state the roster would refuse. */
+      var btn = this, was = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Hosting…';
+      function back() { btn.textContent = was; renderRoster(); }
       /* The table goes up, and then the host picks a chair at it like anybody else.
          Sitting them down in the first human seat automatically was one fewer click and the
          wrong seat surprisingly often — you may have built the roster with yourself third, or
@@ -3331,8 +3341,8 @@
          simply arrives as a watcher and takes one. Watching is why the stream is opened here:
          without it the lobby would not show anybody else arriving. */
       Net.create(seats)
-        .then(function () { Net.connect(); })
-        .catch(function (err) { netTrouble(err.message); });
+        .then(function () { back(); Net.connect(); },
+              function (err) { back(); netTrouble(err.message); });
     });
 
     document.getElementById('joinBtn').addEventListener('click', function () {
@@ -3482,14 +3492,28 @@
           if (loud) setBadge(err.message, true);
         });
     }
+    /* Where the server is, asked for before anybody needs the answer.
+       Nothing on this page knows the server's address until something asks for it, and
+       whatever asks first pays for the asking — which, for somebody setting up a table, is
+       the press of Host Online. That press then wears the whole cost of looking, including
+       the wait on any address that has stopped answering. So it is asked here instead, while
+       the page is being looked at rather than clicked on, and hosting costs what every press
+       after it costs. It is a look, not a commitment: the answer is Net's to keep, and no
+       answer is not news — the server may simply not be running, which is only worth saying
+       to somebody who has actually asked for a game. */
+    function warmServer() { Net.find().catch(function () {}); }
+
     var inUrl = (location.search.match(/[?&]room=([A-Za-z0-9]{6})/) || [])[1];
     if (CAME_BACK && CAME_BACK.lobby) {
       /* back from editing a seat: into that lobby, and the ship goes up with us */
       rejoin(CAME_BACK.lobby, true).then(function () { sendEditedSeat(CAME_BACK.seat); });
     }
-    else if (CAME_BACK) { /* you asked to be at the table, not back in your last room */ }
+    /* you asked to be at the table, not back in your last room — and the table is one click
+       from hosting, so that is the arrival most worth having the address ready for */
+    else if (CAME_BACK) warmServer();
     else if (inUrl) rejoin(inUrl.toUpperCase(), true);
     else if (Net.lastRoom() && Net.hadSeatIn(Net.lastRoom())) rejoin(Net.lastRoom(), false);
+    else warmServer();
   })();
 
   /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
