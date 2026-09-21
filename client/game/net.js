@@ -24,7 +24,13 @@ var Net = (function () {
     /* Which room the board currently on screen actually came from. Not a boolean: switching
        rooms without disconnecting leaves `online` true from the previous one, and "we are
        online" is then mistaken for "we are showing this game". */
-    stateRoom: null
+    stateRoom: null,
+    /* Sitting in no seat is two different situations and they do not read alike: you have not
+       taken one yet, or you had one and it was taken off you. The page says a different thing
+       about each, so the difference has to survive here rather than be announced once as a
+       message and then be gone. Giving a seat up yourself is the first situation, not the
+       second — you are not looking for an explanation of something you just did. */
+    removed: false
   };
   var lobbyFns = [], errFns = [];
   var LOCAL = {};                     /* the engine calls we took over, kept for offline play */
@@ -275,7 +281,7 @@ var Net = (function () {
 
   function create(seats) {
     return api('/api/create', { seats: seats }).then(function (j) {
-      ST.room = j.room; ST.lobby = j.lobby;
+      ST.room = j.room; ST.lobby = j.lobby; ST.removed = false;
       rememberRoom(j.room);
       fireLobby();
       return j.room;
@@ -302,7 +308,7 @@ var Net = (function () {
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'no such room');
         /* a different room means the board on screen is somebody else's game, whatever it is */
-        if (j.lobby.room !== ST.room) ST.stateRoom = null;
+        if (j.lobby.room !== ST.room) { ST.stateRoom = null; ST.removed = false; }
         ST.room = j.lobby.room; ST.lobby = j.lobby;
         rememberRoom(ST.room);
         fireLobby();
@@ -317,7 +323,7 @@ var Net = (function () {
     var body = { room: ST.room, seat: seat };
     if (had && had.token) body.token = had.token;
     return api('/api/claim', body).then(function (j) {
-      ST.token = j.token; ST.seat = j.seat; ST.lobby = j.lobby;
+      ST.token = j.token; ST.seat = j.seat; ST.lobby = j.lobby; ST.removed = false;
       remember(ST.room, j.token, j.seat);
       connect();
       fireLobby();
@@ -332,6 +338,7 @@ var Net = (function () {
     return api('/api/claim', { room: room, token: had.token, seat: had.seat })
       .then(function (j) {
         ST.room = room; ST.token = j.token; ST.seat = j.seat; ST.lobby = j.lobby;
+        ST.removed = false;
         remember(room, j.token, j.seat);
         connect();
         fireLobby();
@@ -343,7 +350,7 @@ var Net = (function () {
   function release() {
     if (!ST.token) return Promise.resolve();
     var room = ST.room, token = ST.token;
-    ST.token = null; ST.seat = null;
+    ST.token = null; ST.seat = null; ST.removed = false;
     forget(room);
     forgetRoom();
     return api('/api/release', { room: room, token: token }).then(function (j) {
@@ -446,8 +453,8 @@ var Net = (function () {
         /* We believed we held a seat and the server says otherwise — it was given up here or
            freed by the leader. Become a watcher rather than pretending. */
         ST.token = null; ST.seat = null;
+        ST.removed = true;
         forget(ST.room);
-        fireError('your seat was freed — you are watching now');
       }
       if (msg.state) {
         if (!ST.online) install();
@@ -515,6 +522,8 @@ var Net = (function () {
     lobby: function () { return ST.lobby; },
     /* true only when the board on screen is this room's game, as the server sent it */
     hasState: function () { return ST.stateRoom !== null && ST.stateRoom === ST.room; },
+    /* true only where somebody else emptied the chair we were sitting in */
+    removed: function () { return ST.removed; },
     create: create, look: look, claim: claim, resume: resume, release: release, leave: leave,
     kick: kick,
     openGames: openGames, setSeatKind: setSeatKind, setPace: setPace,
