@@ -1722,8 +1722,19 @@
     return why ? 'It ' + why + '.' : 'Not available right now.';
   }
 
-  function renderHand(G) {
-    var s = G.players[meIdx()], html = '';
+  /* ---------- the hand bar ----------
+     The bar is repainted on every state change, and on High graphics a card's silhouette
+     carries infinite CSS animations behind a drop-shadow — an offscreen compositor surface
+     apiece. Rebuilding the whole bar with innerHTML threw those surfaces away and built them
+     again several times a second, and their number only climbs as cards reach the table, so
+     the compositor's pools grew all game where a still board's did not. The bar now diffs the
+     way the board does: a card's node is built once and kept, and a repaint touches only what
+     actually changed. See paintPieces, which has always worked this way. */
+
+  /* everything that belongs in the bar this frame, in order: the face-down backs, your hand,
+     then everything you have in play */
+  function handRecs(G) {
+    var s = G.players[meIdx()], out = [];
     var mine = isMyTurn(G) && !G.pending && !G.over;
     var canPlay = mine && G.phase === 'play';
     var myTurn = mine && G.phase === 'action';
@@ -1734,12 +1745,12 @@
       var c = s.cards[id];
       if (!c) { hidden++; return; }
       var t = Engine.findTech(c.name) || {};
-      html += '<div class="hcard' + pickClass(G, id) + '" data-card="' + id + '">' +
-        '<div class="hn" data-tech="' + esc(c.name) +
-        '" data-card="' + id + '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
-        '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
-        '<div class="hb"><button data-play="' + id + '"' +
-        (canPlay && s.playsLeft > 0 ? '' : ' disabled') + '>Play</button></div></div>';
+      out.push({ key: id, id: id, kind: 'hand', cls: pickClass(G, id),
+                 nameHtml: esc(c.name), nameAttrs: { 'data-tech': c.name, 'data-card': id },
+                 nameTitle: 'Show this card\'s details',
+                 metaHtml: '', textHtml: cardText(t),   /* already escaped, and carries info pips */
+                 btn: { attr: 'data-play', label: 'Play',
+                        disabled: !(canPlay && s.playsLeft > 0) } });
     });
     s.played.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
@@ -1748,36 +1759,36 @@
          or a played Heat Sinks simply vanishes. It has no button and is never "unusable". */
       var passiveOnly = !e.activate;
       var cReady = !c.exhausted && (passiveOnly || Engine.affordable(s, c, 'tech'));
-      html += '<div class="hcard inplay' + (cReady ? '' : ' spent') +
-        (livePassive(s, c, 'tech') ? ' watching' : '') + pickClass(G, id) +
-        '" data-card="' + id + '">' +
-        '<div class="hn" data-tech="' + esc(c.name) + '" data-card="' + id +
-        '" title="Show this card\'s details">' + esc(c.name) + '</div>' +
-        /* only charges and heat are worth a line; an empty one just leaves a gap */
-        ((c.charges || c.heat) ? '<div class="hmeta">' + tokenPips(c) + '</div>' : '') +
-        '<div class="ht">' + cardText(t) + '</div>' +   /* already escaped, and carries info pips */
-        (passiveOnly
-          ? '<div class="hb"><span class="passive-tag">In play</span></div>'
-          : '<div class="hb"><button data-act="' + id + '"' +
-            (myTurn && cReady ? '' : ' disabled title="' + esc(whyNoActivate(G, s, c, 'tech')) + '"') +
-            '>Activate</button></div>') +
-        '</div>';
+      var off = !(myTurn && cReady);
+      out.push({ key: id, id: id, kind: 'tech',
+                 cls: ' inplay' + (cReady ? '' : ' spent') +
+                      (livePassive(s, c, 'tech') ? ' watching' : '') + pickClass(G, id),
+                 nameHtml: esc(c.name), nameAttrs: { 'data-tech': c.name, 'data-card': id },
+                 nameTitle: 'Show this card\'s details',
+                 /* only charges and heat are worth a line; an empty one just leaves a gap */
+                 metaHtml: (c.charges || c.heat) ? tokenPips(c) : '',
+                 textHtml: cardText(t),                 /* already escaped, and carries info pips */
+                 btn: passiveOnly ? null
+                    : { attr: 'data-act', label: 'Activate', disabled: off,
+                        title: off ? whyNoActivate(G, s, c, 'tech') : '' },
+                 tag: passiveOnly ? 'In play' : null });
     });
     Object.keys(s.deployables).forEach(function (id) {
       var d = s.deployables[id], e = Engine.fx(d.name, 'mod');
       if (!e.activate && !e.passive) return;      /* nothing to show and nothing to do */
       var dReady = !d.exhausted && (!e.activate || Engine.affordable(s, d, 'dep'));
-      html += '<div class="hcard inplay' + (dReady ? '' : ' spent') +
-        (livePassive(s, d, 'dep') ? ' watching' : '') + pickClass(G, id) +
-        '" data-card="' + id + '">' +
-        '<div class="hn" data-mod="' + esc(d.name) + '" title="Show this deployable\'s details">' +
-        pieceIcon(s.idx, d.name, false) + esc(d.name) + '</div>' +
-        '<div class="hmeta">deployable ' + hullPip(d) + tokenPips(d) + '</div>' +
-        '<div class="ht">' + esc((Engine.findMod(d.name) || {}).onactivate || '') + '</div>' +
-        (e.activate
-          ? '<div class="hb"><button data-dact="' + id + '"' +
-            (myTurn && dReady ? '' : ' disabled') + '>Activate</button></div>'
-          : '<div class="hb"><span class="passive-tag">In play</span></div>') + '</div>';
+      out.push({ key: id, id: id, kind: 'dep',
+                 cls: ' inplay' + (dReady ? '' : ' spent') +
+                      (livePassive(s, d, 'dep') ? ' watching' : '') + pickClass(G, id),
+                 nameHtml: pieceIcon(s.idx, d.name, false) + esc(d.name),
+                 nameAttrs: { 'data-mod': d.name },
+                 nameTitle: 'Show this deployable\'s details',
+                 iconKey: iconKey(s.idx, d.name, false),
+                 metaHtml: 'deployable ' + hullPip(d) + tokenPips(d),
+                 textHtml: esc((Engine.findMod(d.name) || {}).onactivate || ''),
+                 btn: e.activate ? { attr: 'data-dact', label: 'Activate',
+                                     disabled: !(myTurn && dReady) } : null,
+                 tag: e.activate ? null : 'In play' });
     });
     Object.keys(s.modules).forEach(function (id) {
       var m = s.modules[id], e = Engine.fx(m.name, 'mod');
@@ -1789,35 +1800,136 @@
       if (Engine.isCoreLike && Engine.isCoreLike(s, m)) return;
       if (!e.activate && !e.passive) return;
       var mReady = !m.exhausted && (!e.activate || Engine.affordable(s, m, 'mod'));
-      html += '<div class="hcard inplay' + (mReady ? '' : ' spent') +
-        (livePassive(s, m, 'mod') ? ' watching' : '') + pickClass(G, id) +
-        '" data-card="' + id + '">' +
-        '<div class="hn" data-mod="' + esc(m.name) + '" title="Show this module\'s details">' +
-        pieceIcon(s.idx, m.name, id === s.coreId) + esc(m.name) + '</div>' +
-        '<div class="hmeta">' + hullPip(m) + tokenPips(m) + '</div>' +
-        '<div class="ht">' + esc((Engine.findMod(m.name) || {}).onactivate || '') + '</div>' +
-        (e.activate
-          ? '<div class="hb"><button data-mact="' + id + '"' +
-            (myTurn && mReady ? '' : ' disabled title="' + esc(whyNoActivate(G, s, m, 'mod')) + '"') +
-            '>Activate</button></div>'
-          : '<div class="hb"><span class="passive-tag">In play</span></div>') + '</div>';
+      var off = !(myTurn && mReady);
+      out.push({ key: id, id: id, kind: 'mod',
+                 cls: ' inplay' + (mReady ? '' : ' spent') +
+                      (livePassive(s, m, 'mod') ? ' watching' : '') + pickClass(G, id),
+                 nameHtml: pieceIcon(s.idx, m.name, id === s.coreId) + esc(m.name),
+                 nameAttrs: { 'data-mod': m.name },
+                 nameTitle: 'Show this module\'s details',
+                 iconKey: iconKey(s.idx, m.name, id === s.coreId),
+                 metaHtml: hullPip(m) + tokenPips(m),
+                 textHtml: esc((Engine.findMod(m.name) || {}).onactivate || ''),
+                 btn: e.activate ? { attr: 'data-mact', label: 'Activate', disabled: off,
+                                     title: off ? whyNoActivate(G, s, m, 'mod') : '' } : null,
+                 tag: e.activate ? null : 'In play' });
     });
     if (hidden) {
-      html = '<div class="hcard facedown" title="' + hidden +
-             ' card' + (hidden === 1 ? '' : 's') + ' you cannot see">' +
-             '<div class="hn" style="color:var(--ink-dim)">Hidden</div>' +
-             '<div class="ht" style="text-align:center;font-size:20px;font-family:var(--mono)">' +
-             hidden + '</div>' +
-             '<div class="hb"><span class="passive-tag">in hand</span></div></div>' + html;
+      out.unshift({ key: '__hidden', id: '', kind: 'hidden', cls: ' facedown',
+                    cardTitle: hidden + ' card' + (hidden === 1 ? '' : 's') + ' you cannot see',
+                    nameHtml: 'Hidden', nameDim: true,
+                    metaHtml: '', textHtml: String(hidden), textBig: true,
+                    btn: null, tag: 'in hand' });
     }
-    handEl.innerHTML = html || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">No cards.</div>';
+    return out;
+  }
+
+  /* Every card wears the same skeleton whatever kind it is, so a repaint can find the parts
+     without knowing which one it has. The name and the card text never change under a card —
+     a card's name is its identity — so they are written once, here. */
+  function buildCard(rec) {
+    var d = document.createElement('div');
+    d.setAttribute('data-key', rec.key);
+    d.setAttribute('data-kind', rec.kind);
+    d.setAttribute('data-icon', rec.iconKey || '');
+    if (rec.id) d.setAttribute('data-card', rec.id);
+    var hn = document.createElement('div');
+    hn.className = 'hn';
+    hn.innerHTML = rec.nameHtml;
+    for (var a in (rec.nameAttrs || {})) hn.setAttribute(a, rec.nameAttrs[a]);
+    if (rec.nameTitle) hn.title = rec.nameTitle;
+    if (rec.nameDim) hn.style.color = 'var(--ink-dim)';
+    d.appendChild(hn);
+    var hm = document.createElement('div');
+    hm.className = 'hmeta';
+    d.appendChild(hm);
+    var ht = document.createElement('div');
+    ht.className = 'ht';
+    if (rec.textBig) ht.setAttribute('style', 'text-align:center;font-size:20px;font-family:var(--mono)');
+    d.appendChild(ht);
+    var hb = document.createElement('div');
+    hb.className = 'hb';
+    var b = document.createElement('button');
+    if (rec.btn) { b.setAttribute(rec.btn.attr, rec.id); b.textContent = rec.btn.label; }
+    hb.appendChild(b);
+    var tag = document.createElement('span');
+    tag.className = 'passive-tag';
+    hb.appendChild(tag);
+    d.appendChild(hb);
+    return d;
+  }
+
+  function paintCard(d, rec) {
+    /* the debug hover lives on the node rather than in the state, so it has to survive a
+       repaint the node itself does not */
+    d.className = 'hcard' + rec.cls +
+                  (debugOn && rec.id && rec.id === debugCard ? ' dbg-hover' : '');
+    if (rec.cardTitle) d.title = rec.cardTitle;
+    var hm = d.querySelector('.hmeta');
+    if (hm._html !== rec.metaHtml) { hm.innerHTML = rec.metaHtml; hm._html = rec.metaHtml; }
+    hm.style.display = rec.metaHtml ? '' : 'none';
+    var ht = d.querySelector('.ht');
+    if (ht._html !== rec.textHtml) { ht.innerHTML = rec.textHtml; ht._html = rec.textHtml; }
+    var b = d.querySelector('.hb button');
+    b.style.display = rec.btn ? '' : 'none';
+    if (rec.btn) { b.disabled = rec.btn.disabled; b.title = rec.btn.title || ''; }
+    var tag = d.querySelector('.passive-tag');
+    tag.style.display = rec.tag ? '' : 'none';
+    if (rec.tag) tag.textContent = rec.tag;
+  }
+
+  function renderHand(G) {
+    var recs = handRecs(G);
+    /* drop cards that have left the bar, then place the rest in order, reusing what is there.
+       A card keeps its id when it is played, so the kind is part of what makes a node the
+       right one — the Play button would otherwise stay on a card that is now in play. The
+       icon key covers a fresh deal, a change of seat colour and the graphics tier, all of
+       which change what the silhouette should be. */
+    var want = {};
+    recs.forEach(function (r) { want[r.key] = r; });
+    if (!recs.length) want['__empty'] = true;
+    var kids = handEl.children;
+    for (var k = kids.length - 1; k >= 0; k--)
+      if (!want[kids[k].getAttribute('data-key')]) handEl.removeChild(kids[k]);
+    if (!recs.length) {
+      if (!handEl.children.length) {
+        var e = document.createElement('div');
+        e.setAttribute('data-key', '__empty');
+        e.setAttribute('style', 'color:var(--ink-dim);font-family:var(--mono);font-size:11px');
+        e.textContent = 'No cards.';
+        handEl.appendChild(e);
+      }
+      return;
+    }
+    var byKey = {};
+    for (var i = 0; i < handEl.children.length; i++)
+      byKey[handEl.children[i].getAttribute('data-key')] = handEl.children[i];
+    recs.forEach(function (rec, idx) {
+      var node = byKey[rec.key];
+      if (node && (node.getAttribute('data-kind') !== rec.kind ||
+                   node.getAttribute('data-icon') !== (rec.iconKey || ''))) {
+        handEl.removeChild(node);
+        node = null;
+      }
+      node = node || buildCard(rec);
+      var ref = handEl.children[idx];
+      if (ref !== node) handEl.insertBefore(node, ref || null);
+      paintCard(node, rec);
+    });
   }
   /* the piece's own silhouette, in your colour, so a card is easy to match to the board */
   var ICON_CACHE = {};
+  /* Everything that decides what the silhouette comes out as: the deal, the seat's colour,
+     and the graphics tier, which is baked into the markup because the rotations are inline
+     styles rather than a class. It keys the cache, and it keys the hand card that holds the
+     icon — a card whose key has moved needs a new icon, not the old one repainted. */
+  function iconKey(owner, name, isCore) {
+    return GamePieces.shapeOf(owner, name, isCore) + '|' + SEAT_HEX[meIdx() % 4] +
+           '|' + (lowGfx ? 'low' : 'high');
+  }
   function pieceIcon(owner, name, isCore) {
-    var shape = GamePieces.shapeOf(owner, name, isCore), col = SEAT_HEX[meIdx() % 4];
-    var k = shape + col;
-    if (!ICON_CACHE[k]) ICON_CACHE[k] = GamePieces.markup(shape, col);
+    var col = SEAT_HEX[meIdx() % 4], k = iconKey(owner, name, isCore);
+    if (!ICON_CACHE[k]) ICON_CACHE[k] = GamePieces.markup(k.slice(0, k.indexOf('|')), col);
     return '<span class="ci" style="--pc:' + col + '">' + ICON_CACHE[k] + '</span>';
   }
 
