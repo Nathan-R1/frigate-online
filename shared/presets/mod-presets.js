@@ -1,6 +1,6 @@
 var MOD_PRESETS = [
     {name:'Quantum Disrupter', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 3 Weapon Modules, this one included, to Target an Object: Range: 12, Check:Sensors, Damage: 6 ☣ ; Create an anomaly on a random space 0-11 away from this Module.'},
-    {name:'Citadel', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'defense', onbuild:'', passive:'Shares Hull HP with your Core, and counts as a Core Module for the purposes of fulfilling requirements.', onactivate:''},
+    {name:'Citadel', traits:'', req:'Adjacent to Core', hull:'', type:'module', tt:'defense', onbuild:'', passive:'Shares Hull HP with your Core, and counts as a Core Module for the purposes of fulfilling requirements.', onactivate:''},
     {name:'Core', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'science', onbuild:'', passive:'', onactivate:''},
     {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable. This is a Stealth Effect.', onactivate:''},
     {name:'Directed Laser Beam', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to target an Object:\nRange: any, Attacks: 1, Dmg: 2 ⚡ (4 if range >= 10)'},
