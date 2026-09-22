@@ -1604,6 +1604,12 @@
   }
 
   /* everything on the board this frame, in draw order: rocks first, then hulls on top */
+  /* What a piece looks like. Normally the shape dealt to its name, but a decoy is asked when
+     it is built and keeps its own answer, so two decoys need not look alike. */
+  function shapeOfPiece(s, id, o, isCore) {
+    return o.shape || GamePieces.shapeOf(s.idx, o.name, isCore);
+  }
+
   function boardObjects(G) {
     var out = [];
     Object.keys(G.asteroids || {}).forEach(function (id) {
@@ -1627,13 +1633,13 @@
         var m = s.modules[id];
         if (hidden(m)) return;
         out.push({ id: id, o: m, kind: 'mod', side: s, si: si,
-                   shape: GamePieces.shapeOf(si, m.name, id === s.coreId), color: SEAT_HEX[si % 4] });
+                   shape: shapeOfPiece(s, id, m, id === s.coreId), color: SEAT_HEX[si % 4] });
       });
       Object.keys(s.deployables).forEach(function (id) {
         var d = s.deployables[id];
         if (hidden(d)) return;
         out.push({ id: id, o: d, kind: 'dep', side: s, si: si,
-                   shape: GamePieces.shapeOf(si, d.name, false), color: SEAT_HEX[si % 4] });
+                   shape: shapeOfPiece(s, id, d, false), color: SEAT_HEX[si % 4] });
       });
     });
     return out;
@@ -1738,7 +1744,7 @@
     [['modules', 'mod'], ['deployables', 'dep']].forEach(function (pair) {
       var byShape = {};
       Object.keys(s[pair[0]]).forEach(function (id) {
-        var o = s[pair[0]][id], sh = GamePieces.shapeOf(s.idx, o.name, id === s.coreId);
+        var o = s[pair[0]][id], sh = shapeOfPiece(s, id, o, id === s.coreId);
         (byShape[sh] = byShape[sh] || {})[o.name] = true;
       });
       Object.keys(byShape).forEach(function (sh) {
