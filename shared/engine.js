@@ -323,14 +323,16 @@ var Engine = (function () {
     if (viewer === null || viewer === undefined) return true;
     var owner = G && G.players[o.owner], seat = G && G.players[viewer];
     if (!owner || !seat) return true;
-    return owner.team !== seat.team;
+    if (owner.team === seat.team) return false;
+    /* scanners identified it: that side knows where it is, the rest of the table does not */
+    return !(o.spotted && o.spotted.indexOf(seat.team) >= 0);
   }
   /* Everything on the board comes out of stealth at once. The pregame calls this as it ends;
      it is also the thing a reveal effect should reach for rather than walking the board
      itself. */
   function reveal(s) {
     var sides = s ? [s] : G.players;
-    function lift(o) { o.stealth = !!o.cloak; }   /* a cloak is not the pregame's doing */
+    function lift(o) { o.stealth = !!o.cloak; o.spotted = undefined; }  /* a cloak is not the pregame's doing */
     sides.forEach(function (p) {
       Object.keys(p.modules).forEach(function (id) { lift(p.modules[id]); });
       Object.keys(p.deployables).forEach(function (id) { lift(p.deployables[id]); });
@@ -1201,6 +1203,31 @@ var Engine = (function () {
       onResolve: function (id) {
         pool.forEach(function (x) { if (x.m.id === id) give(x.m, x.p); });
       } });
+  };
+
+  /* SU Scanners: "identify the location of any Stealth Objects in sensor range". It does not
+     uncloak them for the table — it tells *you* where they are, so the find is recorded against
+     your team and only your side starts seeing them. Range is measured from your own hull, the
+     way every other sensor effect measures it. The log stays neutral: it reaches every seat,
+     and a count would tell the other side its cloak had been found. */
+  OPS.revealStealth = function (o, ctx) {
+    var s = ctx.side, reach = sensorsOf(s);
+    var mine = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    var found = 0;
+    G.players.forEach(function (p) {
+      if (p.team === s.team) return;
+      ['modules', 'deployables'].forEach(function (k) {
+        Object.keys(p[k]).forEach(function (id) {
+          var t = p[k][id];
+          if (!t.stealth) return;
+          if (!mine.some(function (m) { return dist(m, t) <= reach; })) return;
+          t.spotted = t.spotted || [];
+          if (t.spotted.indexOf(s.team) < 0) { t.spotted.push(s.team); found++; }
+        });
+      });
+    });
+    log(s.name + "'s scanners sweep for hidden objects.", s);
+    return found;
   };
 
   /* Cloak. The module is hidden from the other side for the rest of the game — `cloak` marks

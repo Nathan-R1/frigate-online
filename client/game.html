@@ -128,6 +128,12 @@
   .piece.marked { cursor:default; }
   /* ready to activate */
   .piece.ready .module-svg { filter:drop-shadow(0 0 5px var(--pc)) drop-shadow(0 0 13px var(--pc)); }
+  /* A hidden piece you can see: your own cloak, or an enemy's that your scanners picked up.
+     Drawn as a contact rather than a solid piece, so it never reads as something the whole
+     table can see. */
+  .piece.scanned { outline:1px dashed rgba(167,114,240,.75); outline-offset:2px;
+    border-radius:5px; }
+  .piece.scanned .module-svg { opacity:.72; }
 
   /* floating badges: charges top-right, Move remaining bottom-centre */
   .pc-badge { position:absolute; font-family:var(--mono); font-weight:700; font-size:9px;
@@ -410,6 +416,9 @@
      recognisably the same thing */
   .mp-meta span.t-power { color:var(--icon-power); border-color:rgba(167,114,240,.6);
     background:rgba(167,114,240,.12); }
+  /* dashed, like the outline a hidden piece wears on the board, so the two read as one idea */
+  .mp-meta span.t-stealth { color:var(--icon-power); border-style:dashed;
+    border-color:rgba(167,114,240,.7); background:rgba(167,114,240,.08); }
   .mp-meta .ticon { width:11px; height:11px; flex:none; display:block; }
   .mp-desc { color:var(--ink-mid); font-size:12.5px; line-height:1.55; white-space:pre-line; }
   /* debug: the keybind sheet and the card conjurer */
@@ -1687,6 +1696,9 @@
       var mine = rec.si === meIdx();
       var fx = Engine.fx(o.name, 'mod');
       if (o.exhausted) cls += ' exh';
+      /* it is on screen, so either it is yours or your scanners found it — either way it is
+         not a piece the other side can see */
+      if (o.stealth) cls += ' scanned';
       if (rec.kind === 'mod' && !Engine.meetsReq(rec.side, o)) cls += ' badreq';
       /* movement state only means anything while a move prompt is open */
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
@@ -2055,6 +2067,11 @@
     '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="currentColor" stroke-width="1.7" ' +
     'stroke-linejoin="round"/></svg>';
   var CHARGES_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="16" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M21 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 10.5v3M10 10.5v3M14 10.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var STEALTH_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M2.5 12S6 5.5 12 5.5c1.6 0 3 .45 4.2 1.1M21.5 12S18 18.5 12 18.5c-1.7 0-3.2-.5-4.4-1.2" ' +
+    'stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+    '<circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6"/>' +
+    '<path d="M4 20 20 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
   var SPEED_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><path d="M12 20V5M6 11l6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var DURATION_ICON = '<svg class="ticon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5.5l3.5 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var TYPE_ICONS = { offense: '⚔', defense: '🛡', movement: '➤', science: '⚛︎' };
@@ -2102,6 +2119,18 @@
            (power ? '<span class="tokpip pw" title="Power — +1 Hull, Move, Range and Damage">' +
                     POWER_ICON + power + '</span>' : '') +
            (o.heat ? '<span class="tokpip" title="Heat">🔥' + o.heat + '</span>' : '');
+  }
+
+  /* Whether a piece is hidden, and why. It is only ever asked about a piece already on your
+     screen, so for your own side it is "nobody else can see this" and for the other side it is
+     "your scanners found it" — the two reasons a hidden piece is ever drawn. */
+  function stealthChip(o, scanned) {
+    if (!o || !o.stealth) return null;
+    if (scanned) return { text: STEALTH_ICON + 'Detected', cls: 't-stealth',
+                          tip: 'Your scanners identified it. It is still hidden from everyone else.' };
+    return { text: STEALTH_ICON + (o.cloak ? 'Cloaked' : 'Hidden'), cls: 't-stealth',
+             tip: o.cloak ? 'Cloaked — hidden from the other side for the rest of the game'
+                          : 'Hidden until the pregame ends — the other side cannot see it' };
   }
 
   /* Power diverted to a piece, as a chip. The board already shows this to everyone on the
@@ -2234,6 +2263,8 @@
        here told you less than the board already had. Nothing else about it is given away. */
     if (rec.o.charges) meta.push({ text: CHARGES_ICON + rec.o.charges, cls: 't-charge',
                                    tip: 'Charges on it now — the board shows this much' });
+    var ust = stealthChip(rec.o, true);
+    if (ust) meta.push(ust);
     var upw = powerChip(rec.o);
     if (upw) meta.push(upw);
     meta.push(atChip(rec.o));
@@ -2269,6 +2300,8 @@
     if (num(m.duration) > 0) meta.push({ text: DURATION_ICON + esc(m.duration), cls: '', tip: 'Duration' });
     /* the live figure on the piece, as a tech card shows its own; the preset's number only
        when there is no piece to read */
+    var st = rec ? stealthChip(rec.o, false) : null;
+    if (st) meta.push(st);
     var pw = rec ? powerChip(rec.o) : null;
     if (rec && (rec.o.charges || rec.o.heat || pw)) {
       if (rec.o.charges) meta.push({ text: CHARGES_ICON + rec.o.charges, cls: 't-charge',
