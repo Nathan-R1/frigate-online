@@ -82,6 +82,63 @@ var Engine = (function () {
   function vacate(x, y) { delete G.cells[key(x, y)]; }
   function inBounds(x, y) { return x >= 0 && y >= 0 && x < RULES.boardSize && y < RULES.boardSize; }
 
+  /* ---- standing inside another piece ----
+     The grid holds one occupant per square and every rule reads it that way: line of sight is
+     blocked by it, a module may not be built on it, a move may not pass it. A piece may now
+     step onto a square one of its owner's own pieces already holds — it is then standing
+     *inside* that piece rather than replacing it, and is simply not on the grid until it steps
+     off or the holder leaves. That keeps the one-occupant invariant every other rule depends
+     on, and it is why a piece may pass through but not stop there. */
+  function insideSomething(p) {
+    var c = p && cellAt(p.x, p.y);
+    return !!c && c.id !== p.id;
+  }
+  /* every piece of this side's that is standing inside another; movement cannot end while any
+     of them is */
+  function stackedPieces(s) {
+    var out = [];
+    ['modules', 'deployables'].forEach(function (k) {
+      Object.keys(s[k]).forEach(function (id) {
+        if (insideSomething(s[k][id])) out.push(s[k][id]);
+      });
+    });
+    return out;
+  }
+  /* Find whatever is standing on a square other than `notId`, so it can take the square over
+     when the piece holding it leaves. */
+  function occupantAt(x, y, notId) {
+    for (var i = 0; i < G.players.length; i++) {
+      var pl = G.players[i];
+      var pairs = [['modules', 'module'], ['deployables', 'deployable']];
+      for (var k = 0; k < pairs.length; k++) {
+        var bag = pl[pairs[k][0]], ids = Object.keys(bag);
+        for (var j = 0; j < ids.length; j++) {
+          var q = bag[ids[j]];
+          if (q.id === notId || q.x !== x || q.y !== y) continue;
+          return { kind: pairs[k][1], owner: pl.idx, id: q.id };
+        }
+      }
+    }
+    return null;
+  }
+  /* Step off a square. Only the piece the grid actually holds frees it, and anything that was
+     standing inside it takes it over — otherwise the square would read as empty with a piece
+     still standing on it. */
+  function leaveCell(p) {
+    var c = cellAt(p.x, p.y);
+    if (!c || c.id !== p.id) return;          /* it was inside something: nothing of ours to free */
+    vacate(p.x, p.y);
+    var next = occupantAt(p.x, p.y, p.id);
+    if (next) occupy(p.x, p.y, next);
+  }
+  /* Take a square if it is free; if something already holds it, stand inside instead. */
+  function enterCell(p, kind, ownerIdx) {
+    if (cellAt(p.x, p.y)) return;
+    var ref = { kind: kind, id: p.id };
+    if (ownerIdx !== undefined && ownerIdx !== null) ref.owner = ownerIdx;
+    occupy(p.x, p.y, ref);
+  }
+
   /* ---- line of sight: centre to centre; any occupied square in between blocks.
      Every occupant counts as a blocker, your own hull included. ---- */
   function lineBlocked(sx, sy, tx, ty) {
@@ -621,7 +678,7 @@ var Engine = (function () {
          found at all. The queued effect keeps a direct reference, so the blast still knows
          where the mine was standing. */
       fire(s, 'onDestroyedOrEnemyEnters', { self: dep, source: dep });
-      vacate(dep.x, dep.y);
+      leaveCell(dep);
       delete s.deployables[dep.id];
     }
     return amount;
@@ -629,7 +686,7 @@ var Engine = (function () {
 
   function destroyModule(s, mod) {
     log(s.name + "'s " + mod.name + ' is destroyed.', s);
-    vacate(mod.x, mod.y);
+    leaveCell(mod);
     delete s.modules[mod.id];
     checkWin();
   }
@@ -1139,13 +1196,26 @@ var Engine = (function () {
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
     s.moveLeft = n;
     log(s.name + ' gains Move ' + n + ' per module.', s);
+    openFleetMove(s, n);
+  };
+
+  /* Move your whole fleet. A piece may pass through your own hull, so the phase cannot be
+     ended while one is still standing inside another — the prompt simply comes back. */
+  function openFleetMove(s, n) {
     prompt({ kind: 'move', label: 'Move your modules — ' + n + ' each',
       /* Done means done: unspent Move is lost rather than banked onto the next engine */
       onResolve: function () {
+        var stuck = stackedPieces(s);
+        if (stuck.length) {
+          log(s.name + ' cannot stop with ' + stuck.length +
+              (stuck.length === 1 ? ' piece' : ' pieces') + ' inside another — move clear first.', s);
+          openFleetMove(s, n);
+          return;
+        }
         Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
         s.moveLeft = 0;
       } });
-  };
+  }
 
   OPS.gainShield = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
@@ -1567,8 +1637,16 @@ var Engine = (function () {
     fire(s, 'onMove', { moveBonus: true });
   }
   function openStepMove(obj, n) {
-    prompt({ kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
-             objId: obj.id, left: n, onResolve: function () {} });
+    /* The prompt object is the live one — stepObject decrements G.pending.left, which is this
+       same `p` — so re-opening after a refusal carries the Move that is actually left. */
+    var p = { kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
+              objId: obj.id, left: n,
+              onResolve: function () {
+                if (!insideSomething(obj)) return;
+                log(obj.name + ' cannot stop inside another piece — move it clear.');
+                openStepMove(obj, p.left);
+              } };
+    prompt(p);
   }
   OPS.__stepMove = function (o, ctx) {
     var s = ctx.side, t = objectById(o.objId);
@@ -1860,20 +1938,34 @@ var Engine = (function () {
     if (!inBounds(nx, ny)) return false;
     var c = cellAt(nx, ny);
     if (c) {
-      /* a module may overrun a deployable, but nothing else */
-      if (c.kind !== 'deployable') return false;
-      var od = G.players[c.owner].deployables[c.id];
-      if (od) {
-        log(m.name + ' overruns ' + od.name + '.');
-        /* "an enemy enters this space" — driving over a mine is the case it exists for */
-        fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
-        vacate(od.x, od.y);
-        delete G.players[c.owner].deployables[c.id];
+      var ours = c.owner === s.idx;
+      /* Your own hull is something you can move through — you end up standing inside it, and
+         the move phase will not let you stop there. Anybody else's still blocks. */
+      if (c.kind === 'module') {
+        if (!ours) return false;
+        /* You must have the Move to get out again. Without this a piece could spend its last
+           step going inside your hull, and then be unable to leave a square it is not allowed
+           to stop on — the move phase would refuse to end with no legal way to fix it. */
+        if (m.moveLeft <= 1) { log(m.name + ' has not the Move to pass through and get clear.', s); return false; }
       }
+      else if (c.kind === 'deployable') {
+        /* Your own deployable is passed over, not driven over. An enemy's is overrun, which is
+           the case the rule exists for. */
+        if (!ours) {
+          var od = G.players[c.owner].deployables[c.id];
+          if (od) {
+            log(m.name + ' overruns ' + od.name + '.');
+            /* "an enemy enters this space" — driving over a mine is what this is for */
+            fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
+            vacate(od.x, od.y);
+            delete G.players[c.owner].deployables[c.id];
+          }
+        }
+      } else return false;                     /* a rock or an anomaly stops you dead */
     }
-    vacate(m.x, m.y);
+    leaveCell(m);
     m.x = nx; m.y = ny; m.moveLeft--;
-    occupy(nx, ny, { kind: 'module', owner: s.idx, id: m.id });
+    enterCell(m, 'module', s.idx);
     /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
        outside the resolver, so nothing else will come along to drain it. A mine driven over
        would have been queued to detonate and then simply sat there. */
@@ -1984,10 +2076,26 @@ var Engine = (function () {
     var t = objectById(objId);
     if (!t || !G.pending || G.pending.left <= 0) return false;
     var o = t.obj, nx = o.x + dx, ny = o.y + dy;
-    if (!inBounds(nx, ny) || cellAt(nx, ny)) return false;
-    vacate(o.x, o.y); o.x = nx; o.y = ny;
-    occupy(nx, ny, t.kind === 'asteroid' ? { kind: 'asteroid', id: o.id }
-                                         : { kind: t.kind, owner: t.owner.idx, id: o.id });
+    if (!inBounds(nx, ny)) return false;
+    var c = cellAt(nx, ny);
+    if (c) {
+      /* A deployable of yours may pass through anything else of yours — another deployable or
+         your own hull. Everything else is still solid, and an enemy deployable is not overrun
+         by a deployable: overrunning is a module's doing. */
+      var through = t.kind === 'deployable' && t.owner && c.owner === t.owner.idx &&
+                    (c.kind === 'deployable' || c.kind === 'module');
+      if (!through) return false;
+      /* It has to have the Move to get out again, or it would be stranded on a square it is
+         not allowed to stop on with no legal step left — the prompt would refuse to close and
+         there would be no way to fix it. */
+      if (G.pending.left <= 1) {
+        log(o.name + ' has not the Move to pass through and get clear.');
+        return false;
+      }
+    }
+    leaveCell(o);
+    o.x = nx; o.y = ny;
+    enterCell(o, t.kind === 'asteroid' ? 'asteroid' : t.kind, t.owner ? t.owner.idx : null);
     G.pending.left--; emit();
     return true;
   }
@@ -2188,6 +2296,11 @@ var Engine = (function () {
     costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
     isCoreLike: function (s2, m) { return isCoreLike(s2, m); },
     hiddenFrom: function (o, viewer) { return hiddenFrom(o, viewer); },
+    stacked: function (idx) {
+      var s = G && G.players[idx];
+      return s ? stackedPieces(s).map(function (p) { return p.id; }) : [];
+    },
+    insideSomething: function (p) { return insideSomething(p); },
     reveal: reveal,
     sharesHullWithCore: function (s2, m) { return sharesHullWithCore(s2, m); },
     hullHolder: function (s2, m) { return hullHolder(s2, m); },

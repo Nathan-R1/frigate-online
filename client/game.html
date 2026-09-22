@@ -128,6 +128,11 @@
   .piece.marked { cursor:default; }
   /* ready to activate */
   .piece.ready .module-svg { filter:drop-shadow(0 0 5px var(--pc)) drop-shadow(0 0 13px var(--pc)); }
+  /* A piece of yours standing inside another. It cannot stay there, so it is marked until it
+     is moved clear — otherwise it is hidden underneath and impossible to find. */
+  .piece.stacked { outline:2px dashed var(--red); outline-offset:1px; border-radius:5px;
+    z-index:6; }
+  .piece.stacked .module-svg { opacity:.55; }
   /* A hidden piece you can see: your own cloak, or an enemy's that your scanners picked up.
      Drawn as a contact rather than a solid piece, so it never reads as something the whole
      table can see. */
@@ -1321,15 +1326,24 @@
      A module may step onto empty ground or over a deployable, which it destroys; anything
      else stops it. BFS gives the shortest legal route, and the preview shows it whether or
      not this turn's Move covers the whole thing. */
-  function passable(x, y) {
+  /* Where the thing being moved may step, which depends on what it is. Anything of your own
+     — hull or deployable — can be moved through, though the move cannot *end* inside it. A
+     module also drives over anybody's deployable, overrunning an enemy's; a deployable does
+     not, because overrunning is a module's doing. Enemy hull, rocks and anomalies are solid.
+     With no mover given it answers for a module of yours, which is the common case. */
+  function passable(x, y, mv) {
     var n = Engine.RULES.boardSize;
     if (x < 0 || y < 0 || x >= n || y >= n) return false;
     var c = Engine.cellAt(x, y);
-    return !c || c.kind === 'deployable';
+    if (!c) return true;
+    var kind = mv && mv.kind ? mv.kind : 'module';
+    var owner = mv && mv.owner !== undefined && mv.owner !== null ? mv.owner : meIdx();
+    if (c.owner === owner && (c.kind === 'module' || c.kind === 'deployable')) return true;
+    return kind === 'module' && c.kind === 'deployable';
   }
-  function routeTo(from, tx, ty) {
+  function routeTo(from, tx, ty, mv) {
     if (from.x === tx && from.y === ty) return [{ x: from.x, y: from.y }];
-    if (!passable(tx, ty)) return null;
+    if (!passable(tx, ty, mv)) return null;
     var seen = {}, q = [{ x: from.x, y: from.y, prev: null }], head = 0;
     seen[from.x + ',' + from.y] = 1;
     var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -1337,7 +1351,7 @@
       var cur = q[head++];
       for (var i = 0; i < 4; i++) {
         var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
-        if (seen[k] || !passable(nx, ny)) continue;
+        if (seen[k] || !passable(nx, ny, mv)) continue;
         seen[k] = 1;
         var node = { x: nx, y: ny, prev: cur };
         if (nx === tx && ny === ty) {
@@ -1360,11 +1374,12 @@
     if (p.kind === 'moveObject') {
       /* whatever is on the end of the beam: your drone, an enemy module, a rock */
       var t = Engine.objectById(p.objId);
-      return t ? { obj: t.obj, left: p.left } : null;
+      return t ? { obj: t.obj, left: p.left, kind: t.kind,
+                   owner: t.owner ? t.owner.idx : null } : null;
     }
     if (p.kind === 'move' && selMod) {
       var m = G.players[meIdx()].modules[selMod];
-      return m ? { obj: m, left: m.moveLeft } : null;
+      return m ? { obj: m, left: m.moveLeft, kind: 'module', owner: meIdx() } : null;
     }
     return null;
   }
@@ -1386,7 +1401,7 @@
     if (telegraphed) { drawPoly(telegraphed, false); distEl.classList.add('hidden'); return telegraphed; }
     var mv = mover(G);
     if (!mv || !hoverCell) return clearRoute();
-    var route = routeTo(mv.obj, hoverCell.x, hoverCell.y);
+    var route = routeTo(mv.obj, hoverCell.x, hoverCell.y, mv);
     if (!route || route.length < 2) return clearRoute();
     drawPoly(route, route.length - 1 > mv.left);
     showDist(route.length - 1, mv.left, route.length - 1 > mv.left);
@@ -1511,7 +1526,7 @@
       if (cur.d >= mv.left) continue;
       for (var i = 0; i < 4; i++) {
         var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
-        if (k in seen || !passable(nx, ny)) continue;
+        if (k in seen || !passable(nx, ny, mv)) continue;
         seen[k] = true;
         q.push({ x: nx, y: ny, d: cur.d + 1 });
       }
@@ -1707,6 +1722,8 @@
       /* it is on screen, so either it is yours or your scanners found it — either way it is
          not a piece the other side can see */
       if (o.stealth) cls += ' scanned';
+      /* standing inside another piece: legal on the way past, not somewhere to stop */
+      if (mine && Engine.insideSomething && Engine.insideSomething(o)) cls += ' stacked';
       if (rec.kind === 'mod' && !Engine.meetsReq(rec.side, o)) cls += ' badreq';
       /* movement state only means anything while a move prompt is open */
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
@@ -2437,12 +2454,16 @@
            '<div style="font-size:11px;margin-bottom:4px">Selected: <b style="color:var(--cyan)">' +
            (sm ? esc(sm.name) + ' (' + sm.moveLeft + ' left)' : 'none') + '</b> — ' + total + ' Move unspent</div>' +
            movePad(!!sm && sm.moveLeft > 0) +
-           '<button class="g-btn" data-done="1">Done moving</button>' + cancelBtn();
+           stuckNote(G) +
+           '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
+           '>Done moving</button>' + cancelBtn();
     }
     else if (p.kind === 'moveObject')
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Click where it should go, ' +
            'or use the pad — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' + movePad(p.left > 0) +
-           '<button class="g-btn" data-done="1">Done</button>' + cancelBtn();
+           stuckNote(G) +
+           '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
+           '>Done</button>' + cancelBtn();
     else if (p.kind === 'space')
       h += '<div style="font-size:11px;color:var(--ink-dim)">Click a highlighted cell.</div>' +
            '<div style="margin-top:6px">' +
@@ -2488,6 +2509,20 @@
   /* Cancel is offered wherever an activation can still be taken back. It puts the pieces
      where they stood and hands back everything the cost took — the modules it exhausted, the
      charges it spent, the drone it ran over — not just the part you were being asked about. */
+  /* Pieces of the acting side that are standing inside another. Movement cannot be ended
+     while there are any, so the button is greyed and the reason is written out — the engine
+     refuses it too, so this is the explanation rather than the rule. */
+  function stuckIds(G) {
+    return (Engine.stacked ? Engine.stacked(G.active) : []) || [];
+  }
+  function stuckNote(G) {
+    var n = stuckIds(G).length;
+    if (!n) return '';
+    return '<div style="font-size:11px;color:var(--red);margin-bottom:6px">' +
+           (n === 1 ? 'A piece is' : n + ' pieces are') + ' still inside another ' +
+           '(outlined in red). Move ' + (n === 1 ? 'it' : 'them') + ' clear to finish.</div>';
+  }
+
   function cancelBtn(label) {
     if (!Engine.canUndo()) return '';
     return '<button class="g-btn ghost" style="margin-left:6px" data-cancel="1">' +
@@ -2749,7 +2784,7 @@
         return Engine.resolve(cell);
       /* clicking open ground walks the selected piece there along the previewed route */
       if (mover(G) && cell) {
-        var route = routeTo(mover(G).obj, cell.x, cell.y);
+        var route = routeTo(mover(G).obj, cell.x, cell.y, mover(G));
         if (route && route.length > 1) walkRoute(route);
       }
       return;
