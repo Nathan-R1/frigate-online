@@ -1010,7 +1010,10 @@
     return base;
   }
 
-  function start() {
+  /* `scenery` is a board nobody is going to play — the one dealt behind the menus so the page
+     is not blank. It builds every ship at once, because a pregame waiting on a player who will
+     never arrive would leave four bare Cores on screen. */
+  function start(scenery) {
     selMod = null;
     AICommander.reset();
     document.getElementById('modePick').classList.add('hidden');
@@ -1019,7 +1022,8 @@
     /* the roster is now committed: this is the game's own copy from here on */
     SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
     VIEW = localSeats().length ? localSeats()[0] : 0;
-    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat); }));
+    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat); }),
+                   undefined, { autoSetup: !!scenery });
   }
 
   /* Quotes too. Without them this is safe in text and quietly unsafe in an attribute — and
@@ -1074,7 +1078,7 @@
   }
   function renderTop(G) {
     document.getElementById('turnLabel').textContent =
-      'Turn ' + G.turn + ' — ' + G.players[G.active].name;
+      (G.turn === 0 ? 'Pregame' : 'Turn ' + G.turn) + ' — ' + G.players[G.active].name;
     document.getElementById('turnLabel').style.color = SEAT_HEX[G.active % 4];
     var bars = G.players.map(function (s, i) {
       return '<span class="side-bar' + (G.active === i ? ' turn' : '') + (s.dead ? ' out' : '') +
@@ -1083,11 +1087,15 @@
     document.getElementById('barRow').innerHTML = bars;
     document.getElementById('statsDrop').innerHTML = bars;
     var mine = isMyTurn(G) && !G.pending && !G.over;
-    /* the two are never both useful, so only the one for this phase is on screen */
+    /* the two are never both useful, so only the one for this phase is on screen. The pregame
+       turn has no action phase to move on to, so its button ends the pregame outright — it is
+       the same button and the same call, only the word changes. */
     var inPlay = G.phase === 'play';
     var eb = document.getElementById('endBtn'), pb = document.getElementById('playPhaseBtn');
     eb.classList.toggle('hidden', inPlay);
     pb.classList.toggle('hidden', !inPlay);
+    var pbLabel = pb.querySelector('.btn-label');
+    if (pbLabel) pbLabel.textContent = G.turn === 0 ? 'End Pregame Phase' : 'End Play Phase';
     eb.disabled = !mine;
     pb.disabled = !mine;
     /* the roster and the phase both change what the row has to hold, so it is re-fitted
@@ -1916,6 +1924,16 @@
     d.className = 'hcard' + rec.cls +
                   (debugOn && rec.id && rec.id === debugCard ? ' dbg-hover' : '');
     if (rec.cardTitle) d.title = rec.cardTitle;
+    /* The name is written once when the node is built, but nodes are reused by card id — and
+       ids start again at c_1 on every fresh deal, so the board dealt behind the menu leaves
+       nodes that the real game then inherits under the same key. Without this a card shows the
+       previous deal's name, and `data-tech` sends the popup to the wrong card entirely. */
+    var hn = d.querySelector('.hn');
+    if (hn._html !== rec.nameHtml) {
+      hn.innerHTML = rec.nameHtml;
+      hn._html = rec.nameHtml;
+      for (var a in (rec.nameAttrs || {})) hn.setAttribute(a, rec.nameAttrs[a]);
+    }
     var hm = d.querySelector('.hmeta');
     if (hm._html !== rec.metaHtml) { hm.innerHTML = rec.metaHtml; hm._html = rec.metaHtml; }
     hm.style.display = rec.metaHtml ? '' : 'none';
@@ -1923,7 +1941,11 @@
     if (ht._html !== rec.textHtml) { ht.innerHTML = rec.textHtml; ht._html = rec.textHtml; }
     var b = d.querySelector('.hb button');
     b.style.display = rec.btn ? '' : 'none';
-    if (rec.btn) { b.disabled = rec.btn.disabled; b.title = rec.btn.title || ''; }
+    if (rec.btn) {
+      b.disabled = rec.btn.disabled;
+      b.title = rec.btn.title || '';
+      if (b.textContent !== rec.btn.label) b.textContent = rec.btn.label;
+    }
     var tag = d.querySelector('.passive-tag');
     tag.style.display = rec.tag ? '' : 'none';
     if (rec.tag) tag.textContent = rec.tag;
@@ -2314,7 +2336,12 @@
     }
     if (!p) {
       promptEl.innerHTML =
-        G.phase === 'play'
+        G.turn === 0
+          ? '<div class="p-label">Build your ship</div><div style="font-size:11px;color:var(--ink-dim)">' +
+            'These are your Starter Cards. Play them in whatever order you like, and choose where ' +
+            'each module berths. Anything you do not play is put away — End Pregame Phase when you ' +
+            'are done. There is no moving or firing this turn.</div>'
+          : G.phase === 'play'
           ? '<div class="p-label">Play phase</div><div style="font-size:11px;color:var(--ink-dim)">Play a card, or End Play Phase. Whatever is left in hand is discarded.</div>'
           : '<div class="p-label">Action phase</div><div style="font-size:11px;color:var(--ink-dim)">Click your modules and cards to activate them, then end your turn.</div>';
       return; }
@@ -3844,7 +3871,7 @@
      fresh board so the result overlay has nothing to describe, and offers the menu. */
   document.getElementById('replayBtn').addEventListener('click', function () {
     if (typeof Net !== 'undefined' && Net.room()) Net.leave();
-    start();
+    start(true);
     askMode();
   });
 
@@ -3864,7 +3891,7 @@
     });
   }
   Engine.onChange(scheduleRender);
-  start();          /* build a board so the page is not blank behind the picker */
+  start(true);      /* build a board so the page is not blank behind the picker */
   /* Coming back from the sheet builder is a reload, not a fresh arrival: land where the trip
      started rather than at the first menu, which would throw away a half-arranged table.
      CAME_BACK was read at the top, before the rejoin had a chance to act on it. */

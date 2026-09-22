@@ -37,10 +37,6 @@ var Engine = (function () {
   function onChange(fn) { listeners.push(fn); }
   function emit() { for (var i = 0; i < listeners.length; i++) listeners[i](G); }
 
-  /* Log lines are coloured by side. That is the active seat almost always, but not during
-     setup, where every side deploys its Starter Cards before anyone's turn has begun —
-     `speaker` names who is acting while that is true. */
-  var speaker = null;
   /* A line is coloured by whoever it is about, which on someone else's turn is often not
      the player acting: their gun fires, but it is your shield that soaks it and your passive
      that answers. Pass the subject and the line reads in that seat's colour. */
@@ -52,7 +48,7 @@ var Engine = (function () {
      only wants to know what happened can then be given exactly those, instead of the log
      having to be guessed at by matching words in it. */
   function log(msg, who, kind) {
-    var idx = who == null ? (speaker === null ? G.active : speaker)
+    var idx = who == null ? G.active
             : (typeof who === 'number' ? who : who.idx);
     var entry = { turn: G.turn, side: idx, msg: msg };
     if (kind) entry.kind = kind;
@@ -233,7 +229,7 @@ var Engine = (function () {
      A side with no team is its own team, so the default is a free-for-all. */
   /* A seed may be given so that the same table can be dealt twice — a server restoring a game
      it saved, or a test that wants the same dice every run. Left out, one is made. */
-  function newGame(configs, seed) {
+  function newGame(configs, seed, opts) {
     if (!Array.isArray(configs)) configs = Array.prototype.slice.call(arguments);
     configs = configs.slice(0, 4);
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
@@ -259,16 +255,21 @@ var Engine = (function () {
       shuffle(s.deck);
     });
     scatterAsteroids();
-    /* Anything in the deck carrying the Starter Card trait is played before combat, which is
-       how a ship arrives with a hull already built rather than a bare Core. */
-    G.setup = true;
-    G.players.forEach(function (pl) {
-      speaker = pl.idx;
-      playStarterCards(pl);
-    });
-    speaker = null;
-    G.setup = false;
-    log(G.players.length + '-player game start.');
+    /* Turn 0 is the pregame: every seat takes a play phase with its Starter Cards in hand and
+       builds its ship in the order it likes. It is an ordinary turn, so the whole of the turn
+       machinery — playCard, endPlayPhase, the placement prompts, the AI — works unchanged, and
+       the turn counter itself records that the pregame is over when it rolls to 1.
+
+       The exception is a board nobody is going to play: the menu screens want scenery behind
+       them, not four bare Cores waiting on a player who will never arrive. `autoSetup` deploys
+       everything at once for those, which is what every game used to do. */
+    if (opts && opts.autoSetup) {
+      autoBerth = true;
+      try { G.players.forEach(autoDeployStarters); } finally { autoBerth = false; }
+      log(G.players.length + '-player game start.');
+    } else {
+      G.turn = 0;
+    }
     startTurn();
     return G;
   }
@@ -287,16 +288,26 @@ var Engine = (function () {
     return isStarterCard(card.name);
   }
 
-  function playStarterCards(s) {
-    s.deck.slice().forEach(function (id) {
+  /* Every Starter Card at once, with no one asked anything — the scenery boards behind the
+     menus, and nothing else. A card that wants an answer is given the empty one, so a prompt
+     can never be left parked for a player who is not there; the guard is only there so a card
+     that re-prompts forever cannot hang the page. */
+  function autoDeployStarters(s) {
+    starterIds(s, s.deck).forEach(function (id) {
       var card = s.cards[id];
-      if (!card || !cardIsStarter(card)) return;
       var i = s.deck.indexOf(id);
       if (i >= 0) s.deck.splice(i, 1);
       s.played.push(id);
       log(s.name + ' deploys ' + card.name + ' before combat.', s);
       run(fx(card.name, 'tech').onPlay || [], { side: s, card: card });
+      var guard = 0;
+      while (G.pending && guard++ < 50) resolve(null);
     });
+  }
+
+  /* the Starter Cards among a pile, in the pile's own order */
+  function starterIds(s, pile) {
+    return pile.filter(function (id) { return cardIsStarter(s.cards[id]); });
   }
 
   /* ---- who is on whose side ---- */
@@ -395,9 +406,28 @@ var Engine = (function () {
     G.phase = 'upkeep';
     tickDurations(s);
     s.moveLeft = 0;
+    G.phase = 'draw';
+    if (G.turn === 0) {
+      /* the pregame hand is the Starter Cards, and the plays are exactly enough to spend it.
+         Spending the last one drops playsLeft to 0, which is the same signal that ends any
+         other play phase — so the seat hands over by itself with nothing extra to press. */
+      var starters = starterIds(s, s.deck);
+      starters.forEach(function (id) {
+        s.deck.splice(s.deck.indexOf(id), 1);
+        s.hand.push(id);
+      });
+      s.playsLeft = starters.length;
+      log(s.name + ' prepares for combat.', s);
+      G.phase = 'play';
+      /* nothing to deploy is nothing to decide: hand straight on, rather than sitting on a
+         board with no legal action. startTurn does not run the queue, so this cannot wait
+         for step() to notice. */
+      if (!s.playsLeft) { endPlayPhase(); return; }
+      emit();
+      return;
+    }
     s.playsLeft = playCountOf(s);
     log(s.name + ' begins turn ' + G.turn + '.', s);
-    G.phase = 'draw';
     drawCards(s, drawCountOf(s) - s.hand.length > 0 ? drawCountOf(s) - s.hand.length : 0);
     G.phase = 'play';
     emit();
@@ -408,14 +438,28 @@ var Engine = (function () {
     if (G.phase !== 'play') return false;
     var s = side();
     if (s.hand.length) {
-      log(s.name + ' discards ' + s.hand.length + ' card(s) from hand.', s);
+      log(G.turn === 0
+            ? s.name + ' leaves ' + s.hand.length + ' Starter Card(s) in the box.'
+            : s.name + ' discards ' + s.hand.length + ' card(s) from hand.', s);
       s.discard = s.discard.concat(s.hand);
       s.hand = [];
     }
     s.playsLeft = 0;
+    /* The pregame turn has no action phase — there is nothing built yet to fire or fly — so
+       ending it hands straight to the next seat. */
+    if (G.turn === 0) { advancePregame(); return true; }
     G.phase = 'action';
     emit();
     return true;
+  }
+
+  /* Pass the pregame on. The turn counter does the bookkeeping: rolling past the last seat
+     makes it turn 1, and the next startTurn is an ordinary one. */
+  function advancePregame() {
+    var nxt = nextLiving(G.active);
+    if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order: 0 becomes 1 */
+    G.active = nxt;
+    startTurn();
   }
 
   /* ---- presentation channel ----
@@ -441,6 +485,10 @@ var Engine = (function () {
 
   function endTurn() {
     if (G.over) return;
+    /* The pregame turn ends through its play phase, so that unplayed Starter Cards are put
+       away rather than carried into turn 1. This is reachable from the server command as well
+       as the page, so it is refused here rather than only in the UI. */
+    if (G.turn === 0) { endPlayPhase(); return; }
     clearUndo();
     G.pending = null; G.queue = [];
     var s = side();
@@ -724,10 +772,14 @@ var Engine = (function () {
       onResolve: function (i) { if (i === 0) go(); } });
   };
 
+  /* Set only while a board is being built with no player to ask — see autoDeployStarters.
+     It is a module variable rather than game state so that nothing can persist it or read it
+     back: a real game never berths a module for you. */
+  var autoBerth = false;
   OPS.createModule = function (o, ctx) {
     var s = ctx.side;
-    if (G.setup) {
-      /* deploying before the game begins: berth it ourselves, nearest the Core */
+    if (autoBerth) {
+      /* nobody is here to be asked: berth it ourselves, nearest the Core */
       var cell = firstLegalCell(s, o.module);
       if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' deploys ' + o.module + '.', s); }
       else log(s.name + ' has nowhere to berth ' + o.module + '.', s);
@@ -1911,7 +1963,7 @@ var Engine = (function () {
     var out = copy({ turn: G.turn, active: G.active, phase: G.phase, seq: G.seq, over: G.over,
                      cells: G.cells, asteroids: G.asteroids, players: G.players,
                      shapes: G.shapes,
-                     seed: G.seed, rng: G.rng, setup: G.setup });
+                     seed: G.seed, rng: G.rng });
     out.log = G.log.slice(-LOG_KEEP);
     return out;
   }
@@ -1922,7 +1974,6 @@ var Engine = (function () {
     G.queue = G.queue || [];
     G.pending = null;
     undoPoint = null;
-    speaker = null;
     emit();
     return G;
   }
