@@ -506,11 +506,20 @@ function tickRooms() {
        computer plays here and not there. The guard is not a rule, it is a promise that a bug in
        the commander cannot spin this process forever. */
     var mine = seat.idx, acted = false, guard = 0;
+    /* G.seq only moves when something is created, so a card that merely spends itself — a
+       Starter Card that grants shields rather than building a module, say — looked to this
+       loop like a tick that did nothing, and the table was never told. The hand size is what
+       actually changed, so it belongs in the fingerprint. */
+    function mark() {
+      var s0 = G.players[G.active];
+      return JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending,
+                             s0 ? s0.hand.length : 0]);
+    }
     do {
-      var before = JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending]);
+      var before = mark();
       try { room.AI.tick(G.active); }
       catch (e) { console.error('[ai]', code, e.message); break; }
-      if (JSON.stringify([G.turn, G.active, G.phase, G.seq, !!G.pending]) === before) break;
+      if (mark() === before) break;
       acted = true;
     } while (room.instant && !G.over && G.active === mine && guard++ < 4000);
     if (!acted) return;
