@@ -919,6 +919,27 @@
     if (G && !isAI(G.active)) return G.active;
     return VIEW;
   }
+  /* Who is actually looking, which is not the same question meIdx() answers: that one says
+     whose side of the table the board is drawn from, and for a spectator it borrows the active
+     seat. Right for orientation, wrong for what may be seen — a spectator is nobody. */
+  function viewerIdx() {
+    if (online()) return Net.seat();      /* null while watching */
+    return meIdx();                       /* hotseat: the screen belongs to whoever is up */
+  }
+  /* A stealthed piece is on the board but not on screen for the other side. The engine owns
+     the rule; this only asks it, so the board and the connectors cannot disagree. */
+  function hidden(o) {
+    return !!(Engine.hiddenFrom && Engine.hiddenFrom(o, viewerIdx()));
+  }
+  /* The highlights — where a module may berth, how far a piece can still walk, what a shot can
+     see, which pieces it may pick — are the acting player's working-out. On someone else's
+     screen they give away a move that has not been made yet, and in the pregame they would give
+     away a hull that is meant to be hidden. So they are drawn for whoever is being asked, and
+     for nobody else: a spectator is nobody, and a seat watching another seat's turn is too. */
+  function actingHere(G) {
+    return !!G && G.active === viewerIdx();
+  }
+
   function sideName(i) {
     if (online()) {
       var G = Engine.get();
@@ -1438,7 +1459,7 @@
   }
 
   function paintCells(G) {
-    var p = G.pending;
+    var p = actingHere(G) ? G.pending : null;
     var legal = (p && p.kind === 'space' && p.filter) ? p.filter : null;
     /* a placement that fills a shape shows that shape under the cursor, so you can see
        exactly where the block lands before committing to it */
@@ -1447,7 +1468,8 @@
       p.pattern.forEach(function (d) { shape[(hoverCell.x + d[0]) + ',' + (hoverCell.y + d[1])] = true; });
     /* the same tint carries two meanings, both "where this can reach": squares the selected
        piece can move to, and squares the shot being aimed can see */
-    var reach = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.envelope : reachSet(G);
+    var reach = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.envelope
+              : (actingHere(G) ? reachSet(G) : null);
     var kids = cellsEl.children;
     for (var i = 0; i < kids.length; i++) {
       var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
@@ -1515,7 +1537,10 @@
   function connPairs(G) {
     var out = [];
     G.players.forEach(function (s, si) {
-      var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+      /* the struts between modules are drawn in the seat's colour, so a hidden hull would
+         still show its outline unless they go with it */
+      var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+                   .filter(function (m) { return !hidden(m); });
       for (var i = 0; i < mods.length; i++) for (var j = i + 1; j < mods.length; j++) {
         var a = mods[i], b = mods[j], dx = a.x - b.x, dy = a.y - b.y;
         if ((dx === 0 && Math.abs(dy) === 1) || (dy === 0 && Math.abs(dx) === 1))
@@ -1595,13 +1620,18 @@
                  shape: 'circle', color: '#b060e0' });
     });
     G.players.forEach(function (s, si) {
+      /* A hidden piece gets no record, so it has no node on the board and nothing to hover,
+         click or read. The square it stands on is still occupied — that lives in G.cells, which
+         is what movement, line of sight and placement all ask. */
       Object.keys(s.modules).forEach(function (id) {
         var m = s.modules[id];
+        if (hidden(m)) return;
         out.push({ id: id, o: m, kind: 'mod', side: s, si: si,
                    shape: GamePieces.shapeOf(si, m.name, id === s.coreId), color: SEAT_HEX[si % 4] });
       });
       Object.keys(s.deployables).forEach(function (id) {
         var d = s.deployables[id];
+        if (hidden(d)) return;
         out.push({ id: id, o: d, kind: 'dep', side: s, si: si,
                    shape: GamePieces.shapeOf(si, d.name, false), color: SEAT_HEX[si % 4] });
       });
@@ -1640,7 +1670,8 @@
     d.style.left = (o.x * CELL) + 'px';
     d.style.top  = (o.y * CELL) + 'px';
     var cls = 'piece ' + rec.kind;
-    var targetIds = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.targets : [];
+    var targetIds = (actingHere(G) && p && (p.kind === 'target' || p.kind === 'confirm'))
+                    ? p.targets : [];
     if (targetIds.indexOf(rec.id) >= 0) cls += (p.kind === 'confirm' ? ' marked' : ' targetable');
     if (foundIds.indexOf(rec.id) >= 0) cls += ' found';
     if (debugHeld === rec.id) cls += ' held';
