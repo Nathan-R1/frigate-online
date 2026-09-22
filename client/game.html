@@ -1081,15 +1081,23 @@
     syncView(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
-    if (G.over) document.getElementById('overTitle').textContent = overText(G);
+    if (G.over) document.getElementById('overTitle').innerHTML = overHtml(G);
   }
 
   /* Name the winner. A personal verdict tells you nothing you did not already know, and in a
-     three or four player game it does not even say who took it. */
-  function overText(G) {
+     three or four player game it does not even say who took it.
+
+     Each name is written in its own seat's colour — the colour that seat's ship and its bar on
+     the top row already wear — so a shared win reads at a glance instead of having to match
+     names to sides. The words between them stay the box's own colour. This is the one place the
+     title is markup rather than text, and names come from sheets and lobbies, so they are
+     escaped on the way in. */
+  function overHtml(G) {
     var w = G.over.winners || [];
     if (!w.length) return 'Everyone is destroyed';
-    var names = w.map(function (i) { return G.players[i].name; });
+    var names = w.map(function (i) {
+      return '<span style="color:' + SEAT_HEX[i % 4] + '">' + esc(G.players[i].name) + '</span>';
+    });
     if (names.length === 1) return names[0] + ' wins';
     return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win';
   }
