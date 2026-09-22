@@ -181,6 +181,9 @@ var Engine = (function () {
   }
 
   var MOD_SHAPES = ['hex', 'triangle', 'square', 'diamond', 'circle', 'frigate'];
+  var SHAPE_NAMES = { hex: 'Hexagon', triangle: 'Triangle', square: 'Square',
+                      diamond: 'Diamond', circle: 'Circle', frigate: 'Frigate' };
+  function shapeName(k) { return SHAPE_NAMES[k] || k; }
 
   function creationNames(v, out) {
     if (Array.isArray(v)) { v.forEach(function (x) { creationNames(x, out); }); return out; }
@@ -327,9 +330,10 @@ var Engine = (function () {
      itself. */
   function reveal(s) {
     var sides = s ? [s] : G.players;
+    function lift(o) { o.stealth = !!o.cloak; }   /* a cloak is not the pregame's doing */
     sides.forEach(function (p) {
-      Object.keys(p.modules).forEach(function (id) { p.modules[id].stealth = false; });
-      Object.keys(p.deployables).forEach(function (id) { p.deployables[id].stealth = false; });
+      Object.keys(p.modules).forEach(function (id) { lift(p.modules[id]); });
+      Object.keys(p.deployables).forEach(function (id) { lift(p.deployables[id]); });
     });
   }
 
@@ -697,6 +701,7 @@ var Engine = (function () {
      deployable overrun along the way. A computer seat never backs out, so it never pays for
      the copy. */
   var undoPoint = null;
+  var PILES = ['hand', 'played', 'deck', 'discard', 'trash'];
   function copy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
 
   function beginUndo(label) {
@@ -708,6 +713,10 @@ var Engine = (function () {
       label: label, active: G.active, turn: G.turn,
       cells: copy(G.cells), moveLeft: s.moveLeft, playsLeft: s.playsLeft, shield: s.shield,
       cards: copy(s.cards), asteroids: copy(G.asteroids),
+      /* Where the cards were, not just what they were. Taking back a card you played has to
+         put it back in your hand; without the piles it stayed in play with the play refunded,
+         and a cancelled draw kept the card it drew. */
+      piles: PILES.reduce(function (o, k) { o[k] = s[k].slice(); return o; }, {}),
       modules: G.players.map(function (pl) { return copy(pl.modules); }),
       deployables: G.players.map(function (pl) { return copy(pl.deployables); }),
       shields: G.players.map(function (pl) { return pl.shield; })
@@ -727,6 +736,7 @@ var Engine = (function () {
     G.asteroids = u.asteroids;
     s.moveLeft = u.moveLeft; s.playsLeft = u.playsLeft;
     s.cards = u.cards;
+    if (u.piles) PILES.forEach(function (k) { s[k] = u.piles[k].slice(); });
     G.players.forEach(function (pl, i) {
       pl.modules = u.modules[i];
       pl.deployables = u.deployables[i];
@@ -818,11 +828,30 @@ var Engine = (function () {
       else log(s.name + ' has nowhere to berth ' + o.module + '.', s);
       return;
     }
-    prompt({ kind: 'space', label: 'Place ' + o.module, filter: placementFilter(s, o.module),
-      onResolve: function (cell) {
-        if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' builds ' + o.module + '.', s); }
-      } });
+    askShape(s, o.module, function (shape) {
+      prompt({ kind: 'space', label: 'Place ' + o.module, filter: placementFilter(s, o.module),
+        onResolve: function (cell) {
+          if (!cell) return;
+          var id = placeModule(s, o.module, cell.x, cell.y);
+          if (id && shape) s.modules[id].shape = shape;
+          log(s.name + ' builds ' + o.module + '.', s);
+        } });
+    });
   };
+
+  /* A decoy is whatever it chooses to look like, and each one is asked separately. The deal
+     assigns a shape per module *name*, so left to that every decoy on the board would wear the
+     same silhouette — the one thing a decoy must not do. A shape stored on the piece itself
+     overrides the deal for that piece alone. */
+  function askShape(s, modName, then) {
+    if (!fx(modName, 'mod').chooseShape) return then(null);
+    /* Settled before the piece is put down. Asked afterwards, everyone watches the decoy
+       arrive wearing one silhouette and then turn into another, which points straight at it.
+       The answer is never logged either — the log goes to every seat. */
+    prompt({ kind: 'choice', label: 'What should ' + modName + ' look like?',
+      options: MOD_SHAPES.map(shapeName),
+      onResolve: function (i) { then(MOD_SHAPES[i | 0] || MOD_SHAPES[0]); } });
+  }
 
   /* the legal berth closest to the Core, searched outward so a hull grows in a tight cluster */
   function firstLegalCell(s, modName) {
@@ -1172,6 +1201,18 @@ var Engine = (function () {
       onResolve: function (id) {
         pool.forEach(function (x) { if (x.m.id === id) give(x.m, x.p); });
       } });
+  };
+
+  /* Cloak. The module is hidden from the other side for the rest of the game — `cloak` marks
+     it as hidden by a card rather than by the pregame, so the reveal at the start of turn 1
+     leaves it alone. What it is is not logged: the log reaches every seat. */
+  OPS.cloak = function (o, ctx) {
+    var s = ctx.side;
+    withOwnModule(s, 'Cloak which module?', function (m) {
+      m.cloak = true;
+      m.stealth = true;
+      log(s.name + ' cloaks a module.', s);
+    }, s.name + ' has no module to cloak.');
   };
 
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.', ctx.side); };
@@ -1532,9 +1573,9 @@ var Engine = (function () {
 
   /* Ask which of your modules this is about, then hand it to `then`. One candidate needs no
      asking; none means the ability simply has nothing to work with. */
-  function withOwnModule(s, label, then) {
+  function withOwnModule(s, label, then, noneMsg) {
     var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
-    if (!mods.length) { log(s.name + ' has no module to move.', s); return; }
+    if (!mods.length) { log(noneMsg || (s.name + ' has no module to move.'), s); return; }
     if (mods.length === 1) { then(mods[0]); return; }
     prompt({ kind: 'target', label: label, targets: mods.map(function (m) { return m.id; }),
       onResolve: function (id) {
@@ -1700,6 +1741,9 @@ var Engine = (function () {
     if (s.playsLeft <= 0) { log('No plays left this turn.'); emit(); return false; }
     var i = s.hand.indexOf(cardId); if (i < 0) return false;
     var card = s.cards[cardId];
+    /* Taken before the card moves, so cancelling puts it back in hand with the play refunded.
+       This is what puts a Cancel beside the Skip on a placement a card asked for. */
+    beginUndo(card.name);
     s.hand.splice(i, 1); s.played.push(cardId);
     s.playsLeft--;
     log(s.name + ' plays ' + card.name + '.', s, 'act');

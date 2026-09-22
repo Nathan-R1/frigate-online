@@ -40,6 +40,7 @@ tech: {
 'TAT Launcher':           { onPlay:[{op:'addCharge',target:'self',n:1}],
                             activate:{ cost:[{op:'exhaustSelf'},{op:'spendCharge',n:1}],
                                        effect:[{op:'createDeployable',deployable:'TAT Guided'}] } },
+'Cloak':                  { onPlay:[{op:'cloak',target:'choose'},{op:'trashSelf'}] },
 'Decoy Launcher':         { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'createDeployable',deployable:'Decoy Deployable'}] } },
 'Decoy Builder':          { onPlay:[{op:'addCharge',target:'self',n:4}],
@@ -226,8 +227,9 @@ mod: {
                         passive:[{ trigger:'static',
                                    effect:[{op:'buff',scope:'allies',within:'sensors',
                                             checks:2,saves:2}] }] },
-'Decoy Module':       { placement:'adjacentToAny',
-                        passive:[{ trigger:'static', effect:[{op:'stealthMimic',as:'module'}] }] },
+/* Not a mimic of some other module, but a silhouette its owner picks when it is built — and
+   picked again for every decoy, so two of them need not look alike. */
+'Decoy Module':       { placement:'adjacentToAny', chooseShape:true },
 'Graviton Engine':    { placement:'adjacentToAny', movement:true,
                         activate:{ cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
                                    effect:[{op:'gainMove',n:3}] } },

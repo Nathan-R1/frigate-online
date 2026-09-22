@@ -16,6 +16,6 @@ var MOD_PRESETS = [
     {name:'Thrust Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust to gain 2 Move for each module.'},
     {name:'Shield Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent modules to gain 2 shields.'},
     {name:'SPEAR Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent weapons modules to:\nRange: Sensors, Attacks: 4, Dmg: 2 \u26a1 (Exhaust the module hit for 1 round).'},
-    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'', passive:'This Module may appear as any other Module. This is a Stealth Effect.', onactivate:''}
+    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'Choose the shape it appears as. Each Decoy may be given a different one.', passive:'', onactivate:''}
   ];
 MOD_PRESETS.sort(function(a,b){return a.name.toLowerCase().localeCompare(b.name.toLowerCase());});
