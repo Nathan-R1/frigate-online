@@ -37,10 +37,6 @@ var Engine = (function () {
   function onChange(fn) { listeners.push(fn); }
   function emit() { for (var i = 0; i < listeners.length; i++) listeners[i](G); }
 
-  /* Log lines are coloured by side. That is the active seat almost always, but not during
-     setup, where every side deploys its Starter Cards before anyone's turn has begun —
-     `speaker` names who is acting while that is true. */
-  var speaker = null;
   /* A line is coloured by whoever it is about, which on someone else's turn is often not
      the player acting: their gun fires, but it is your shield that soaks it and your passive
      that answers. Pass the subject and the line reads in that seat's colour. */
@@ -52,7 +48,7 @@ var Engine = (function () {
      only wants to know what happened can then be given exactly those, instead of the log
      having to be guessed at by matching words in it. */
   function log(msg, who, kind) {
-    var idx = who == null ? (speaker === null ? G.active : speaker)
+    var idx = who == null ? G.active
             : (typeof who === 'number' ? who : who.idx);
     var entry = { turn: G.turn, side: idx, msg: msg };
     if (kind) entry.kind = kind;
@@ -148,11 +144,18 @@ var Engine = (function () {
   function placeModule(s, modName, x, y) {
     var m = findMod(modName); if (!m) return null;
     if (!inBounds(x, y) || cellAt(x, y)) return null;
+    shapeFallback(s.idx, modName);
     var id = uid('m');
-    var hull = num(m.hull, 1);
-    s.modules[id] = { id: id, name: modName, x: x, y: y, hull: hull, hullMax: hull,
-                      exhausted: false, tokens: {}, charges: num(m.charges, 0),
-                      moveLeft: 0, owner: s.idx };
+    var rec = { id: id, name: modName, x: x, y: y,
+                exhausted: false, tokens: {}, charges: num(m.charges, 0),
+                moveLeft: 0, owner: s.idx, stealth: pregame() };
+    /* A module that shares the Core's hull carries no hull fields at all. Leaving it a pool
+       nothing reads is how the Citadel came to own a second, private 5 HP. */
+    if (!sharesHullWithCore(s, rec)) {
+      rec.hull = num(m.hull, 1);
+      rec.hullMax = rec.hull;
+    }
+    s.modules[id] = rec;
     occupy(x, y, { kind: 'module', owner: s.idx, id: id });
     return id;
   }
@@ -160,9 +163,11 @@ var Engine = (function () {
   function placeDeployable(s, depName, x, y) {
     var m = findMod(depName); if (!m) return null;
     if (!inBounds(x, y) || cellAt(x, y)) return null;
+    shapeFallback(s.idx, depName);
     var id = uid('d');
     s.deployables[id] = { id: id, name: depName, x: x, y: y, hull: num(m.hull, 1),
-                          speed: num(m.speed, 0), charges: num(m.charges, 0), owner: s.idx };
+                          speed: num(m.speed, 0), charges: num(m.charges, 0), owner: s.idx,
+                          stealth: pregame() };
     occupy(x, y, { kind: 'deployable', owner: s.idx, id: id });
     return id;
   }
@@ -173,6 +178,48 @@ var Engine = (function () {
       var t = a[i]; a[i] = a[j]; a[j] = t;
     }
     return a;
+  }
+
+  var MOD_SHAPES = ['hex', 'triangle', 'square', 'diamond', 'circle', 'frigate'];
+  var SHAPE_NAMES = { hex: 'Hexagon', triangle: 'Triangle', square: 'Square',
+                      diamond: 'Diamond', circle: 'Circle', frigate: 'Frigate' };
+  function shapeName(k) { return SHAPE_NAMES[k] || k; }
+
+  function creationNames(v, out) {
+    if (Array.isArray(v)) { v.forEach(function (x) { creationNames(x, out); }); return out; }
+    if (v && typeof v === 'object') {
+      if (v.op === 'createModule' && v.module) out[v.module] = true;
+      if (v.op === 'createDeployable' && v.deployable) out[v.deployable] = true;
+      Object.keys(v).forEach(function (k) { creationNames(v[k], out); });
+    }
+    return out;
+  }
+
+  function dealShapes(idx, cfg) {
+    var names = { Core: true };
+    (cfg.modules || []).forEach(function (mn) { names[mn] = true; });
+    (cfg.deck || []).forEach(function (d) {
+      var t = (d && d.name) || d;
+      creationNames(CARD_EFFECTS.tech[t], names);
+    });
+    var items = Object.keys(names);
+    shuffle(items);
+    var pool = MOD_SHAPES.slice();
+    shuffle(pool);
+    G.shapes[idx] = {};
+    items.forEach(function (name, k) { G.shapes[idx][name] = pool[k % pool.length]; });
+  }
+
+  function shapeFallback(idx, name) {
+    if (idx === undefined || idx === null) return;
+    if (!G.shapes) G.shapes = G.players.map(function () { return {}; });
+    var map = G.shapes[idx] || (G.shapes[idx] = {});
+    if (map[name]) return;
+    var used = {};
+    Object.keys(map).forEach(function (k) { used[map[k]] = true; });
+    var free = MOD_SHAPES.filter(function (s) { return !used[s]; });
+    map[name] = free.length ? free[Math.floor(rand() * free.length)]
+                            : MOD_SHAPES[Math.floor(rand() * MOD_SHAPES.length)];
   }
 
   /* two sides face off across the middle; three or four take corners */
@@ -186,13 +233,16 @@ var Engine = (function () {
      A side with no team is its own team, so the default is a free-for-all. */
   /* A seed may be given so that the same table can be dealt twice — a server restoring a game
      it saved, or a test that wants the same dice every run. Left out, one is made. */
-  function newGame(configs, seed) {
+  function newGame(configs, seed, opts) {
     if (!Array.isArray(configs)) configs = Array.prototype.slice.call(arguments);
     configs = configs.slice(0, 4);
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
-          log: [], seq: 1, over: null, queue: [], asteroids: {},
+          log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
           seed: s0, rng: s0 };
+    /* Settled before a single piece is put down, because the Core is placed below and it has
+       to be hidden with the rest of the hull it is about to grow. */
+    if (!(opts && opts.autoSetup)) G.turn = 0;
     var pts = spawnPoints(configs.length);
     configs.forEach(function (cfg, i) {
       var s = makeSide(cfg.name, cfg);
@@ -201,6 +251,7 @@ var Engine = (function () {
       s.ai = !!cfg.ai;
       s.dead = false;
       G.players.push(s);
+      dealShapes(i, cfg);
       var p = pts[i] || pts[0];
       s.coreId = placeModule(s, 'Core', p.x, p.y);
       (cfg.modules || []).forEach(function (mn, k) {
@@ -211,16 +262,19 @@ var Engine = (function () {
       shuffle(s.deck);
     });
     scatterAsteroids();
-    /* Anything in the deck carrying the Starter Card trait is played before combat, which is
-       how a ship arrives with a hull already built rather than a bare Core. */
-    G.setup = true;
-    G.players.forEach(function (pl) {
-      speaker = pl.idx;
-      playStarterCards(pl);
-    });
-    speaker = null;
-    G.setup = false;
-    log(G.players.length + '-player game start.');
+    /* Turn 0 is the pregame: every seat takes a play phase with its Starter Cards in hand and
+       builds its ship in the order it likes. It is an ordinary turn, so the whole of the turn
+       machinery — playCard, endPlayPhase, the placement prompts, the AI — works unchanged, and
+       the turn counter itself records that the pregame is over when it rolls to 1.
+
+       The exception is a board nobody is going to play: the menu screens want scenery behind
+       them, not four bare Cores waiting on a player who will never arrive. `autoSetup` deploys
+       everything at once for those, which is what every game used to do. */
+    if (opts && opts.autoSetup) {
+      autoBerth = true;
+      try { G.players.forEach(autoDeployStarters); } finally { autoBerth = false; }
+      log(G.players.length + '-player game start.');
+    }
     startTurn();
     return G;
   }
@@ -239,16 +293,55 @@ var Engine = (function () {
     return isStarterCard(card.name);
   }
 
-  function playStarterCards(s) {
-    s.deck.slice().forEach(function (id) {
+  /* Every Starter Card at once, with no one asked anything — the scenery boards behind the
+     menus, and nothing else. A card that wants an answer is given the empty one, so a prompt
+     can never be left parked for a player who is not there; the guard is only there so a card
+     that re-prompts forever cannot hang the page. */
+  function autoDeployStarters(s) {
+    starterIds(s, s.deck).forEach(function (id) {
       var card = s.cards[id];
-      if (!card || !cardIsStarter(card)) return;
       var i = s.deck.indexOf(id);
       if (i >= 0) s.deck.splice(i, 1);
       s.played.push(id);
       log(s.name + ' deploys ' + card.name + ' before combat.', s);
       run(fx(card.name, 'tech').onPlay || [], { side: s, card: card });
+      var guard = 0;
+      while (G.pending && guard++ < 50) resolve(null);
     });
+  }
+
+  /* ---- stealth ----
+     A stealthed piece is on the board in every way that matters — it fills its square, it
+     blocks line of sight, it can be shot at — but the other side cannot see it. Ships are
+     built under it during the pregame, so nobody reads their opponent's hull off the board
+     before the first turn and berths against it. */
+  function pregame() { return !!G && G.turn === 0; }
+  /* Whether `o` is hidden from the seat `viewer`. A watcher is nobody, and is shown neither
+     side's hull rather than one of them. Your own team always sees its own. */
+  function hiddenFrom(o, viewer) {
+    if (!o || !o.stealth) return false;
+    if (viewer === null || viewer === undefined) return true;
+    var owner = G && G.players[o.owner], seat = G && G.players[viewer];
+    if (!owner || !seat) return true;
+    if (owner.team === seat.team) return false;
+    /* scanners identified it: that side knows where it is, the rest of the table does not */
+    return !(o.spotted && o.spotted.indexOf(seat.team) >= 0);
+  }
+  /* Everything on the board comes out of stealth at once. The pregame calls this as it ends;
+     it is also the thing a reveal effect should reach for rather than walking the board
+     itself. */
+  function reveal(s) {
+    var sides = s ? [s] : G.players;
+    function lift(o) { o.stealth = !!o.cloak; o.spotted = undefined; }  /* a cloak is not the pregame's doing */
+    sides.forEach(function (p) {
+      Object.keys(p.modules).forEach(function (id) { lift(p.modules[id]); });
+      Object.keys(p.deployables).forEach(function (id) { lift(p.deployables[id]); });
+    });
+  }
+
+  /* the Starter Cards among a pile, in the pile's own order */
+  function starterIds(s, pile) {
+    return pile.filter(function (id) { return cardIsStarter(s.cards[id]); });
   }
 
   /* ---- who is on whose side ---- */
@@ -347,9 +440,28 @@ var Engine = (function () {
     G.phase = 'upkeep';
     tickDurations(s);
     s.moveLeft = 0;
+    G.phase = 'draw';
+    if (G.turn === 0) {
+      /* the pregame hand is the Starter Cards, and the plays are exactly enough to spend it.
+         Spending the last one drops playsLeft to 0, which is the same signal that ends any
+         other play phase — so the seat hands over by itself with nothing extra to press. */
+      var starters = starterIds(s, s.deck);
+      starters.forEach(function (id) {
+        s.deck.splice(s.deck.indexOf(id), 1);
+        s.hand.push(id);
+      });
+      s.playsLeft = starters.length;
+      log(s.name + ' prepares for combat.', s);
+      G.phase = 'play';
+      /* nothing to deploy is nothing to decide: hand straight on, rather than sitting on a
+         board with no legal action. startTurn does not run the queue, so this cannot wait
+         for step() to notice. */
+      if (!s.playsLeft) { endPlayPhase(); return; }
+      emit();
+      return;
+    }
     s.playsLeft = playCountOf(s);
     log(s.name + ' begins turn ' + G.turn + '.', s);
-    G.phase = 'draw';
     drawCards(s, drawCountOf(s) - s.hand.length > 0 ? drawCountOf(s) - s.hand.length : 0);
     G.phase = 'play';
     emit();
@@ -360,14 +472,33 @@ var Engine = (function () {
     if (G.phase !== 'play') return false;
     var s = side();
     if (s.hand.length) {
-      log(s.name + ' discards ' + s.hand.length + ' card(s) from hand.', s);
+      log(G.turn === 0
+            ? s.name + ' leaves ' + s.hand.length + ' Starter Card(s) in the box.'
+            : s.name + ' discards ' + s.hand.length + ' card(s) from hand.', s);
       s.discard = s.discard.concat(s.hand);
       s.hand = [];
     }
     s.playsLeft = 0;
+    /* The pregame turn has no action phase — there is nothing built yet to fire or fly — so
+       ending it hands straight to the next seat. */
+    if (G.turn === 0) { advancePregame(); return true; }
     G.phase = 'action';
     emit();
     return true;
+  }
+
+  /* Pass the pregame on. The turn counter does the bookkeeping: rolling past the last seat
+     makes it turn 1, and the next startTurn is an ordinary one. */
+  function advancePregame() {
+    var nxt = nextLiving(G.active);
+    if (nxt <= G.active) {
+      G.turn++;                           /* wrapped past the end of the order: 0 becomes 1 */
+      /* everyone's hull comes into view together, so no seat sees another's a moment early */
+      reveal();
+      log('The fleets come into view.');
+    }
+    G.active = nxt;
+    startTurn();
   }
 
   /* ---- presentation channel ----
@@ -393,6 +524,10 @@ var Engine = (function () {
 
   function endTurn() {
     if (G.over) return;
+    /* The pregame turn ends through its play phase, so that unplayed Starter Cards are put
+       away rather than carried into turn 1. This is reachable from the server command as well
+       as the page, so it is refused here rather than only in the UI. */
+    if (G.turn === 0) { endPlayPhase(); return; }
     clearUndo();
     G.pending = null; G.queue = [];
     var s = side();
@@ -452,13 +587,17 @@ var Engine = (function () {
     var absorbed = Math.min(targetSide.shield, amount);
     targetSide.shield -= absorbed;
     var rest = amount - absorbed;
-    mod.hull -= rest;
+    /* A Citadel is the Core wearing another silhouette: the damage lands in the Core's pool,
+       and it is the Core that dies when that pool runs out — the Citadel goes with the wreck. */
+    var hit = hullHolder(targetSide, mod);
+    hit.hull -= rest;
     if (absorbed) {
       log(targetSide.name + "'s shields absorb " + absorbed + '.', targetSide);
       fire(targetSide, 'onShieldDamaged', { amount: absorbed });
     }
-    if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage.', targetSide);
-    if (mod.hull <= 0) destroyModule(targetSide, mod);
+    if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage' +
+                  (hit === mod ? '' : ' — off the Core') + '.', targetSide);
+    if (hit.hull <= 0) destroyModule(targetSide, hit);
     dealtDamage(mod);
     checkWin();
     return rest;
@@ -564,6 +703,7 @@ var Engine = (function () {
      deployable overrun along the way. A computer seat never backs out, so it never pays for
      the copy. */
   var undoPoint = null;
+  var PILES = ['hand', 'played', 'deck', 'discard', 'trash'];
   function copy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
 
   function beginUndo(label) {
@@ -575,6 +715,10 @@ var Engine = (function () {
       label: label, active: G.active, turn: G.turn,
       cells: copy(G.cells), moveLeft: s.moveLeft, playsLeft: s.playsLeft, shield: s.shield,
       cards: copy(s.cards), asteroids: copy(G.asteroids),
+      /* Where the cards were, not just what they were. Taking back a card you played has to
+         put it back in your hand; without the piles it stayed in play with the play refunded,
+         and a cancelled draw kept the card it drew. */
+      piles: PILES.reduce(function (o, k) { o[k] = s[k].slice(); return o; }, {}),
       modules: G.players.map(function (pl) { return copy(pl.modules); }),
       deployables: G.players.map(function (pl) { return copy(pl.deployables); }),
       shields: G.players.map(function (pl) { return pl.shield; })
@@ -594,6 +738,7 @@ var Engine = (function () {
     G.asteroids = u.asteroids;
     s.moveLeft = u.moveLeft; s.playsLeft = u.playsLeft;
     s.cards = u.cards;
+    if (u.piles) PILES.forEach(function (k) { s[k] = u.piles[k].slice(); });
     G.players.forEach(function (pl, i) {
       pl.modules = u.modules[i];
       pl.deployables = u.deployables[i];
@@ -672,20 +817,43 @@ var Engine = (function () {
       onResolve: function (i) { if (i === 0) go(); } });
   };
 
+  /* Set only while a board is being built with no player to ask — see autoDeployStarters.
+     It is a module variable rather than game state so that nothing can persist it or read it
+     back: a real game never berths a module for you. */
+  var autoBerth = false;
   OPS.createModule = function (o, ctx) {
     var s = ctx.side;
-    if (G.setup) {
-      /* deploying before the game begins: berth it ourselves, nearest the Core */
+    if (autoBerth) {
+      /* nobody is here to be asked: berth it ourselves, nearest the Core */
       var cell = firstLegalCell(s, o.module);
       if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' deploys ' + o.module + '.', s); }
       else log(s.name + ' has nowhere to berth ' + o.module + '.', s);
       return;
     }
-    prompt({ kind: 'space', label: 'Place ' + o.module, filter: placementFilter(s, o.module),
-      onResolve: function (cell) {
-        if (cell) { placeModule(s, o.module, cell.x, cell.y); log(s.name + ' builds ' + o.module + '.', s); }
-      } });
+    askShape(s, o.module, function (shape) {
+      prompt({ kind: 'space', label: 'Place ' + o.module, filter: placementFilter(s, o.module),
+        onResolve: function (cell) {
+          if (!cell) return;
+          var id = placeModule(s, o.module, cell.x, cell.y);
+          if (id && shape) s.modules[id].shape = shape;
+          log(s.name + ' builds ' + o.module + '.', s);
+        } });
+    });
   };
+
+  /* A decoy is whatever it chooses to look like, and each one is asked separately. The deal
+     assigns a shape per module *name*, so left to that every decoy on the board would wear the
+     same silhouette — the one thing a decoy must not do. A shape stored on the piece itself
+     overrides the deal for that piece alone. */
+  function askShape(s, modName, then) {
+    if (!fx(modName, 'mod').chooseShape) return then(null);
+    /* Settled before the piece is put down. Asked afterwards, everyone watches the decoy
+       arrive wearing one silhouette and then turn into another, which points straight at it.
+       The answer is never logged either — the log goes to every seat. */
+    prompt({ kind: 'choice', label: 'What should ' + modName + ' look like?',
+      options: MOD_SHAPES.map(shapeName),
+      onResolve: function (i) { then(MOD_SHAPES[i | 0] || MOD_SHAPES[0]); } });
+  }
 
   /* the legal berth closest to the Core, searched outward so a hull grows in a tight cluster */
   function firstLegalCell(s, modName) {
@@ -1008,6 +1176,8 @@ var Engine = (function () {
        permanent rather than something a later repair would clamp away. */
     function give(m, owner) {
       if (!m) return;
+      /* reinforcing a Citadel is reinforcing the Core; there is only the one pool */
+      m = hullHolder(owner || s, m);
       m.hull += n;
       if (o.mayExceed) m.hullMax = Math.max(m.hullMax || 0, m.hull);
       else m.hull = Math.min(m.hull, m.hullMax || m.hull);
@@ -1033,6 +1203,43 @@ var Engine = (function () {
       onResolve: function (id) {
         pool.forEach(function (x) { if (x.m.id === id) give(x.m, x.p); });
       } });
+  };
+
+  /* SU Scanners: "identify the location of any Stealth Objects in sensor range". It does not
+     uncloak them for the table — it tells *you* where they are, so the find is recorded against
+     your team and only your side starts seeing them. Range is measured from your own hull, the
+     way every other sensor effect measures it. The log stays neutral: it reaches every seat,
+     and a count would tell the other side its cloak had been found. */
+  OPS.revealStealth = function (o, ctx) {
+    var s = ctx.side, reach = sensorsOf(s);
+    var mine = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    var found = 0;
+    G.players.forEach(function (p) {
+      if (p.team === s.team) return;
+      ['modules', 'deployables'].forEach(function (k) {
+        Object.keys(p[k]).forEach(function (id) {
+          var t = p[k][id];
+          if (!t.stealth) return;
+          if (!mine.some(function (m) { return dist(m, t) <= reach; })) return;
+          t.spotted = t.spotted || [];
+          if (t.spotted.indexOf(s.team) < 0) { t.spotted.push(s.team); found++; }
+        });
+      });
+    });
+    log(s.name + "'s scanners sweep for hidden objects.", s);
+    return found;
+  };
+
+  /* Cloak. The module is hidden from the other side for the rest of the game — `cloak` marks
+     it as hidden by a card rather than by the pregame, so the reveal at the start of turn 1
+     leaves it alone. What it is is not logged: the log reaches every seat. */
+  OPS.cloak = function (o, ctx) {
+    var s = ctx.side;
+    withOwnModule(s, 'Cloak which module?', function (m) {
+      m.cloak = true;
+      m.stealth = true;
+      log(s.name + ' cloaks a module.', s);
+    }, s.name + ' has no module to cloak.');
   };
 
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.', ctx.side); };
@@ -1393,9 +1600,9 @@ var Engine = (function () {
 
   /* Ask which of your modules this is about, then hand it to `then`. One candidate needs no
      asking; none means the ability simply has nothing to work with. */
-  function withOwnModule(s, label, then) {
+  function withOwnModule(s, label, then, noneMsg) {
     var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
-    if (!mods.length) { log(s.name + ' has no module to move.', s); return; }
+    if (!mods.length) { log(noneMsg || (s.name + ' has no module to move.'), s); return; }
     if (mods.length === 1) { then(mods[0]); return; }
     prompt({ kind: 'target', label: label, targets: mods.map(function (m) { return m.id; }),
       onResolve: function (id) {
@@ -1451,7 +1658,10 @@ var Engine = (function () {
     function give(m) {
       m.tokens = m.tokens || {};
       m.tokens[token] = (m.tokens[token] || 0) + 1;
-      if (token === 'Power') { m.hull += 1; m.hullMax += 1; }
+      if (token === 'Power') {
+        var h = hullHolder(s, m);
+        h.hull += 1; h.hullMax += 1;
+      }
       log(s.name + ' diverts power to ' + m.name + '.', s);
       emit();
     }
@@ -1558,6 +1768,9 @@ var Engine = (function () {
     if (s.playsLeft <= 0) { log('No plays left this turn.'); emit(); return false; }
     var i = s.hand.indexOf(cardId); if (i < 0) return false;
     var card = s.cards[cardId];
+    /* Taken before the card moves, so cancelling puts it back in hand with the play refunded.
+       This is what puts a Cancel beside the Skip on a placement a card asked for. */
+    beginUndo(card.name);
     s.hand.splice(i, 1); s.played.push(cardId);
     s.playsLeft--;
     log(s.name + ' plays ' + card.name + '.', s, 'act');
@@ -1680,6 +1893,23 @@ var Engine = (function () {
       return (pas.effect || []).some(function (o) { return o.op === 'countsAsCore'; });
     });
   }
+  /* A module with no hull of its own: it is a piece of the Core, so damage to it comes off
+     the ship's hull and it reports that number. The Citadel says so in its own static passive
+     — read here the way isCoreLike reads countsAsCore, rather than hardcoded against a name. */
+  function sharesHullWithCore(s, m) {
+    if (!m || !s || m.id === s.coreId) return false;
+    var e = fx(m.name, 'mod');
+    if (e.shareHullWithCore) return true;
+    return (e.passive || []).some(function (pas) {
+      return (pas.effect || []).some(function (o) { return o.op === 'shareHullWithCore'; });
+    });
+  }
+  /* Where a module's hull actually lives. Every read and every write goes through this, so a
+     shared pool is one number in one place and nothing can drift out of step with it. */
+  function hullHolder(s, m) {
+    if (!sharesHullWithCore(s, m)) return m;
+    return s.modules[s.coreId] || m;
+  }
   /* Everything joined to the Core by a chain of adjacent modules. This is the rule beneath
      every card's own requirement: a module may satisfy "adjacent to any" against a neighbour
      and still be invalid, because that pair is drifting on its own with no path home. */
@@ -1799,6 +2029,7 @@ var Engine = (function () {
     if (!G) return null;
     var out = { replica: true, turn: G.turn, active: G.active, phase: G.phase, seq: G.seq,
                 over: G.over, cells: copy(G.cells), asteroids: copy(G.asteroids),
+                shapes: copy(G.shapes),
                 log: G.log.slice(-200), pending: promptData(), canUndo: canUndo(),
                 players: [] };
     G.players.forEach(function (s, i) {
@@ -1835,7 +2066,8 @@ var Engine = (function () {
     /* trimmed: the log is most of the bytes and only the recent lines are ever read */
     var out = copy({ turn: G.turn, active: G.active, phase: G.phase, seq: G.seq, over: G.over,
                      cells: G.cells, asteroids: G.asteroids, players: G.players,
-                     seed: G.seed, rng: G.rng, setup: G.setup });
+                     shapes: G.shapes,
+                     seed: G.seed, rng: G.rng });
     out.log = G.log.slice(-LOG_KEEP);
     return out;
   }
@@ -1846,7 +2078,6 @@ var Engine = (function () {
     G.queue = G.queue || [];
     G.pending = null;
     undoPoint = null;
-    speaker = null;
     emit();
     return G;
   }
@@ -1956,6 +2187,10 @@ var Engine = (function () {
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
     isCoreLike: function (s2, m) { return isCoreLike(s2, m); },
+    hiddenFrom: function (o, viewer) { return hiddenFrom(o, viewer); },
+    reveal: reveal,
+    sharesHullWithCore: function (s2, m) { return sharesHullWithCore(s2, m); },
+    hullHolder: function (s2, m) { return hullHolder(s2, m); },
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
     drawCountOf: drawCountOf, playCountOf: playCountOf,
     storageCapOf: storageCapOf, capacityCapOf: capacityCapOf,

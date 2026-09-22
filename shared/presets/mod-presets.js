@@ -1,6 +1,6 @@
 var MOD_PRESETS = [
     {name:'Quantum Disrupter', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 3 Weapon Modules, this one included, to Target an Object: Range: 12, Check:Sensors, Damage: 6 ☣ ; Create an anomaly on a random space 0-11 away from this Module.'},
-    {name:'Citadel', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'defense', onbuild:'', passive:'Shares Hull HP with your Core, and counts as a Core Module for the purposes of fulfilling requirements.', onactivate:''},
+    {name:'Citadel', traits:'', req:'Adjacent to Core', hull:'', type:'module', tt:'defense', onbuild:'', passive:'Shares Hull HP with your Core, and counts as a Core Module for the purposes of fulfilling requirements.', onactivate:''},
     {name:'Core', traits:'', req:'Adjacent to Core', hull:'5', type:'module', tt:'science', onbuild:'', passive:'', onactivate:''},
     {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable. This is a Stealth Effect.', onactivate:''},
     {name:'Directed Laser Beam', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to target an Object:\nRange: any, Attacks: 1, Dmg: 2 ⚡ (4 if range >= 10)'},
@@ -16,6 +16,6 @@ var MOD_PRESETS = [
     {name:'Thrust Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust to gain 2 Move for each module.'},
     {name:'Shield Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent modules to gain 2 shields.'},
     {name:'SPEAR Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent weapons modules to:\nRange: Sensors, Attacks: 4, Dmg: 2 \u26a1 (Exhaust the module hit for 1 round).'},
-    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'', passive:'This Module may appear as any other Module. This is a Stealth Effect.', onactivate:''}
+    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'Choose the shape it appears as. Each Decoy may be given a different one.', passive:'', onactivate:''}
   ];
 MOD_PRESETS.sort(function(a,b){return a.name.toLowerCase().localeCompare(b.name.toLowerCase());});

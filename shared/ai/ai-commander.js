@@ -242,8 +242,11 @@ var AICommander = (function () {
       if (!found || !found.owner || found.owner.team === s.team) return;
       var owner = found.owner, t = found.obj, isDep = found.kind === 'deployable';
       var sc = st.doctrine.targetBias(t, isDep, owner);
-      if (t.id === owner.coreId) {
-        var lethal = K.expectedDamage(s) >= owner.shield + t.hull;
+      /* A Citadel is the Core's hull under another silhouette, so shooting it is shooting the
+         Core — the lethal check has to weigh the pool the damage actually lands in. */
+      var pool = (!isDep && Engine.hullHolder) ? Engine.hullHolder(owner, t) : t;
+      if (pool.id === owner.coreId) {
+        var lethal = K.expectedDamage(s) >= owner.shield + pool.hull;
         sc = lethal ? 500 : sc - 40;
       }
       if (!isDep && K.preset(t).tt === 'offense' && K.modList(owner).filter(K.isGun).length <= 1) sc += 40;

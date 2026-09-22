@@ -1,12 +1,12 @@
 /* Board piece graphics.
 
    The silhouettes, the slow rotations and the blinking lights are lifted from the tabletop
-   tabletop battle map this game grew out of, so a piece carries no text: its
-   shape says what class of module it is, and everything else — selection, exhaustion, a
-   broken connection, movement left — is a class or a floating badge.
+   battle map this game grew out of, so a piece carries no text: its shape says what class of
+   module it is, and everything else — selection, exhaustion, a broken connection, movement
+   left — is a class or a floating badge.
 
-   hex = Core, triangle = Offense, square = Defense/Armor, diamond = Movement,
-   circle = Science, and anything unrecognised falls back to the hex. */
+   Shapes are dealt per seat when a game starts, so the class clues above are only the fallback
+   for a shape the deal has not assigned. Everything unrecognised falls back to the hex. */
 var GamePieces = (function () {
   'use strict';
 
@@ -33,26 +33,23 @@ var GamePieces = (function () {
     for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
     return (h >>> 0) / 4294967296;
   }
-  /* Low-graphics mode: the SMIL rotates and pulses are simply not built, so a piece has no
-     moving parts at all. The CSS side kills the keyframe animations via html.gfx-low. */
+  /* The rotates and pulses are CSS animations, not SMIL, so a detached piece node is dropped
+     with nothing left behind — SMIL keeps a gone piece's animation state alive and the board
+     leaks memory every time a piece is removed. The CSS side kills the keyframes via
+     html.gfx-low. The groups these attach to are centred on their own origin, so a CSS rotate
+     about (0 0) spins them in place exactly like the SMIL rotate did. */
   var lowGfx = false;
   function setLowGfx(on) { lowGfx = !!on; }
 
   function addRotate(node, dur, reverse) {
     if (lowGfx) return;
-    node.appendChild(svgEl('animateTransform', {
-      attributeName: 'transform', type: 'rotate',
-      from: reverse ? '360' : '0', to: reverse ? '0' : '360',
-      dur: dur, repeatCount: 'indefinite' }));
+    node.style.animation = 'piece-rot ' + dur + ' linear infinite';
+    node.style.animationDirection = reverse ? 'reverse' : 'normal';
   }
   function addPing(node) {
     if (lowGfx) return;
-    node.appendChild(svgEl('animateTransform', {
-      attributeName: 'transform', type: 'scale', values: '.45;1.12', dur: '2.8s',
-      repeatCount: 'indefinite', calcMode: 'spline', keySplines: '0.2 0 0.6 1' }));
-    node.appendChild(svgEl('animate', {
-      attributeName: 'opacity', values: '0;.9;0', keyTimes: '0;.35;1',
-      dur: '2.8s', repeatCount: 'indefinite' }));
+    node.style.animation = 'ping-scale 2.8s cubic-bezier(.2,0,.6,1) infinite,' +
+                           ' ping-fade 2.8s linear infinite';
   }
 
   /* ---------- shapes ---------- */
@@ -143,6 +140,23 @@ var GamePieces = (function () {
     svg.appendChild(g);
   }
 
+  /* The ship itself, carried over from the tabletop board's frigate token: a hull with a
+     lit bridge and two engines that flicker out of step with each other. */
+  function buildFrigate(svg, c) {
+    var g = svgEl('g', { transform: 'translate(36 36)' });
+    g.appendChild(svgEl('path', { d: 'M0 -29 L14 -9 L17 18 L22 22 L22 28 L-22 28 L-22 22 L-17 18 L-14 -9 Z',
+      fill: shade(c, 0.18), stroke: c, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    g.appendChild(svgEl('path', { d: 'M0 -14 L6 -2 L-6 -2 Z', fill: shade(c, 1.3), stroke: 'none' }));
+    var e1 = svgEl('rect', { x: -15, y: 23, width: 7, height: 5, rx: 1, fill: shade(c, 1.5) });
+    e1.setAttribute('class', 'engine');
+    var e2 = svgEl('rect', { x: 8, y: 23, width: 7, height: 5, rx: 1, fill: shade(c, 1.5) });
+    e2.setAttribute('class', 'engine');
+    e2.setAttribute('style', 'animation-delay:.45s');
+    g.appendChild(e1);
+    g.appendChild(e2);
+    svg.appendChild(g);
+  }
+
   /* a lumpy rock, seeded off the asteroid's id so each one keeps its own silhouette */
   function buildAsteroid(svg, seed) {
     var g = svgEl('g', { transform: 'translate(36 36)' });
@@ -205,7 +219,7 @@ var GamePieces = (function () {
   }
 
   var BUILDERS = { hex: buildHex, triangle: buildTriangle, square: buildSquare,
-                   diamond: buildDiamond, circle: buildCircle };
+                   diamond: buildDiamond, circle: buildCircle, frigate: buildFrigate };
 
   /* Does this module stand in for the Core? The Citadel says so in its own rules text — it
      shares the Core's hull and counts as a Core Module — so it wears the Core's silhouette
@@ -219,9 +233,15 @@ var GamePieces = (function () {
     });
   }
 
-  /* the module's own type decides its silhouette; the Core is special-cased because its
-     preset type is 'movement' and it must not read as an engine */
-  function shapeOf(name, isCore) {
+  /* the shape a piece wears. Dealt per seat when the game is dealt (Engine.get().shapes),
+     so a Cannon is not recognisably a triangle from across the board; the Core shuffles like
+     any other name. Only when the game has no deal — an old save, the setup screens — does the
+     shape fall back to the module's class: hex for Core, offense triangle, defence square,
+     movement diamond, science circle. */
+  function shapeOf(owner, name, isCore) {
+    var g = (typeof Engine !== 'undefined' && Engine.get) ? Engine.get() : null;
+    var map = g && g.shapes && g.shapes[owner];
+    if (map && map[name]) return map[name];
     if (isCore || countsAsCore(name)) return 'hex';
     var m = (typeof Engine !== 'undefined' && Engine.findMod) ? Engine.findMod(name) : null;
     var tt = m && m.tt;

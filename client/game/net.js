@@ -24,7 +24,13 @@ var Net = (function () {
     /* Which room the board currently on screen actually came from. Not a boolean: switching
        rooms without disconnecting leaves `online` true from the previous one, and "we are
        online" is then mistaken for "we are showing this game". */
-    stateRoom: null
+    stateRoom: null,
+    /* Sitting in no seat is two different situations and they do not read alike: you have not
+       taken one yet, or you had one and it was taken off you. The page says a different thing
+       about each, so the difference has to survive here rather than be announced once as a
+       message and then be gone. Giving a seat up yourself is the first situation, not the
+       second — you are not looking for an explanation of something you just did. */
+    removed: false
   };
   var lobbyFns = [], errFns = [];
   var LOCAL = {};                     /* the engine calls we took over, kept for offline play */
@@ -92,26 +98,35 @@ var Net = (function () {
 
   function candidates() {
     var out = [], seen = {};
-    function add(b, fromUrl) {
+    function add(b, fromUrl, kept) {
       if (b === null || b === undefined || seen[b]) return;
       seen[b] = 1;
-      out.push({ base: b, fromUrl: !!fromUrl });
+      out.push({ base: b, fromUrl: !!fromUrl, kept: !!kept });
     }
     var asked = (location.search.match(/[?&]server=([^&]+)/) || [])[1];
     if (asked) {
       var want = decodeURIComponent(asked).replace(/\/$/, '');
       if (isTrustedBase(want) || allowForeign(want)) add(want, true);
     }
-    /* Only an address the page found itself is ever remembered — but a browser that met an
-       earlier build may still be holding one it was handed, so it is judged on the way out
-       too, and forgotten if it does not pass. */
-    try {
-      var kept = localStorage.getItem('frigateServer');
-      if (kept && isTrustedBase(kept)) add(kept);
-      else if (kept) localStorage.removeItem('frigateServer');
-    } catch (e) {}
     if (location.protocol === 'http:' || location.protocol === 'https:') add('');   /* same origin */
     if (location.hostname) add(location.protocol + '//' + location.hostname + ':' + DEFAULT_PORT);
+    /* Only an address the page found itself is ever remembered — but a browser that met an
+       earlier build may still be holding one it was handed, so it is judged on the way out
+       too, and forgotten if it does not pass.
+
+       It is asked after the two addresses above and not before them, which is a change of
+       mind. A remembered address is the only candidate that can be wrong about the world:
+       the others are read off where the browser actually is, while this one was written down
+       on some earlier day and the machine it named may since have been given a different
+       number — which is exactly what a WSL host does every time it reboots. Asking the
+       addresses that cannot go stale first costs nothing when the remembered one is still
+       right, and saves the wait when it is not. It still goes ahead of localhost, so a game
+       server genuinely elsewhere on the wifi beats a guess at this machine. */
+    try {
+      var kept = localStorage.getItem('frigateServer');
+      if (kept && isTrustedBase(kept)) add(kept, false, true);
+      else if (kept) localStorage.removeItem('frigateServer');
+    } catch (e) {}
     add('http://localhost:' + DEFAULT_PORT);
     return out;
   }
@@ -131,32 +146,98 @@ var Net = (function () {
     });
   }
 
+  /* How long a candidate is given to answer.
+     A server that is there answers in single milliseconds; one across the room on wifi, or a
+     node process serving its first request, in tens. What takes seconds is not a slow server
+     but a missing one — an address that used to be a machine swallows the connection and says
+     nothing, and the operating system waits out its own retries before admitting it. Nobody
+     is served by that wait, so it is cut short well above any real answer and well below the
+     silence. This is only for looking: once an address has answered, what we send it is given
+     as long as it needs, because a command abandoned halfway is worse than a slow one. */
+  var PROBE_MS = 800;
+
   function probe(base) {
-    return fetch(base + '/api/list', { method: 'GET' })
+    var ctl = null, timer = null;
+    try { ctl = new AbortController(); } catch (e) { ctl = null; }
+    if (ctl) timer = setTimeout(function () { ctl.abort(); }, PROBE_MS);
+    function stop() { if (timer) clearTimeout(timer); }
+    return fetch(base + '/api/list', ctl ? { method: 'GET', signal: ctl.signal }
+                                         : { method: 'GET' })
       .then(readJson)
-      .then(function (j) { if (!j.ok) throw new Error('not the game server'); return base; });
+      .then(function (j) { if (!j.ok) throw new Error('not the game server'); return base; })
+      .then(function (ok) { stop(); return ok; },
+            function (e) { stop(); throw e; });
   }
 
-  /* Resolved once, then reused. */
+  /* All at once, but still in order of preference.
+     A candidate that does not answer used to hold up every candidate behind it, including the
+     one that would have answered immediately. They are asked together now — these are plain
+     GETs to addresses we had already decided we were willing to ask, so asking early costs
+     nothing — and the answers are read in the order the list was built: a candidate wins when
+     it has answered and everything ahead of it has given up. The same address is chosen as
+     before. It is simply chosen without waiting on the silence of the ones that were never
+     going to answer.
+
+     Each is held back a moment behind the one in front, so the usual case — the first address
+     is the right one and answers straight away — never sends the rest at all. */
+  var HEAD_START_MS = 150;
+
+  function noServer() {
+    return new Error(
+      'No game server found. Start it with ./run-online.sh, then reload — or add ' +
+      '?server=http://host:' + DEFAULT_PORT + ' to this address.');
+  }
+
+  function firstThatAnswers(list, run) {
+    return new Promise(function (resolve, reject) {
+      /* Numbers rather than true and false, because '' — this very origin — is a real base and
+         a falsy one, and "has not answered yet" has to be tellable from "answered with ''". */
+      var mark = list.map(function () { return 0; });     /* 0 waiting, 1 answered, -1 no */
+      var done = false;
+      function look() {
+        if (done) return;
+        for (var i = 0; i < list.length; i++) {
+          if (mark[i] === 0) return;                      /* something better may still answer */
+          if (mark[i] === 1) { done = true; resolve(list[i]); return; }
+        }
+        done = true; reject(noServer());
+      }
+      if (!list.length) { done = true; reject(noServer()); return; }
+      list.forEach(function (cand, i) {
+        setTimeout(function () {
+          if (done) { mark[i] = -1; return; }             /* settled already; do not even ask */
+          run(cand).then(function () { mark[i] = 1; look(); },
+                         function () { mark[i] = -1; look(); });
+        }, i * HEAD_START_MS);
+      });
+    });
+  }
+
+  /* Resolved once, then reused — and only looked for once at a time. The page warms this up on
+     arrival, so a click a moment later has to join the search already running rather than start
+     a second one alongside it. A search that found nothing is not remembered: the server may
+     simply have been started since, and a reload should not be the price of that. */
+  var PENDING = null;
   function findServer() {
     if (BASE !== null) return Promise.resolve(BASE);
-    var list = candidates(), i = 0;
-    function next() {
-      if (i >= list.length) {
-        return Promise.reject(new Error(
-          'No game server found. Start it with ./run-online.sh, then reload — or add ' +
-          '?server=http://host:' + DEFAULT_PORT + ' to this address.'));
-      }
-      var cand = list[i++];
-      return probe(cand.base).then(function (ok) {
-        BASE = ok;
-        /* An address the page worked out for itself is worth remembering. One that arrived in
-           the URL is not: remembering it would turn one followed link into every later visit. */
-        if (!cand.fromUrl) { try { localStorage.setItem('frigateServer', ok); } catch (e) {} }
-        return ok;
-      }, next);
-    }
-    return next();
+    if (PENDING) return PENDING;
+    PENDING = firstThatAnswers(candidates(), function (cand) {
+      return probe(cand.base).then(null, function (e) {
+        /* A remembered address is a shortcut, and one that does not answer has stopped being
+           one. Forgetting it here is what stops a machine that has changed its number from
+           being waited on again on every load for the rest of its life. */
+        if (cand.kept) { try { localStorage.removeItem('frigateServer'); } catch (e2) {} }
+        throw e;
+      });
+    }).then(function (cand) {
+      PENDING = null;
+      BASE = cand.base;
+      /* An address the page worked out for itself is worth remembering. One that arrived in
+         the URL is not: remembering it would turn one followed link into every later visit. */
+      if (!cand.fromUrl) { try { localStorage.setItem('frigateServer', BASE); } catch (e) {} }
+      return BASE;
+    }, function (e) { PENDING = null; throw e; });
+    return PENDING;
   }
 
   function api(route, body) {
@@ -200,7 +281,7 @@ var Net = (function () {
 
   function create(seats) {
     return api('/api/create', { seats: seats }).then(function (j) {
-      ST.room = j.room; ST.lobby = j.lobby;
+      ST.room = j.room; ST.lobby = j.lobby; ST.removed = false;
       rememberRoom(j.room);
       fireLobby();
       return j.room;
@@ -227,7 +308,7 @@ var Net = (function () {
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'no such room');
         /* a different room means the board on screen is somebody else's game, whatever it is */
-        if (j.lobby.room !== ST.room) ST.stateRoom = null;
+        if (j.lobby.room !== ST.room) { ST.stateRoom = null; ST.removed = false; }
         ST.room = j.lobby.room; ST.lobby = j.lobby;
         rememberRoom(ST.room);
         fireLobby();
@@ -242,7 +323,7 @@ var Net = (function () {
     var body = { room: ST.room, seat: seat };
     if (had && had.token) body.token = had.token;
     return api('/api/claim', body).then(function (j) {
-      ST.token = j.token; ST.seat = j.seat; ST.lobby = j.lobby;
+      ST.token = j.token; ST.seat = j.seat; ST.lobby = j.lobby; ST.removed = false;
       remember(ST.room, j.token, j.seat);
       connect();
       fireLobby();
@@ -257,6 +338,7 @@ var Net = (function () {
     return api('/api/claim', { room: room, token: had.token, seat: had.seat })
       .then(function (j) {
         ST.room = room; ST.token = j.token; ST.seat = j.seat; ST.lobby = j.lobby;
+        ST.removed = false;
         remember(room, j.token, j.seat);
         connect();
         fireLobby();
@@ -268,7 +350,7 @@ var Net = (function () {
   function release() {
     if (!ST.token) return Promise.resolve();
     var room = ST.room, token = ST.token;
-    ST.token = null; ST.seat = null;
+    ST.token = null; ST.seat = null; ST.removed = false;
     forget(room);
     forgetRoom();
     return api('/api/release', { room: room, token: token }).then(function (j) {
@@ -371,8 +453,8 @@ var Net = (function () {
         /* We believed we held a seat and the server says otherwise — it was given up here or
            freed by the leader. Become a watcher rather than pretending. */
         ST.token = null; ST.seat = null;
+        ST.removed = true;
         forget(ST.room);
-        fireError('your seat was freed — you are watching now');
       }
       if (msg.state) {
         if (!ST.online) install();
@@ -440,6 +522,8 @@ var Net = (function () {
     lobby: function () { return ST.lobby; },
     /* true only when the board on screen is this room's game, as the server sent it */
     hasState: function () { return ST.stateRoom !== null && ST.stateRoom === ST.room; },
+    /* true only where somebody else emptied the chair we were sitting in */
+    removed: function () { return ST.removed; },
     create: create, look: look, claim: claim, resume: resume, release: release, leave: leave,
     kick: kick,
     openGames: openGames, setSeatKind: setSeatKind, setPace: setPace,
