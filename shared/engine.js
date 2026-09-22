@@ -148,7 +148,7 @@ var Engine = (function () {
     var id = uid('m');
     var rec = { id: id, name: modName, x: x, y: y,
                 exhausted: false, tokens: {}, charges: num(m.charges, 0),
-                moveLeft: 0, owner: s.idx };
+                moveLeft: 0, owner: s.idx, stealth: pregame() };
     /* A module that shares the Core's hull carries no hull fields at all. Leaving it a pool
        nothing reads is how the Citadel came to own a second, private 5 HP. */
     if (!sharesHullWithCore(s, rec)) {
@@ -166,7 +166,8 @@ var Engine = (function () {
     shapeFallback(s.idx, depName);
     var id = uid('d');
     s.deployables[id] = { id: id, name: depName, x: x, y: y, hull: num(m.hull, 1),
-                          speed: num(m.speed, 0), charges: num(m.charges, 0), owner: s.idx };
+                          speed: num(m.speed, 0), charges: num(m.charges, 0), owner: s.idx,
+                          stealth: pregame() };
     occupy(x, y, { kind: 'deployable', owner: s.idx, id: id });
     return id;
   }
@@ -236,6 +237,9 @@ var Engine = (function () {
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
           log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
           seed: s0, rng: s0 };
+    /* Settled before a single piece is put down, because the Core is placed below and it has
+       to be hidden with the rest of the hull it is about to grow. */
+    if (!(opts && opts.autoSetup)) G.turn = 0;
     var pts = spawnPoints(configs.length);
     configs.forEach(function (cfg, i) {
       var s = makeSide(cfg.name, cfg);
@@ -267,8 +271,6 @@ var Engine = (function () {
       autoBerth = true;
       try { G.players.forEach(autoDeployStarters); } finally { autoBerth = false; }
       log(G.players.length + '-player game start.');
-    } else {
-      G.turn = 0;
     }
     startTurn();
     return G;
@@ -302,6 +304,32 @@ var Engine = (function () {
       run(fx(card.name, 'tech').onPlay || [], { side: s, card: card });
       var guard = 0;
       while (G.pending && guard++ < 50) resolve(null);
+    });
+  }
+
+  /* ---- stealth ----
+     A stealthed piece is on the board in every way that matters — it fills its square, it
+     blocks line of sight, it can be shot at — but the other side cannot see it. Ships are
+     built under it during the pregame, so nobody reads their opponent's hull off the board
+     before the first turn and berths against it. */
+  function pregame() { return !!G && G.turn === 0; }
+  /* Whether `o` is hidden from the seat `viewer`. A watcher is nobody, and is shown neither
+     side's hull rather than one of them. Your own team always sees its own. */
+  function hiddenFrom(o, viewer) {
+    if (!o || !o.stealth) return false;
+    if (viewer === null || viewer === undefined) return true;
+    var owner = G && G.players[o.owner], seat = G && G.players[viewer];
+    if (!owner || !seat) return true;
+    return owner.team !== seat.team;
+  }
+  /* Everything on the board comes out of stealth at once. The pregame calls this as it ends;
+     it is also the thing a reveal effect should reach for rather than walking the board
+     itself. */
+  function reveal(s) {
+    var sides = s ? [s] : G.players;
+    sides.forEach(function (p) {
+      Object.keys(p.modules).forEach(function (id) { p.modules[id].stealth = false; });
+      Object.keys(p.deployables).forEach(function (id) { p.deployables[id].stealth = false; });
     });
   }
 
@@ -457,7 +485,12 @@ var Engine = (function () {
      makes it turn 1, and the next startTurn is an ordinary one. */
   function advancePregame() {
     var nxt = nextLiving(G.active);
-    if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order: 0 becomes 1 */
+    if (nxt <= G.active) {
+      G.turn++;                           /* wrapped past the end of the order: 0 becomes 1 */
+      /* everyone's hull comes into view together, so no seat sees another's a moment early */
+      reveal();
+      log('The fleets come into view.');
+    }
     G.active = nxt;
     startTurn();
   }
@@ -2083,6 +2116,8 @@ var Engine = (function () {
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
     isCoreLike: function (s2, m) { return isCoreLike(s2, m); },
+    hiddenFrom: function (o, viewer) { return hiddenFrom(o, viewer); },
+    reveal: reveal,
     sharesHullWithCore: function (s2, m) { return sharesHullWithCore(s2, m); },
     hullHolder: function (s2, m) { return hullHolder(s2, m); },
     addAsteroid: addAsteroid, damageAsteroid: damageAsteroid,
