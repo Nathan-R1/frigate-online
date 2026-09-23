@@ -196,8 +196,6 @@ tech: {
                                              effect:[{op:'popup'},{op:'trashSelf'}] }] },
 'Tutorial Prompt — Cards':             { passive:[{ trigger:'onPlayPhase',
                                              effect:[{op:'popup'},{op:'trashSelf'}] }] },
-'Tutorial Prompt — Press to Continue': { passive:[{ trigger:'onPlay',
-                                             effect:[{op:'popup'},{op:'trashSelf'}] }] },
 'Tutorial Prompt — Modules':           { passive:[{ trigger:'onActionPhase',
                                                effect:[{op:'popup'},{op:'trashSelf'}] }] },
 'Tutorial Prompt — Moving':            { passive:[{ trigger:'onMoveDone',
