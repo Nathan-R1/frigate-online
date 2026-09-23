@@ -316,6 +316,14 @@ var Engine = (function () {
         if (spot) placeModule(s, mn, spot.x, spot.y);
       });
       (cfg.deck || []).forEach(function (tn) { addCardToDeck(s, tn); });
+      /* A card that starts in play rather than in the deck — the tutorial's prompt cards.
+         It is created the same way, then lifted straight out of the deck into played. */
+      (cfg.played || []).forEach(function (tn) {
+        var id = addCardToDeck(s, tn);
+        if (!id) return;
+        s.deck.splice(s.deck.indexOf(id), 1);
+        s.played.push(id);
+      });
       shuffle(s.deck);
     });
     scatterAsteroids();
@@ -333,6 +341,13 @@ var Engine = (function () {
       log(G.players.length + '-player game start.');
     }
     startTurn();
+    /* The first turn is under way before anything has happened, so the handover into it is
+       itself an event — the tutorial's opening prompt listens for it. Fired after startTurn
+       so it queues in front of the play-phase prompts and shows first, then the queue is
+       drained so the first bubbles appear at the start rather than on the player's next move
+       (nothing parks yet: the opening prompts cost nothing and ask nothing). */
+    fire(side(), 'onGameStart', {});
+    step();
     return G;
   }
 
@@ -510,6 +525,7 @@ var Engine = (function () {
       s.playsLeft = starters.length;
       log(s.name + ' prepares for combat.', s);
       G.phase = 'play';
+      fire(s, 'onPlayPhase', {});
       /* nothing to deploy is nothing to decide: hand straight on, rather than sitting on a
          board with no legal action. startTurn does not run the queue, so this cannot wait
          for step() to notice. */
@@ -521,6 +537,7 @@ var Engine = (function () {
     log(s.name + ' begins turn ' + G.turn + '.', s);
     drawCards(s, drawCountOf(s) - s.hand.length > 0 ? drawCountOf(s) - s.hand.length : 0);
     G.phase = 'play';
+    fire(s, 'onPlayPhase', {});
     emit();
   }
 
@@ -540,7 +557,13 @@ var Engine = (function () {
        ending it hands straight to the next seat. */
     if (G.turn === 0) { advancePregame(); return true; }
     G.phase = 'action';
-    emit();
+    /* The action phase has begun: anything waiting for that moment — the tutorial's
+       "Modules" prompt — goes out now, before the board is drawn, so the bubble is already
+       up when the player looks. This branch is reached from the end-phase button or from the
+       trailing step() check alike; the nested step is safe because the phase is no longer
+       'play' by the time it returns. */
+    fire(s, 'onActionPhase', {});
+    step();
     return true;
   }
 
@@ -569,6 +592,14 @@ var Engine = (function () {
   var telegraphOn = true;
   function setTelegraph(on) { telegraphOn = !!on; }
   function telegraph() { return telegraphOn && watchers.length > 0; }
+
+  /* ---- notification channel ----
+     A floating prompt is presentation, not state: nothing here changes the game, and with no
+     listener attached a notification is a no-op. The tutorial's prompt cards ask the view to
+     show their text through it — see OPS.popup. */
+  var notifiers = [];
+  function onNotice(fn) { notifiers.push(fn); }
+  function notice(e) { for (var i = 0; i < notifiers.length; i++) notifiers[i](e); }
 
   function nextLiving(from) {
     var n = G.players.length;
@@ -600,6 +631,14 @@ var Engine = (function () {
     var nxt = nextLiving(G.active);
     if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order */
     G.active = nxt;
+    /* The handover is itself an event — the tutorial's turn-2 kit listens for it, and it is
+       always the enemy ending their turn that rolls the counter up to turn 2, so a prompt
+       dealt to the computer's side naturally comes into effect right as turn 2 begins. It is
+       resolved here rather than left queued: anything it grants — the tutorial's deck additions —
+       must be in place before startTurn() draws the new hand below. The phase is 'action' by
+       now, so step()'s trailing endPlayPhase check cannot trip. */
+    fire(s, 'onEndTurn', {});
+    step();
     startTurn();
   }
 
@@ -872,6 +911,13 @@ var Engine = (function () {
     prompt({ kind: 'choice', label: 'Activate passive — ' + o.name + '?',
       options: ['Yes', 'No'],
       onResolve: function (i) { if (i === 0) go(); } });
+  };
+
+  /* A tutorial prompt, not a rule: tell the view to float the card's text over the board,
+     pointing at the piece the prompt is about. It holds no state and parks nothing, so the
+     queue runs straight on to the next op — the same way any other announcement leaves it. */
+  OPS.popup = function (o, ctx) {
+    notice({ card: ctx && ctx.card ? ctx.card.name : null });
   };
 
   /* Set only while a board is being built with no player to ask — see autoDeployStarters.
@@ -1214,6 +1260,7 @@ var Engine = (function () {
         }
         Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
         s.moveLeft = 0;
+        fire(s, 'onMoveDone', {});
       } });
   }
 
@@ -1314,6 +1361,16 @@ var Engine = (function () {
 
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.', ctx.side); };
   OPS.grantPlays = function (o, ctx) { ctx.side.playsLeft += resolveCount(ctx.side, o.n, ctx); log('+' + o.n + ' play.'); };
+  /* The tutorial's turn-2 kit buys its cards from a passive rather than the menu: every side
+     at the table gets the same two, so the human and any computer each have them to play with.
+     Nothing else in the game grants tech into a deck, so this is the only caller. */
+  OPS.addCardsToDeck = function (o, ctx) {
+    (o.cards || []).forEach(function (name) {
+      G.players.forEach(function (p) {
+        if (addCardToDeck(p, name)) log(p.name + ' gains ' + name + '.', p);
+      });
+    });
+  };
 
   OPS.addCharge = function (o, ctx) {
     var c = holderOf(ctx);
@@ -1854,6 +1911,7 @@ var Engine = (function () {
     log(s.name + ' plays ' + card.name + '.', s, 'act');
     var e = fx(card.name, 'tech');
     run(e.onPlay || [], { side: s, card: card });
+    fire(s, 'onPlay', {});
     return true;
   }
 
@@ -2290,6 +2348,7 @@ var Engine = (function () {
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
     undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph, setTelegraph: setTelegraph,
+    onNotice: onNotice, notice: notice,
     hostileObjects: hostileObjects, objectById: objectById, stepObject: stepObject,
     connectedToCore: connectedToCore,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
