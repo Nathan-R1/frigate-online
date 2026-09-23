@@ -538,6 +538,10 @@ var Engine = (function () {
     drawCards(s, drawCountOf(s) - s.hand.length > 0 ? drawCountOf(s) - s.hand.length : 0);
     G.phase = 'play';
     fire(s, 'onPlayPhase', {});
+    /* nothing was drawn — an exhausted deck that shuffles empty — so there is nothing to play
+       and the phase hands straight on. startTurn does not run the queue, so this cannot wait
+       for step() to notice. */
+    if (!s.hand.length) { endPlayPhase(); return; }
     emit();
   }
 
@@ -773,9 +777,11 @@ var Engine = (function () {
       var item = G.queue.shift();
       exec(item.op, item.ctx);
     }
-    /* checked here, not inside playCard, so a card that grants extra plays keeps the phase open */
-    if (!G.pending && !G.queue.length && !G.over &&
-        G.phase === 'play' && side().playsLeft <= 0) endPlayPhase();
+    /* checked here, not inside playCard, so a card that grants extra plays keeps the phase
+       open; an empty hand ends it too — there is nothing left to play, so move on to the
+       action phase rather than sitting on a dead play phase */
+    if (!G.pending && !G.queue.length && !G.over && G.phase === 'play' &&
+        (side().playsLeft <= 0 || !side().hand.length)) endPlayPhase();
     emit();
   }
 
