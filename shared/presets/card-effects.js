@@ -172,7 +172,45 @@ tech: {
                                      pattern:'selfAndAllAdjacent'},
                                     {op:'trashSelf'}] },
 'SU Scanners':            { activate:{ cost:[{op:'exhaustSelf'}],
-                                       effect:[{op:'revealStealth',within:'sensors'}] } }
+                                        effect:[{op:'revealStealth',within:'sensors'}] } },
+
+/* --- tutorial aids: not rules, floating prompts -------------------------
+   Each listens for one moment in the player's own game, floats its text over the board, then
+   takes itself out of play so it can never prompt twice. The two move prompts share a
+   trigger and queue in the order these appear in `played` — Moving first, then End Turn.
+
+   The End Turn card also hands the player a spare Move 3, so someone who cut a module loose
+   can walk it back into the Core's reach. The grant sits behind its trashSelf on purpose:
+   Move 3 opens a fresh move prompt, and finishing that move fires onMoveDone again — by then
+   both cards have already taken themselves out of play, so the second onMoveDone finds
+   nothing left to fire and the grant cannot repeat or recurse.
+
+   The last two listen for the enemy ending their turn — the handover that starts turn 2 — so
+   they are dealt to the computer's `played` rather than the player's. The first grants both
+   turns their turn-2 kit (Cannon Unit and P.D. Unit) before the new hand is drawn, then floats
+   its "Play a card" line. The second tells the player to watch the enemy's modules; the view
+   keeps its bubble until the player hands the turn over (notify.js holds it), so it speaks as
+   the computer begins to move rather than over the player's own play. Each trashes itself the
+   moment it has spoken, so neither ever fires again. */
+'Tutorial Prompt — Click to Begin':    { passive:[{ trigger:'onGameStart',
+                                             effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Cards':             { passive:[{ trigger:'onPlayPhase',
+                                             effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Press to Continue': { passive:[{ trigger:'onPlay',
+                                             effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Modules':           { passive:[{ trigger:'onActionPhase',
+                                               effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Moving':            { passive:[{ trigger:'onMoveDone',
+                                              effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — End Turn':          { passive:[{ trigger:'onMoveDone',
+                                              effect:[{op:'popup'},{op:'trashSelf'},
+                                                      {op:'gainMove',n:3}] }] },
+'Tutorial Prompt — Play a Card':       { passive:[{ trigger:'onEndTurn',
+                                              effect:[{op:'addCardsToDeck',
+                                                       cards:['Cannon Unit','P.D. Unit']},
+                                                      {op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Enemy Moves':       { passive:[{ trigger:'onEndTurn',
+                                              effect:[{op:'popup'},{op:'trashSelf'}] }] }
 },
 
 /* =========================== MODULES =========================== */

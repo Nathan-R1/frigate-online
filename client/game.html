@@ -218,6 +218,10 @@
   .pathlayer.over .move-beacon::after { border-color:rgba(210,84,78,.85); }
   /* cells the selected piece can still reach this turn */
   .cell.inreach { background:rgba(79,216,201,.09); border-color:rgba(79,216,201,.22); }
+  /* the tile the piece being moved still stands on — its gold home square, picked out while
+     the cyan reachable ground fans out from it */
+  .cell.movesel { background:rgba(232,192,74,.35); border-color:#e8c04a;
+                  box-shadow:inset 0 0 12px rgba(232,192,74,.4); }
 
   .ping { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%;
     border:2px solid rgba(255,255,255,.65); box-shadow:0 0 10px rgba(255,255,255,.35);
@@ -660,9 +664,11 @@
   <p style="margin:16px 0 0">
     <button type="button" class="g-btn" id="modeHostBtn">Host</button>
     <button type="button" class="g-btn ghost" id="joinBtn" style="margin-left:8px">Join</button>
+    <button type="button" class="g-btn ghost" id="tutorialBtn" style="margin-left:8px">Tutorial</button>
   </p>
   <p class="rost-note"><b>Host</b> sets up the table — then play it here on this screen, or put
-     it on the server and hand out a code. <b>Join</b> is for when somebody has given you one.</p>
+     it on the server and hand out a code. <b>Join</b> is for when somebody has given you one.
+     <b>Tutorial</b> drops you straight into a fixed local game to learn the ropes.</p>
 </div></div>
 <div class="g-over g-full hidden" id="setupPick"><div class="box">
   <h2 id="setupTitle">Host a game</h2>
@@ -741,6 +747,7 @@
 <script src="../shared/ai/ai-doctrine.js"></script>
 <script src="../shared/ai/ai-commander.js"></script>
 <script src="game/net.js"></script>
+<script src="game/notify.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1019,10 +1026,39 @@
                traits: promote ? (base ? base + ' Starter Card' : 'Starter Card') : base };
     });
   }
+  /* The tutorial deals both sides the fixed kit the menu promises: a single Graviton Unit,
+     promoted to a Starter Card so the pregame builds it into the ship, and a flat 2 in every
+     skill — no saved build or custom roster reaches in. The player also starts with the six
+     Tutorial Prompt techs already in play: their passives drive the teaching popups and each
+     takes itself out of play once it has shown its prompt. The opponent carries the turns-two
+     prompts — Play a Card and Enemy Moves — which speak when its own turn ends and turn 2
+     begins. */
+  function tutorialConfig(i, seat) {
+    var skills = {};
+    ['Cyber', 'Diplomacy', 'Engineering', 'Leadership',
+     'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science']
+      .forEach(function (k) { skills[k] = 2; });
+    var played = i === 0 ? [
+      'Tutorial Prompt — Click to Begin',
+      'Tutorial Prompt — Cards',
+      'Tutorial Prompt — Press to Continue',
+      'Tutorial Prompt — Modules',
+      'Tutorial Prompt — Moving',
+      'Tutorial Prompt — End Turn'
+      /* the turn-2 kit lives with the opponent: it answers the enemy's end-of-turn, the very
+         handover that starts turn 2, adding the Cannon/P.D. units to both decks and floating
+         "Play a card". It queues behind the kit by appearing later in the deal. */
+    ] : ['Tutorial Prompt — Play a Card', 'Tutorial Prompt — Enemy Moves'];
+    return { name: i === 0 ? 'You' : 'Opponent', team: seat.team, ai: seat.ai,
+             deck: [{ name: 'Graviton Unit', traits: 'Starter Card' }],
+             modules: [], played: played, skills: skills };
+  }
+
   /* What a seat brings to the table: its own build if it has one, the stock frigate if not.
      Deployables in a sheet are things its cards create, not hull the ship starts with, so
      only real modules are placed on the board. */
-  function seatConfig(i, seat) {
+  function seatConfig(i, seat, tutorial) {
+    if (tutorial) return tutorialConfig(i, seat);
     /* no pre-placed hull for anyone: every ship is built by the Starter Cards in its deck */
     var base = { name: sideName(i), team: seat.team, ai: seat.ai,
                  deck: starterDeck(), modules: [] };
@@ -1047,17 +1083,19 @@
 
   /* `scenery` is a board nobody is going to play — the one dealt behind the menus so the page
      is not blank. It builds every ship at once, because a pregame waiting on a player who will
-     never arrive would leave four bare Cores on screen. */
-  function start(scenery) {
+     never arrive would leave four bare Cores on screen. `tutorial` locks the table to two seats
+     — a local player against the computer — on the fixed kit the Tutorial button promises. */
+  function start(scenery, tutorial) {
     selMod = null;
     AICommander.reset();
     document.getElementById('modePick').classList.add('hidden');
     document.getElementById('setupPick').classList.add('hidden');
+    if (tutorial) SEATS = [{ team: 0, ai: false }, { team: 1, ai: true }];
     writeStore(GAME_ROSTER_KEY, SEATS);
     /* the roster is now committed: this is the game's own copy from here on */
     SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
     VIEW = localSeats().length ? localSeats()[0] : 0;
-    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat); }),
+    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat, tutorial); }),
                    undefined, { autoSetup: !!scenery });
   }
 
@@ -1190,6 +1228,9 @@
   }
   /* assigned by the stats button below; called from the fit before that code has run */
   var closeStatsDrop = function () {};
+  /* assigned by the log-pane block below; a game that wants the log preset (the tutorial
+     hides it) can say so without owning any of the pane's DOM */
+  var setLogMode = function () {};
 
   /* the stats readable-out is pinned to the button, but sized to the window — it can
      never poke past the edge of a phone screen, whatever the label or roster does */
@@ -1285,6 +1326,28 @@
       applyView();
     } else fitView(n);
   }
+
+  /* Aim the camera at a seat's hull — its centre of mass — at the given zoom, so the board
+     opens somewhere that matters instead of wherever the last pan left it. The tutorial uses
+     it to put the player's ship under the lens. */
+  function focusViewOn(idx, zoom) {
+    var G = Engine.get();
+    var s = G && G.players[idx];
+    if (!s) return;
+    var parts = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+      .concat(Object.keys(s.deployables || {}).map(function (id) { return s.deployables[id]; }));
+    if (!parts.length) return;
+    var cx = 0, cy = 0;
+    parts.forEach(function (p) { cx += p.x; cy += p.y; });
+    cx = cx / parts.length; cy = cy / parts.length;
+    var r = boardEl.getBoundingClientRect();
+    view.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+    view.x = r.width / 2 - (cx * CELL + CELL / 2) * view.zoom;
+    view.y = r.height / 2 - (cy * CELL + CELL / 2) * view.zoom;
+    applyView();
+  }
+  /* the camera, lent to the tutorial prompts so they can pan across to the enemy ship */
+  window.FrigateView = { focus: focusViewOn };
 
   function ensureLayers(n) {
     if (cellsEl) return;
@@ -1502,6 +1565,10 @@
        piece can move to, and squares the shot being aimed can see */
     var reach = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.envelope
               : (actingHere(G) ? reachSet(G) : null);
+    /* the tile the Move prompt has picked up: mark where the selected piece still stands in
+       gold, so the reachable cyan ground reads as fanning out from a home square */
+    var mv = actingHere(G) && p && p.kind === 'move' ? mover(G) : null;
+    var moveCell = (mv && mv.obj) ? mv.obj.x + ',' + mv.obj.y : null;
     var kids = cellsEl.children;
     for (var i = 0; i < kids.length; i++) {
       var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
@@ -1511,6 +1578,8 @@
       if (inShape !== c.classList.contains('preview')) c.classList.toggle('preview', inShape);
       var inr = !!reach && reach[x + ',' + y] === true;
       if (inr !== c.classList.contains('inreach')) c.classList.toggle('inreach', inr);
+      var self = moveCell === (x + ',' + y);
+      if (self !== c.classList.contains('movesel')) c.classList.toggle('movesel', self);
     }
   }
 
@@ -1888,6 +1957,7 @@
     s.played.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       var e = Engine.fx(c.name, 'tech');
+      if (t.hidden) return;   /* tutorial prompts do their speaking via Notify, not the bar */
       /* A card with nothing to activate still sits in play doing its work — it needs showing,
          or a played Heat Sinks simply vanishes. It has no button and is never "unusable". */
       var passiveOnly = !e.activate;
@@ -3181,6 +3251,13 @@
 
   document.getElementById('newBtn').addEventListener('click', exitToMenu);
   document.getElementById('modeHostBtn').addEventListener('click', function () { openSetup(); });
+  document.getElementById('tutorialBtn').addEventListener('click', function () {
+    start(undefined, true);
+    /* the tutorial is about watching your own ship, not the chat of the log — hide it, and
+       lead with a close look at your piece rather than the whole board */
+    setLogMode('off');
+    focusViewOn(0, 2.5);
+  });
   document.getElementById('setupBack').addEventListener('click', askMode);
   rostCount.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-count]');
@@ -3939,6 +4016,7 @@
         head.appendChild(btn);
       }
     }
+    setLogMode = apply;
     apply(logMode);
     btn.addEventListener('click', function () { apply(NEXT[logMode]); });
   })();
