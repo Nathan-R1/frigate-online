@@ -179,11 +179,12 @@ tech: {
    takes itself out of play so it can never prompt twice. The two move prompts share a
    trigger and queue in the order these appear in `played` — Moving first, then End Turn.
 
-   The End Turn card also hands the player a spare Move 3, so someone who cut a module loose
-   can walk it back into the Core's reach. The grant sits behind its trashSelf on purpose:
-   Move 3 opens a fresh move prompt, and finishing that move fires onMoveDone again — by then
-   both cards have already taken themselves out of play, so the second onMoveDone finds
-   nothing left to fire and the grant cannot repeat or recurse.
+   The Moving card also hands the player a spare Move 3, so someone who cut a module loose
+   can walk it back into the Core's reach. It seats itself out of play before the grant — the
+   Move opens a fresh fleet prompt (another onMoveDone), and once it is gone that second fire
+   finds it already gone. The End Turn card stays in play that beat longer so it is the one
+   that speaks on the second Done with "now hand over". Its first queued copy that survives
+   behind the grant is harmless: trashSelf is idempotent and the view shows each bubble once.
 
    The last two listen for the enemy ending their turn — the handover that starts turn 2 — so
    they are dealt to the computer's `played` rather than the player's. The first grants both
@@ -199,10 +200,10 @@ tech: {
 'Tutorial Prompt — Modules':           { passive:[{ trigger:'onActionPhase',
                                                effect:[{op:'popup'},{op:'trashSelf'}] }] },
 'Tutorial Prompt — Moving':            { passive:[{ trigger:'onMoveDone',
-                                              effect:[{op:'popup'},{op:'trashSelf'}] }] },
-'Tutorial Prompt — End Turn':          { passive:[{ trigger:'onMoveDone',
                                               effect:[{op:'popup'},{op:'trashSelf'},
                                                       {op:'gainMove',n:3}] }] },
+'Tutorial Prompt — End Turn':          { passive:[{ trigger:'onMoveDone',
+                                              effect:[{op:'popup'},{op:'trashSelf'}] }] },
 'Tutorial Prompt — Play a Card':       { passive:[{ trigger:'onEndTurn',
                                               effect:[{op:'addCardsToDeck',
                                                        cards:['Cannon Unit','P.D. Unit']},
