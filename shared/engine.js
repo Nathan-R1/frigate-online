@@ -1446,7 +1446,12 @@ var Engine = (function () {
     if (ctx.card) ctx.card.exhausted = true;
     if (ctx.module) exhaustPiece(ctx.side, ctx.module);
   };
-  OPS.trashSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'trash'); };
+  OPS.trashSelf = function (o, ctx) {
+    /* idempotent: a card whose passive fired a second copy of itself may be asked to trash
+       itself twice, and the second time must be a no-op rather than a duplicate entry */
+    var s = ctx.side, c = ctx.card;
+    if (c && s.trash.indexOf(c.id) < 0) moveCard(s, c, 'trash');
+  };
   OPS.discardSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'discard'); };
 
   OPS.refresh = function (o, ctx) {

@@ -23,7 +23,6 @@ var Notify = (function () {
   var ANCHOR = {
     'Tutorial Prompt — Click to Begin':       { side: 'centre' },
     'Tutorial Prompt — Cards':                { id: 'hand', side: 'above' },
-    'Tutorial Prompt — Press to Continue':    { id: 'playPhaseBtn', side: 'below' },
     'Tutorial Prompt — Modules':              { id: 'hand', side: 'above' },
     'Tutorial Prompt — Moving':               { side: 'centre' },
     'Tutorial Prompt — End Turn':             { id: 'endBtn', side: 'below' },
