@@ -3282,6 +3282,13 @@
     /* the tutorial is about watching your own ship, not the chat of the log — hide it, and
        lead with a close look at your piece rather than the whole board */
     setLogMode('off');
+    setLabels(true);
+    var lbl = document.getElementById('labelOpts');
+    if (lbl) {
+      [].forEach.call(lbl.children, function (b) {
+        b.classList.toggle('on', b.getAttribute('data-label') === '1');
+      });
+    }
     focusViewOn(0, 2.5);
   });
   document.getElementById('setupBack').addEventListener('click', askMode);
