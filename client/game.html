@@ -590,6 +590,12 @@
             <button type="button" data-instant="1">On</button>
           </span>
         </div>
+        <div class="set-row"><span class="set-label">Labels</span>
+          <span class="set-opts" id="labelOpts">
+            <button type="button" data-label="0">Off</button>
+            <button type="button" data-label="1">On</button>
+          </span>
+        </div>
         <div class="set-row"><span class="set-label">Debug</span>
           <span class="set-opts" id="debugOpts">
             <button type="button" data-debug="0">Off</button>
@@ -1043,7 +1049,10 @@
       'Tutorial Prompt — Cards',
       'Tutorial Prompt — Modules',
       'Tutorial Prompt — Moving',
-      'Tutorial Prompt — End Turn'
+      'Tutorial Prompt — End Turn',
+      'Tutorial Prompt — Cannon Aim',
+      'Tutorial Prompt — Cannon No Targets',
+      'Tutorial Prompt — Cannon Fired'
       /* the turn-2 kit lives with the opponent: it answers the enemy's end-of-turn, the very
          handover that starts turn 2, adding the Cannon/P.D. units to both decks and floating
          "Play a card". It queues behind the kit by appearing later in the deal. */
@@ -1812,7 +1821,11 @@
             : rec.side.name + ' — Unknown ' + (rec.kind === 'dep' ? 'Deployable' : 'Module');
     var tg = d.querySelector('.pc-tag');
     var bucket = rec.kind === 'dep' ? ambiguous.dep : rec.kind === 'mod' ? ambiguous.mod : null;
-    var tag = (rec.si === meIdx() && bucket && bucket[rec.shape]) ? shortName(o.name) : '';
+    var tag = '';
+    if (rec.si === meIdx()) {
+      if (bucket && bucket[rec.shape]) tag = shortName(o.name);
+      else if (showLabels && (rec.kind === 'mod' || rec.kind === 'dep')) tag = shortName(o.name);
+    }
     tg.textContent = tag;
     tg.style.display = tag ? '' : 'none';
     var ch = d.querySelector('.pc-charge'), mv = d.querySelector('.pc-move');
@@ -2996,6 +3009,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
+    var lbl = document.getElementById('labelOpts');
     var dbg = document.getElementById('debugOpts');
     var gfx = document.getElementById('gfxOpts');
     function mark() {
@@ -3004,6 +3018,9 @@
       });
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
+      });
+      [].forEach.call(lbl.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-label') === '1') === showLabels);
       });
       [].forEach.call(gfx.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-gfx') === 'low') === lowGfx);
@@ -3017,9 +3034,19 @@
       cog.setAttribute('aria-expanded', on ? 'true' : 'false');
     }
     setInstant(instantMoves);      /* apply whatever was remembered */
+    setLabels(showLabels);
     setLowGfx(lowGfx);
     setDebug(debugOn);
     mark();
+    if (lbl) {
+      lbl.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-label]');
+        if (!b) return;
+        setLabels(b.getAttribute('data-label') === '1');
+        mark();
+        Engine.emit();
+      });
+    }
     dbg.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-debug]');
       if (!b) return;
@@ -3938,6 +3965,14 @@
        playing on the server, where this page's preference means nothing at all — so the wish
        is sent on, and the server decides whether you are the one who may grant it. */
     if (online() && Net.isLeader()) Net.setPace(instantMoves).catch(function () {});
+  }
+
+  var showLabels = false;
+  try { showLabels = localStorage.getItem('frigateShowLabels') === '1'; } catch (e) {}
+  function setLabels(on) {
+    showLabels = !!on;
+    try { localStorage.setItem('frigateShowLabels', showLabels ? '1' : '0'); } catch (e) {}
+    Engine.emit();
   }
   Engine.onAnnounce(function (e) {
     if (e.kind !== 'move' || !e.route || e.route.length < 2) return;

@@ -296,7 +296,8 @@ var Engine = (function () {
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
           log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
-          seed: s0, rng: s0 };
+          seed: s0, rng: s0,
+          tut: { cannonActivated: false, cannonFiredAtEnemy: false, cannonNoTargetsShown: false, cannonAimShown: false } };
     /* Settled before a single piece is put down, because the Core is placed below and it has
        to be hidden with the rest of the hull it is about to grow. */
     if (!(opts && opts.autoSetup)) G.turn = 0;
@@ -1043,6 +1044,10 @@ var Engine = (function () {
          other, with nothing to click. Taking it back refunds the activation; skipping leaves
          it spent, which is what used to happen without being asked. */
       log(s.name + ' has no target in range with line of sight.', s);
+      if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonNoTargetsShown) {
+        G.tut.cannonNoTargetsShown = true;
+        fire(s, 'onActivateNoTargets', { module: ctx.module });
+      }
       /* Nothing paid, nobody to ask: a mine that finds nothing simply finds nothing, and the
          player whose turn it happens to be is not the one being offered the choice. */
       if (unattended(o, ctx)) return;
@@ -1050,6 +1055,12 @@ var Engine = (function () {
                envelope: firingEnvelope(origins, reach),
                onResolve: function () {} });
       return;
+    } else {
+      if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonAimShown) {
+        G.tut.cannonAimShown = true;
+        // Trigger aim prompt immediately after activation when targets exist
+        fire(s, 'onActivate', { module: ctx.module, cannonTargets: true });
+      }
     }
     var ids = targets.map(function (m) { return m.id; });
     /* An area weapon does not pick: everything it can see is already a target, so the only
@@ -1070,9 +1081,24 @@ var Engine = (function () {
         } });
       return;
     }
+    if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonAimShown) {
+      G.tut.cannonAimShown = true;
+      fire(s, 'onActivate', { module: ctx.module });
+    }
     prompt({ kind: 'target', label: 'Choose a target', targets: ids,
       envelope: firingEnvelope(origins, reach),
-      onResolve: function (targetId) { shoot(o, ctx, targetId); } });
+      onResolve: function (targetId) {
+        var st = objectById(targetId);
+        if (ctx.module && ctx.module.name === 'Cannon' && G.tut) {
+          if (!G.tut.cannonFiredAtEnemy && st && st.owner && st.owner.team !== s.team) {
+            G.tut.cannonFiredAtEnemy = true;
+          }
+          if (G.tut.cannonFiredAtEnemy) {
+            fire(s, 'onAttackFirstHit', { module: ctx.module, target: st });
+          }
+        }
+        shoot(o, ctx, targetId);
+      } });
   };
 
   OPS.__shot = function (o, ctx) { shoot(o.shot, ctx, o.targetId); };
@@ -1182,6 +1208,10 @@ var Engine = (function () {
           if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
           else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
           else damageModule(t.owner, t.obj, dmg);
+        }
+        if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonFiredAtEnemy && t && t.owner && t.owner.team !== s.team) {
+          G.tut.cannonFiredAtEnemy = true;
+          fire(s, 'onAttackFirstHit', { module: ctx.module, target: t });
         }
         /* riders such as a tractor beam's shove run once, on the first hit that lands.
            Queued rather than run, because we are inside the prompt being resolved. */
@@ -1961,6 +1991,12 @@ var Engine = (function () {
     if (!e.activate) return false;
     var a = e.activate;
     beginUndo(m.name);
+    if (m.name === 'Cannon') {
+      if (G.tut && !G.tut.cannonActivated) {
+        G.tut.cannonActivated = true;
+        fire(s, 'onActivate', { module: m, card: null });
+      }
+    }
     if (a.mode === 'choice') {
       prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {

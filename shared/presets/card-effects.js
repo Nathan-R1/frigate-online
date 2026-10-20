@@ -209,7 +209,13 @@ tech: {
                                                        cards:['Cannon Unit','P.D. Unit']},
                                                       {op:'popup'},{op:'trashSelf'}] }] },
 'Tutorial Prompt — Enemy Moves':       { passive:[{ trigger:'onEndTurn',
-                                              effect:[{op:'popup'},{op:'trashSelf'}] }] }
+                                               effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Cannon Aim':        { passive:[{ trigger:'onActivate',
+                                               effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Cannon No Targets': { passive:[{ trigger:'onActivateNoTargets',
+                                               effect:[{op:'popup'},{op:'trashSelf'}] }] },
+'Tutorial Prompt — Cannon Fired':      { passive:[{ trigger:'onAttackFirstHit',
+                                               effect:[{op:'popup'},{op:'trashSelf'}] }] }
 },
 
 /* =========================== MODULES =========================== */
