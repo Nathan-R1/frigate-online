@@ -28,7 +28,10 @@ var Notify = (function () {
     'Tutorial Prompt — End Turn':             { id: 'endBtn', side: 'below' },
     'Tutorial Prompt — Play a Card':          { id: 'hand', side: 'above' },
     /* the "Enemy Moves" bubble is held until the player hands the turn over — see notice() */
-    'Tutorial Prompt — Enemy Moves':          { side: 'centre' }
+    'Tutorial Prompt — Enemy Moves':          { side: 'centre' },
+    'Tutorial Prompt — Cannon Aim':           { side: 'centre' },
+    'Tutorial Prompt — Cannon No Targets':    { side: 'centre' },
+    'Tutorial Prompt — Cannon Fired':         { id: 'gTop', side: 'above' }
   };
 
   var guard = null, cur = null, queue = [], shown = {};
