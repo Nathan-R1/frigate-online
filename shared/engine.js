@@ -82,6 +82,63 @@ var Engine = (function () {
   function vacate(x, y) { delete G.cells[key(x, y)]; }
   function inBounds(x, y) { return x >= 0 && y >= 0 && x < RULES.boardSize && y < RULES.boardSize; }
 
+  /* ---- standing inside another piece ----
+     The grid holds one occupant per square and every rule reads it that way: line of sight is
+     blocked by it, a module may not be built on it, a move may not pass it. A piece may now
+     step onto a square one of its owner's own pieces already holds — it is then standing
+     *inside* that piece rather than replacing it, and is simply not on the grid until it steps
+     off or the holder leaves. That keeps the one-occupant invariant every other rule depends
+     on, and it is why a piece may pass through but not stop there. */
+  function insideSomething(p) {
+    var c = p && cellAt(p.x, p.y);
+    return !!c && c.id !== p.id;
+  }
+  /* every piece of this side's that is standing inside another; movement cannot end while any
+     of them is */
+  function stackedPieces(s) {
+    var out = [];
+    ['modules', 'deployables'].forEach(function (k) {
+      Object.keys(s[k]).forEach(function (id) {
+        if (insideSomething(s[k][id])) out.push(s[k][id]);
+      });
+    });
+    return out;
+  }
+  /* Find whatever is standing on a square other than `notId`, so it can take the square over
+     when the piece holding it leaves. */
+  function occupantAt(x, y, notId) {
+    for (var i = 0; i < G.players.length; i++) {
+      var pl = G.players[i];
+      var pairs = [['modules', 'module'], ['deployables', 'deployable']];
+      for (var k = 0; k < pairs.length; k++) {
+        var bag = pl[pairs[k][0]], ids = Object.keys(bag);
+        for (var j = 0; j < ids.length; j++) {
+          var q = bag[ids[j]];
+          if (q.id === notId || q.x !== x || q.y !== y) continue;
+          return { kind: pairs[k][1], owner: pl.idx, id: q.id };
+        }
+      }
+    }
+    return null;
+  }
+  /* Step off a square. Only the piece the grid actually holds frees it, and anything that was
+     standing inside it takes it over — otherwise the square would read as empty with a piece
+     still standing on it. */
+  function leaveCell(p) {
+    var c = cellAt(p.x, p.y);
+    if (!c || c.id !== p.id) return;          /* it was inside something: nothing of ours to free */
+    vacate(p.x, p.y);
+    var next = occupantAt(p.x, p.y, p.id);
+    if (next) occupy(p.x, p.y, next);
+  }
+  /* Take a square if it is free; if something already holds it, stand inside instead. */
+  function enterCell(p, kind, ownerIdx) {
+    if (cellAt(p.x, p.y)) return;
+    var ref = { kind: kind, id: p.id };
+    if (ownerIdx !== undefined && ownerIdx !== null) ref.owner = ownerIdx;
+    occupy(p.x, p.y, ref);
+  }
+
   /* ---- line of sight: centre to centre; any occupied square in between blocks.
      Every occupant counts as a blocker, your own hull included. ---- */
   function lineBlocked(sx, sy, tx, ty) {
@@ -239,7 +296,7 @@ var Engine = (function () {
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
           log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
-          seed: s0, rng: s0 };
+          seed: s0, rng: s0, shots: [], shotN: 0 };
     /* Settled before a single piece is put down, because the Core is placed below and it has
        to be hidden with the rest of the hull it is about to grow. */
     if (!(opts && opts.autoSetup)) G.turn = 0;
@@ -259,6 +316,14 @@ var Engine = (function () {
         if (spot) placeModule(s, mn, spot.x, spot.y);
       });
       (cfg.deck || []).forEach(function (tn) { addCardToDeck(s, tn); });
+      /* A card that starts in play rather than in the deck — the tutorial's prompt cards.
+         It is created the same way, then lifted straight out of the deck into played. */
+      (cfg.played || []).forEach(function (tn) {
+        var id = addCardToDeck(s, tn);
+        if (!id) return;
+        s.deck.splice(s.deck.indexOf(id), 1);
+        s.played.push(id);
+      });
       shuffle(s.deck);
     });
     scatterAsteroids();
@@ -276,6 +341,10 @@ var Engine = (function () {
       log(G.players.length + '-player game start.');
     }
     startTurn();
+    /* startTurn does not run the queue, so anything the opening play phase set off — the
+       tutorial's first prompts — is drained here rather than on the player's first move
+       (nothing parks yet: the opening prompts cost nothing and ask nothing). */
+    step();
     return G;
   }
 
@@ -453,6 +522,7 @@ var Engine = (function () {
       s.playsLeft = starters.length;
       log(s.name + ' prepares for combat.', s);
       G.phase = 'play';
+      fire(s, 'onPlayPhase', {});
       /* nothing to deploy is nothing to decide: hand straight on, rather than sitting on a
          board with no legal action. startTurn does not run the queue, so this cannot wait
          for step() to notice. */
@@ -464,6 +534,11 @@ var Engine = (function () {
     log(s.name + ' begins turn ' + G.turn + '.', s);
     drawCards(s, drawCountOf(s) - s.hand.length > 0 ? drawCountOf(s) - s.hand.length : 0);
     G.phase = 'play';
+    fire(s, 'onPlayPhase', {});
+    /* nothing was drawn — an exhausted deck that shuffles empty — so there is nothing to play
+       and the phase hands straight on. startTurn does not run the queue, so this cannot wait
+       for step() to notice. */
+    if (!s.hand.length) { endPlayPhase(); return; }
     emit();
   }
 
@@ -483,7 +558,13 @@ var Engine = (function () {
        ending it hands straight to the next seat. */
     if (G.turn === 0) { advancePregame(); return true; }
     G.phase = 'action';
-    emit();
+    /* The action phase has begun: anything waiting for that moment — the tutorial's
+       "Modules" prompt — goes out now, before the board is drawn, so the bubble is already
+       up when the player looks. This branch is reached from the end-phase button or from the
+       trailing step() check alike; the nested step is safe because the phase is no longer
+       'play' by the time it returns. */
+    fire(s, 'onActionPhase', {});
+    step();
     return true;
   }
 
@@ -513,6 +594,14 @@ var Engine = (function () {
   function setTelegraph(on) { telegraphOn = !!on; }
   function telegraph() { return telegraphOn && watchers.length > 0; }
 
+  /* ---- notification channel ----
+     A floating prompt is presentation, not state: nothing here changes the game, and with no
+     listener attached a notification is a no-op. The tutorial's prompt cards ask the view to
+     show their text through it — see OPS.popup. */
+  var notifiers = [];
+  function onNotice(fn) { notifiers.push(fn); }
+  function notice(e) { for (var i = 0; i < notifiers.length; i++) notifiers[i](e); }
+
   function nextLiving(from) {
     var n = G.players.length;
     for (var i = 1; i <= n; i++) {
@@ -540,9 +629,17 @@ var Engine = (function () {
     s.moveLeft = 0;
     refresh(s);
     log(s.name + ' ends turn.', s);
+    var ended = G.turn;
     var nxt = nextLiving(G.active);
     if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order */
     G.active = nxt;
+    /* The handover is itself an event, and names the turn that just ended — the counter may
+       already have rolled over above. It is resolved here rather than left queued: anything it
+       grants — the tutorial's turn-2 kit — must be in place before startTurn() draws the new
+       hand below. The phase is 'action' by now, so step()'s trailing endPlayPhase check cannot
+       trip. */
+    fire(s, 'onEndTurn', { turn: ended });
+    step();
     startTurn();
   }
 
@@ -621,7 +718,7 @@ var Engine = (function () {
          found at all. The queued effect keeps a direct reference, so the blast still knows
          where the mine was standing. */
       fire(s, 'onDestroyedOrEnemyEnters', { self: dep, source: dep });
-      vacate(dep.x, dep.y);
+      leaveCell(dep);
       delete s.deployables[dep.id];
     }
     return amount;
@@ -629,7 +726,7 @@ var Engine = (function () {
 
   function destroyModule(s, mod) {
     log(s.name + "'s " + mod.name + ' is destroyed.', s);
-    vacate(mod.x, mod.y);
+    leaveCell(mod);
     delete s.modules[mod.id];
     checkWin();
   }
@@ -677,9 +774,11 @@ var Engine = (function () {
       var item = G.queue.shift();
       exec(item.op, item.ctx);
     }
-    /* checked here, not inside playCard, so a card that grants extra plays keeps the phase open */
-    if (!G.pending && !G.queue.length && !G.over &&
-        G.phase === 'play' && side().playsLeft <= 0) endPlayPhase();
+    /* checked here, not inside playCard, so a card that grants extra plays keeps the phase
+       open; an empty hand ends it too — there is nothing left to play, so move on to the
+       action phase rather than sitting on a dead play phase */
+    if (!G.pending && !G.queue.length && !G.over && G.phase === 'play' &&
+        (side().playsLeft <= 0 || !side().hand.length)) endPlayPhase();
     emit();
   }
 
@@ -790,6 +889,7 @@ var Engine = (function () {
            not every mine on the board. Such an event names the piece it happened to, and only
            that piece's own passive is offered the chance to answer. */
         if (payload && payload.self && h.obj !== payload.self) return;
+        if (!matches(pas.match, payload)) return;
         var ctx = {};
         for (var k in h.ctx) ctx[k] = h.ctx[k];
         for (var k2 in (payload || {})) ctx[k2] = payload[k2];
@@ -797,6 +897,16 @@ var Engine = (function () {
       });
     });
     if (items.length) G.queue = items.concat(G.queue);
+  }
+
+  /* A passive may narrow its trigger with `match`: each key names a field of the event and the
+     value it must have — or a list of values, any one of which will do. */
+  function matches(want, payload) {
+    for (var k in (want || {})) {
+      var v = payload ? payload[k] : undefined;
+      if (Array.isArray(want[k]) ? want[k].indexOf(v) < 0 : want[k] !== v) return false;
+    }
+    return true;
   }
 
   /* ---- op implementations ---- */
@@ -815,6 +925,15 @@ var Engine = (function () {
     prompt({ kind: 'choice', label: 'Activate passive — ' + o.name + '?',
       options: ['Yes', 'No'],
       onResolve: function (i) { if (i === 0) go(); } });
+  };
+
+  /* A tutorial prompt, not a rule: tell the view to float some words over the board, pointing
+     at the element `at` names (the centre of the screen without one). `focus` also swings the
+     camera to whoever is now at the controls. It holds no state and parks nothing, so the queue
+     runs straight on to the next op — the same way any other announcement leaves it. */
+  OPS.popup = function (o) {
+    notice({ title: o.title, text: o.text || '', at: o.at || null, side: o.side || 'centre',
+             focus: o.focus ? G.active : null });
   };
 
   /* Set only while a board is being built with no player to ask — see autoDeployStarters.
@@ -937,9 +1056,9 @@ var Engine = (function () {
       /* Nothing paid, nobody to ask: a mine that finds nothing simply finds nothing, and the
          player whose turn it happens to be is not the one being offered the choice. */
       if (unattended(o, ctx)) return;
-      prompt({ kind: 'target', label: 'Nothing in range', targets: [],
-               envelope: firingEnvelope(origins, reach),
-               onResolve: function () {} });
+      aim(ctx, false, { kind: 'target', label: 'Nothing in range', targets: [],
+                        envelope: firingEnvelope(origins, reach),
+                        onResolve: function () {} });
       return;
     }
     var ids = targets.map(function (m) { return m.id; });
@@ -961,10 +1080,20 @@ var Engine = (function () {
         } });
       return;
     }
-    prompt({ kind: 'target', label: 'Choose a target', targets: ids,
+    aim(ctx, true, { kind: 'target', label: 'Choose a target', targets: ids,
       envelope: firingEnvelope(origins, reach),
       onResolve: function (targetId) { shoot(o, ctx, targetId); } });
   };
+
+  /* A weapon being pointed at something is an event (the tutorial's aiming tips listen for
+     it), and whatever answers it has to be heard before the target is asked for — a prompt
+     parks the queue, so anything left behind it would only speak once the shot was over. The
+     prompt is therefore queued too, and the answers are fired in front of it. */
+  function aim(ctx, inRange, p) {
+    enqueue([{ op: '__prompt', p: p }], ctx);
+    fire(ctx.side, 'onAim', { weapon: ctx.module ? ctx.module.name : null, inRange: inRange });
+  }
+  OPS.__prompt = function (o) { prompt(o.p); };
 
   OPS.__shot = function (o, ctx) { shoot(o.shot, ctx, o.targetId); };
 
@@ -1037,7 +1166,8 @@ var Engine = (function () {
     var base = resolveCount(s, o.dmg, ctx);
     /* a powered gun hits harder; a zero-damage beam is not a gun, and stays zero */
     var dmg = base > 0 ? base + powerOf(from) : 0;
-    var hit = false;
+    var hit = false, landed = false, rolls = [];
+    var shot = { from: from || ctx.module || null, to: t.obj };
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
     var friendly = !!t.owner && t.owner.team === s.team;
@@ -1067,6 +1197,7 @@ var Engine = (function () {
         log('  ' + c.text + ' — miss; Decomp Strikes rerolls.');
         c = again;
       }
+      rolls.push(c.hit);
       if (c.hit) {
         log('  ' + c.text + ' — hit.');
         if (dmg > 0) {
@@ -1074,6 +1205,7 @@ var Engine = (function () {
           else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
           else damageModule(t.owner, t.obj, dmg);
         }
+        landed = true;
         /* riders such as a tractor beam's shove run once, on the first hit that lands.
            Queued rather than run, because we are inside the prompt being resolved. */
         if (o.onSuccess && !hit) {
@@ -1085,6 +1217,32 @@ var Engine = (function () {
       } else log('  ' + c.text + ' — miss.');
       if (!objectById(targetId)) break;
     }
+    recordShot(o, s, shot.from, shot.to, rolls);
+    /* once per shot that lands, however many of its attacks did — the tutorial's "Great Shot"
+       listens for the one, and its "Damage Taken" for the other, which goes to the ship that
+       was hit: shields or hull, it has been attacked */
+    if (!landed) return;
+    fire(s, 'onHit', { weapon: ctx.module ? ctx.module.name : null, foe: !!t.owner && !friendly });
+    if (dmg > 0 && t.kind === 'module') fire(t.owner, 'onAttacked', { foe: !friendly });
+  }
+
+  /* ---- the shot, for the view ----
+     What the board needs to draw a shot after the fact: where it came from, where it went,
+     and how each roll came out. It is written into the state rather than announced, so an
+     online player — whose page only ever sees snapshots — is shown the same shot as the
+     page that fired it. `n` only grows, which is how the view tells a shot it has drawn from
+     one it has not. The weapon's look is the view's business: the shot carries the attack's
+     own `anim` and `dmgType` and nothing more. Positions are taken before the dice, so a
+     beam that drags its target off still ends where the target was standing. */
+  var SHOTS_KEEP = 16;
+  function recordShot(o, s, from, to, rolls) {
+    function spot(p) {
+      return p ? { id: p.id, x: p.x, y: p.y, owner: p.owner, stealth: !!p.stealth,
+                   spotted: p.spotted ? p.spotted.slice() : undefined } : null;
+    }
+    G.shotN = (G.shotN || 0) + 1;
+    G.shots = (G.shots || []).concat([{ n: G.shotN, side: s.idx, from: spot(from), to: spot(to),
+      rolls: rolls, anim: o.anim || null, dmgType: o.dmgType || null }]).slice(-SHOTS_KEEP);
   }
 
   /* Every square this shot can see: in range of some origin, with a clear line to it. Worked
@@ -1139,13 +1297,27 @@ var Engine = (function () {
     Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
     s.moveLeft = n;
     log(s.name + ' gains Move ' + n + ' per module.', s);
+    openFleetMove(s, n);
+  };
+
+  /* Move your whole fleet. A piece may pass through your own hull, so the phase cannot be
+     ended while one is still standing inside another — the prompt simply comes back. */
+  function openFleetMove(s, n) {
     prompt({ kind: 'move', label: 'Move your modules — ' + n + ' each',
       /* Done means done: unspent Move is lost rather than banked onto the next engine */
       onResolve: function () {
+        var stuck = stackedPieces(s);
+        if (stuck.length) {
+          log(s.name + ' cannot stop with ' + stuck.length +
+              (stuck.length === 1 ? ' piece' : ' pieces') + ' inside another — move clear first.', s);
+          openFleetMove(s, n);
+          return;
+        }
         Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
         s.moveLeft = 0;
+        fire(s, 'onMoveDone', {});
       } });
-  };
+  }
 
   OPS.gainShield = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
@@ -1244,6 +1416,16 @@ var Engine = (function () {
 
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.', ctx.side); };
   OPS.grantPlays = function (o, ctx) { ctx.side.playsLeft += resolveCount(ctx.side, o.n, ctx); log('+' + o.n + ' play.'); };
+  /* The tutorial's turn-2 kit buys its cards from a passive rather than the menu: every side
+     at the table gets the same two, so the human and any computer each have them to play with.
+     Nothing else in the game grants tech into a deck, so this is the only caller. */
+  OPS.addCardsToDeck = function (o, ctx) {
+    (o.cards || []).forEach(function (name) {
+      G.players.forEach(function (p) {
+        if (addCardToDeck(p, name)) log(p.name + ' gains ' + name + '.', p);
+      });
+    });
+  };
 
   OPS.addCharge = function (o, ctx) {
     var c = holderOf(ctx);
@@ -1313,7 +1495,12 @@ var Engine = (function () {
     if (ctx.card) ctx.card.exhausted = true;
     if (ctx.module) exhaustPiece(ctx.side, ctx.module);
   };
-  OPS.trashSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'trash'); };
+  OPS.trashSelf = function (o, ctx) {
+    /* idempotent: a card whose passive fired a second copy of itself may be asked to trash
+       itself twice, and the second time must be a no-op rather than a duplicate entry */
+    var s = ctx.side, c = ctx.card;
+    if (c && s.trash.indexOf(c.id) < 0) moveCard(s, c, 'trash');
+  };
   OPS.discardSelf = function (o, ctx) { moveCard(ctx.side, ctx.card, 'discard'); };
 
   OPS.refresh = function (o, ctx) {
@@ -1493,6 +1680,21 @@ var Engine = (function () {
     return activationShortfall(a, ctx) || null;
   }
 
+  /* An activation that is a choice — Shield Generator's Charge or Shield. Every option is
+     offered, but one whose cost cannot be met (a Shield with no charge to spend) is offered
+     disabled with the reason beside it, rather than taken and refused: picking it would only
+     ever be a wasted click. */
+  function offerChoice(a, ctx, label) {
+    var why = a.options.map(function (opt) { return activationShortfall(opt, ctx) || null; });
+    prompt({ kind: 'choice', label: label, disabled: why,
+      options: a.options.map(function (x) { return x.label; }),
+      onResolve: function (idx) {
+        var opt = a.options[idx]; if (!opt || why[idx]) return;
+        activate(opt.cost, opt.effect, ctx, label, opt.label);
+      } });
+    return true;
+  }
+
   /* Run an activation, but only if its cost can be met in full. */
   function activate(cost, effect, ctx, label, option) {
     var why = costShortfall(cost, ctx) || effectShortfall(effect, ctx);
@@ -1567,8 +1769,16 @@ var Engine = (function () {
     fire(s, 'onMove', { moveBonus: true });
   }
   function openStepMove(obj, n) {
-    prompt({ kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
-             objId: obj.id, left: n, onResolve: function () {} });
+    /* The prompt object is the live one — stepObject decrements G.pending.left, which is this
+       same `p` — so re-opening after a refusal carries the Move that is actually left. */
+    var p = { kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
+              objId: obj.id, left: n,
+              onResolve: function () {
+                if (!insideSomething(obj)) return;
+                log(obj.name + ' cannot stop inside another piece — move it clear.');
+                openStepMove(obj, p.left);
+              } };
+    prompt(p);
   }
   OPS.__stepMove = function (o, ctx) {
     var s = ctx.side, t = objectById(o.objId);
@@ -1776,6 +1986,7 @@ var Engine = (function () {
     log(s.name + ' plays ' + card.name + '.', s, 'act');
     var e = fx(card.name, 'tech');
     run(e.onPlay || [], { side: s, card: card });
+    fire(s, 'onPlay', {});
     return true;
   }
 
@@ -1791,14 +2002,7 @@ var Engine = (function () {
     if (!e.activate) return false;
     var a = e.activate;
     beginUndo(card.name);
-    if (a.mode === 'choice') {
-      prompt({ kind: 'choice', label: card.name, options: a.options.map(function (x) { return x.label; }),
-        onResolve: function (idx) {
-          var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, { side: s, card: card }, card.name, opt.label);
-        } });
-      return true;
-    }
+    if (a.mode === 'choice') return offerChoice(a, { side: s, card: card }, card.name);
     return activate(a.cost, a.effect, { side: s, card: card }, card.name);
   }
 
@@ -1814,14 +2018,7 @@ var Engine = (function () {
     if (!e.activate) return false;
     var a = e.activate;
     beginUndo(m.name);
-    if (a.mode === 'choice') {
-      prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
-        onResolve: function (idx) {
-          var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, { side: s, module: m }, m.name, opt.label);
-        } });
-      return true;
-    }
+    if (a.mode === 'choice') return offerChoice(a, { side: s, module: m }, m.name);
     return activate(a.cost, a.effect, { side: s, module: m }, m.name);
   }
 
@@ -1838,14 +2035,7 @@ var Engine = (function () {
     var a = e.activate;
     beginUndo(d.name);
     var ctx = { side: s, module: d, deployable: d };
-    if (a.mode === 'choice') {
-      prompt({ kind: 'choice', label: d.name, options: a.options.map(function (x) { return x.label; }),
-        onResolve: function (idx) {
-          var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, ctx, d.name, opt.label);
-        } });
-      return true;
-    }
+    if (a.mode === 'choice') return offerChoice(a, ctx, d.name);
     return activate(a.cost, a.effect, ctx, d.name);
   }
 
@@ -1860,20 +2050,34 @@ var Engine = (function () {
     if (!inBounds(nx, ny)) return false;
     var c = cellAt(nx, ny);
     if (c) {
-      /* a module may overrun a deployable, but nothing else */
-      if (c.kind !== 'deployable') return false;
-      var od = G.players[c.owner].deployables[c.id];
-      if (od) {
-        log(m.name + ' overruns ' + od.name + '.');
-        /* "an enemy enters this space" — driving over a mine is the case it exists for */
-        fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
-        vacate(od.x, od.y);
-        delete G.players[c.owner].deployables[c.id];
+      var ours = c.owner === s.idx;
+      /* Your own hull is something you can move through — you end up standing inside it, and
+         the move phase will not let you stop there. Anybody else's still blocks. */
+      if (c.kind === 'module') {
+        if (!ours) return false;
+        /* You must have the Move to get out again. Without this a piece could spend its last
+           step going inside your hull, and then be unable to leave a square it is not allowed
+           to stop on — the move phase would refuse to end with no legal way to fix it. */
+        if (m.moveLeft <= 1) { log(m.name + ' has not the Move to pass through and get clear.', s); return false; }
       }
+      else if (c.kind === 'deployable') {
+        /* Your own deployable is passed over, not driven over. An enemy's is overrun, which is
+           the case the rule exists for. */
+        if (!ours) {
+          var od = G.players[c.owner].deployables[c.id];
+          if (od) {
+            log(m.name + ' overruns ' + od.name + '.');
+            /* "an enemy enters this space" — driving over a mine is what this is for */
+            fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
+            vacate(od.x, od.y);
+            delete G.players[c.owner].deployables[c.id];
+          }
+        }
+      } else return false;                     /* a rock or an anomaly stops you dead */
     }
-    vacate(m.x, m.y);
+    leaveCell(m);
     m.x = nx; m.y = ny; m.moveLeft--;
-    occupy(nx, ny, { kind: 'module', owner: s.idx, id: m.id });
+    enterCell(m, 'module', s.idx);
     /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
        outside the resolver, so nothing else will come along to drain it. A mine driven over
        would have been queued to detonate and then simply sat there. */
@@ -1984,10 +2188,26 @@ var Engine = (function () {
     var t = objectById(objId);
     if (!t || !G.pending || G.pending.left <= 0) return false;
     var o = t.obj, nx = o.x + dx, ny = o.y + dy;
-    if (!inBounds(nx, ny) || cellAt(nx, ny)) return false;
-    vacate(o.x, o.y); o.x = nx; o.y = ny;
-    occupy(nx, ny, t.kind === 'asteroid' ? { kind: 'asteroid', id: o.id }
-                                         : { kind: t.kind, owner: t.owner.idx, id: o.id });
+    if (!inBounds(nx, ny)) return false;
+    var c = cellAt(nx, ny);
+    if (c) {
+      /* A deployable of yours may pass through anything else of yours — another deployable or
+         your own hull. Everything else is still solid, and an enemy deployable is not overrun
+         by a deployable: overrunning is a module's doing. */
+      var through = t.kind === 'deployable' && t.owner && c.owner === t.owner.idx &&
+                    (c.kind === 'deployable' || c.kind === 'module');
+      if (!through) return false;
+      /* It has to have the Move to get out again, or it would be stranded on a square it is
+         not allowed to stop on with no legal step left — the prompt would refuse to close and
+         there would be no way to fix it. */
+      if (G.pending.left <= 1) {
+        log(o.name + ' has not the Move to pass through and get clear.');
+        return false;
+      }
+    }
+    leaveCell(o);
+    o.x = nx; o.y = ny;
+    enterCell(o, t.kind === 'asteroid' ? 'asteroid' : t.kind, t.owner ? t.owner.idx : null);
     G.pending.left--; emit();
     return true;
   }
@@ -2012,7 +2232,7 @@ var Engine = (function () {
     var p = G.pending;
     if (!p) return null;
     var out = { kind: p.kind, label: p.label };
-    ['options', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards'].forEach(function (k) {
+    ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards'].forEach(function (k) {
       if (p[k] !== undefined) out[k] = p[k];
     });
     if (typeof p.filter === 'function') {
@@ -2031,6 +2251,7 @@ var Engine = (function () {
                 over: G.over, cells: copy(G.cells), asteroids: copy(G.asteroids),
                 shapes: copy(G.shapes),
                 log: G.log.slice(-200), pending: promptData(), canUndo: canUndo(),
+                shots: copy(G.shots || []),
                 players: [] };
     G.players.forEach(function (s, i) {
       var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead,
@@ -2182,12 +2403,18 @@ var Engine = (function () {
     enemiesOf: enemiesOf, alliesOf: alliesOf, alive: alive, foe: foe, teamsAlive: teamsAlive,
     undo: undo, canUndo: canUndo,
     onAnnounce: onAnnounce, announce: announce, telegraph: telegraph, setTelegraph: setTelegraph,
+    onNotice: onNotice, notice: notice,
     hostileObjects: hostileObjects, objectById: objectById, stepObject: stepObject,
     connectedToCore: connectedToCore,
     isStarterCard: isStarterCard, cardIsStarter: cardIsStarter, hasStarterTrait: hasStarterTrait,
     costShortfall: costShortfall, affordable: affordable, shortfall: shortfall,
     isCoreLike: function (s2, m) { return isCoreLike(s2, m); },
     hiddenFrom: function (o, viewer) { return hiddenFrom(o, viewer); },
+    stacked: function (idx) {
+      var s = G && G.players[idx];
+      return s ? stackedPieces(s).map(function (p) { return p.id; }) : [];
+    },
+    insideSomething: function (p) { return insideSomething(p); },
     reveal: reveal,
     sharesHullWithCore: function (s2, m) { return sharesHullWithCore(s2, m); },
     hullHolder: function (s2, m) { return hullHolder(s2, m); },

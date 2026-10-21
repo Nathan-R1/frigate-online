@@ -128,6 +128,11 @@
   .piece.marked { cursor:default; }
   /* ready to activate */
   .piece.ready .module-svg { filter:drop-shadow(0 0 5px var(--pc)) drop-shadow(0 0 13px var(--pc)); }
+  /* A piece of yours standing inside another. It cannot stay there, so it is marked until it
+     is moved clear — otherwise it is hidden underneath and impossible to find. */
+  .piece.stacked { outline:2px dashed var(--red); outline-offset:1px; border-radius:5px;
+    z-index:6; }
+  .piece.stacked .module-svg { opacity:.55; }
   /* A hidden piece you can see: your own cloak, or an enemy's that your scanners picked up.
      Drawn as a contact rather than a solid piece, so it never reads as something the whole
      table can see. */
@@ -213,6 +218,10 @@
   .pathlayer.over .move-beacon::after { border-color:rgba(210,84,78,.85); }
   /* cells the selected piece can still reach this turn */
   .cell.inreach { background:rgba(79,216,201,.09); border-color:rgba(79,216,201,.22); }
+  /* the tile the piece being moved still stands on — its gold home square, picked out while
+     the cyan reachable ground fans out from it */
+  .cell.movesel { background:rgba(232,192,74,.35); border-color:#e8c04a;
+                  box-shadow:inset 0 0 12px rgba(232,192,74,.4); }
 
   .ping { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%;
     border:2px solid rgba(255,255,255,.65); box-shadow:0 0 10px rgba(255,255,255,.35);
@@ -581,6 +590,12 @@
             <button type="button" data-instant="1">On</button>
           </span>
         </div>
+        <div class="set-row"><span class="set-label">Labels</span>
+          <span class="set-opts" id="labelOpts">
+            <button type="button" data-label="0">Off</button>
+            <button type="button" data-label="1">On</button>
+          </span>
+        </div>
         <div class="set-row"><span class="set-label">Debug</span>
           <span class="set-opts" id="debugOpts">
             <button type="button" data-debug="0">Off</button>
@@ -655,9 +670,11 @@
   <p style="margin:16px 0 0">
     <button type="button" class="g-btn" id="modeHostBtn">Host</button>
     <button type="button" class="g-btn ghost" id="joinBtn" style="margin-left:8px">Join</button>
+    <button type="button" class="g-btn ghost" id="tutorialBtn" style="margin-left:8px">Tutorial</button>
   </p>
   <p class="rost-note"><b>Host</b> sets up the table — then play it here on this screen, or put
-     it on the server and hand out a code. <b>Join</b> is for when somebody has given you one.</p>
+     it on the server and hand out a code. <b>Join</b> is for when somebody has given you one.
+     <b>Tutorial</b> drops you straight into a fixed local game to learn the ropes.</p>
 </div></div>
 <div class="g-over g-full hidden" id="setupPick"><div class="box">
   <h2 id="setupTitle">Host a game</h2>
@@ -736,6 +753,8 @@
 <script src="../shared/ai/ai-doctrine.js"></script>
 <script src="../shared/ai/ai-commander.js"></script>
 <script src="game/net.js"></script>
+<script src="game/notify.js"></script>
+<script src="game/attack-fx.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1014,10 +1033,31 @@
                traits: promote ? (base ? base + ' Starter Card' : 'Starter Card') : base };
     });
   }
+  /* The tutorial deals both sides the fixed kit the menu promises: a single Graviton Unit,
+     promoted to a Starter Card so the pregame builds it into the ship, and a flat 2 in every
+     skill — no saved build or custom roster reaches in. Both sides also start with Tutorial
+     Prompt techs already in play: their passives drive the teaching popups and each takes
+     itself out of play once it has spoken (card-effects.js). The opponent holds only Play a
+     Card, which answers its own end of turn 1 by handing both decks the turn-2 kit. */
+  function tutorialConfig(i, seat) {
+    var skills = {};
+    ['Cyber', 'Diplomacy', 'Engineering', 'Leadership',
+     'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science']
+      .forEach(function (k) { skills[k] = 2; });
+    var played = (i === 0
+      ? ['Cards', 'Modules', 'Moving', 'Enemy Moves', 'Aim', 'No Targets', 'Great Shot',
+         'Damage Taken']
+      : ['Play a Card']).map(function (n) { return 'Tutorial Prompt — ' + n; });
+    return { name: i === 0 ? 'You' : 'Opponent', team: seat.team, ai: seat.ai,
+             deck: [{ name: 'Graviton Unit', traits: 'Starter Card' }],
+             modules: [], played: played, skills: skills };
+  }
+
   /* What a seat brings to the table: its own build if it has one, the stock frigate if not.
      Deployables in a sheet are things its cards create, not hull the ship starts with, so
      only real modules are placed on the board. */
-  function seatConfig(i, seat) {
+  function seatConfig(i, seat, tutorial) {
+    if (tutorial) return tutorialConfig(i, seat);
     /* no pre-placed hull for anyone: every ship is built by the Starter Cards in its deck */
     var base = { name: sideName(i), team: seat.team, ai: seat.ai,
                  deck: starterDeck(), modules: [] };
@@ -1042,17 +1082,19 @@
 
   /* `scenery` is a board nobody is going to play — the one dealt behind the menus so the page
      is not blank. It builds every ship at once, because a pregame waiting on a player who will
-     never arrive would leave four bare Cores on screen. */
-  function start(scenery) {
+     never arrive would leave four bare Cores on screen. `tutorial` locks the table to two seats
+     — a local player against the computer — on the fixed kit the Tutorial button promises. */
+  function start(scenery, tutorial) {
     selMod = null;
     AICommander.reset();
     document.getElementById('modePick').classList.add('hidden');
     document.getElementById('setupPick').classList.add('hidden');
+    if (tutorial) SEATS = [{ team: 0, ai: false }, { team: 1, ai: true }];
     writeStore(GAME_ROSTER_KEY, SEATS);
     /* the roster is now committed: this is the game's own copy from here on */
     SEATED = SEATS.map(function (x) { return { team: x.team, ai: x.ai }; });
     VIEW = localSeats().length ? localSeats()[0] : 0;
-    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat); }),
+    Engine.newGame(SEATED.map(function (seat, i) { return seatConfig(i, seat, tutorial); }),
                    undefined, { autoSetup: !!scenery });
   }
 
@@ -1081,15 +1123,23 @@
     syncView(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
-    if (G.over) document.getElementById('overTitle').textContent = overText(G);
+    if (G.over) document.getElementById('overTitle').innerHTML = overHtml(G);
   }
 
   /* Name the winner. A personal verdict tells you nothing you did not already know, and in a
-     three or four player game it does not even say who took it. */
-  function overText(G) {
+     three or four player game it does not even say who took it.
+
+     Each name is written in its own seat's colour — the colour that seat's ship and its bar on
+     the top row already wear — so a shared win reads at a glance instead of having to match
+     names to sides. The words between them stay the box's own colour. This is the one place the
+     title is markup rather than text, and names come from sheets and lobbies, so they are
+     escaped on the way in. */
+  function overHtml(G) {
     var w = G.over.winners || [];
     if (!w.length) return 'Everyone is destroyed';
-    var names = w.map(function (i) { return G.players[i].name; });
+    var names = w.map(function (i) {
+      return '<span style="color:' + SEAT_HEX[i % 4] + '">' + esc(G.players[i].name) + '</span>';
+    });
     if (names.length === 1) return names[0] + ' wins';
     return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win';
   }
@@ -1177,6 +1227,9 @@
   }
   /* assigned by the stats button below; called from the fit before that code has run */
   var closeStatsDrop = function () {};
+  /* assigned by the log-pane block below; a game that wants the log preset (the tutorial
+     hides it) can say so without owning any of the pane's DOM */
+  var setLogMode = function () {};
 
   /* the stats readable-out is pinned to the button, but sized to the window — it can
      never poke past the edge of a phone screen, whatever the label or roster does */
@@ -1273,6 +1326,28 @@
     } else fitView(n);
   }
 
+  /* Aim the camera at a seat's hull — its centre of mass — at the given zoom, so the board
+     opens somewhere that matters instead of wherever the last pan left it. The tutorial uses
+     it to put the player's ship under the lens. */
+  function focusViewOn(idx, zoom) {
+    var G = Engine.get();
+    var s = G && G.players[idx];
+    if (!s) return;
+    var parts = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+      .concat(Object.keys(s.deployables || {}).map(function (id) { return s.deployables[id]; }));
+    if (!parts.length) return;
+    var cx = 0, cy = 0;
+    parts.forEach(function (p) { cx += p.x; cy += p.y; });
+    cx = cx / parts.length; cy = cy / parts.length;
+    var r = boardEl.getBoundingClientRect();
+    view.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+    view.x = r.width / 2 - (cx * CELL + CELL / 2) * view.zoom;
+    view.y = r.height / 2 - (cy * CELL + CELL / 2) * view.zoom;
+    applyView();
+  }
+  /* the camera, lent to the tutorial prompts so they can pan across to the enemy ship */
+  window.FrigateView = { focus: focusViewOn };
+
   function ensureLayers(n) {
     if (cellsEl) return;
     var px = n * CELL;
@@ -1313,15 +1388,24 @@
      A module may step onto empty ground or over a deployable, which it destroys; anything
      else stops it. BFS gives the shortest legal route, and the preview shows it whether or
      not this turn's Move covers the whole thing. */
-  function passable(x, y) {
+  /* Where the thing being moved may step, which depends on what it is. Anything of your own
+     — hull or deployable — can be moved through, though the move cannot *end* inside it. A
+     module also drives over anybody's deployable, overrunning an enemy's; a deployable does
+     not, because overrunning is a module's doing. Enemy hull, rocks and anomalies are solid.
+     With no mover given it answers for a module of yours, which is the common case. */
+  function passable(x, y, mv) {
     var n = Engine.RULES.boardSize;
     if (x < 0 || y < 0 || x >= n || y >= n) return false;
     var c = Engine.cellAt(x, y);
-    return !c || c.kind === 'deployable';
+    if (!c) return true;
+    var kind = mv && mv.kind ? mv.kind : 'module';
+    var owner = mv && mv.owner !== undefined && mv.owner !== null ? mv.owner : meIdx();
+    if (c.owner === owner && (c.kind === 'module' || c.kind === 'deployable')) return true;
+    return kind === 'module' && c.kind === 'deployable';
   }
-  function routeTo(from, tx, ty) {
+  function routeTo(from, tx, ty, mv) {
     if (from.x === tx && from.y === ty) return [{ x: from.x, y: from.y }];
-    if (!passable(tx, ty)) return null;
+    if (!passable(tx, ty, mv)) return null;
     var seen = {}, q = [{ x: from.x, y: from.y, prev: null }], head = 0;
     seen[from.x + ',' + from.y] = 1;
     var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -1329,7 +1413,7 @@
       var cur = q[head++];
       for (var i = 0; i < 4; i++) {
         var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
-        if (seen[k] || !passable(nx, ny)) continue;
+        if (seen[k] || !passable(nx, ny, mv)) continue;
         seen[k] = 1;
         var node = { x: nx, y: ny, prev: cur };
         if (nx === tx && ny === ty) {
@@ -1352,11 +1436,12 @@
     if (p.kind === 'moveObject') {
       /* whatever is on the end of the beam: your drone, an enemy module, a rock */
       var t = Engine.objectById(p.objId);
-      return t ? { obj: t.obj, left: p.left } : null;
+      return t ? { obj: t.obj, left: p.left, kind: t.kind,
+                   owner: t.owner ? t.owner.idx : null } : null;
     }
     if (p.kind === 'move' && selMod) {
       var m = G.players[meIdx()].modules[selMod];
-      return m ? { obj: m, left: m.moveLeft } : null;
+      return m ? { obj: m, left: m.moveLeft, kind: 'module', owner: meIdx() } : null;
     }
     return null;
   }
@@ -1378,7 +1463,7 @@
     if (telegraphed) { drawPoly(telegraphed, false); distEl.classList.add('hidden'); return telegraphed; }
     var mv = mover(G);
     if (!mv || !hoverCell) return clearRoute();
-    var route = routeTo(mv.obj, hoverCell.x, hoverCell.y);
+    var route = routeTo(mv.obj, hoverCell.x, hoverCell.y, mv);
     if (!route || route.length < 2) return clearRoute();
     drawPoly(route, route.length - 1 > mv.left);
     showDist(route.length - 1, mv.left, route.length - 1 > mv.left);
@@ -1429,10 +1514,16 @@
     syncSelection(G);
     paintCells(G);
     renderConnections(G);
+    /* shots the engine has recorded since the last look are drawn over the board, from where
+       you sit: a shooter hidden from you fires from nowhere you can see. Queued before the
+       pieces are painted, so a piece one of them destroyed can be held until it lands. */
+    AttackFx.sync(G, { layer: fxEl, cell: CELL, viewer: meIdx(), still: lowGfx || stillMotion,
+                       colour: function (i) { return SEAT_HEX[i % 4]; } });
     paintPieces(G);
     renderMoveHud(G);
     drawRoute(G);
   }
+  var stillMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   /* the Move counter from the tabletop board: what the selected piece has left, and what
      the rest of the fleet still has banked */
@@ -1479,6 +1570,10 @@
        piece can move to, and squares the shot being aimed can see */
     var reach = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.envelope
               : (actingHere(G) ? reachSet(G) : null);
+    /* the tile the Move prompt has picked up: mark where the selected piece still stands in
+       gold, so the reachable cyan ground reads as fanning out from a home square */
+    var mv = actingHere(G) && p && p.kind === 'move' ? mover(G) : null;
+    var moveCell = (mv && mv.obj) ? mv.obj.x + ',' + mv.obj.y : null;
     var kids = cellsEl.children;
     for (var i = 0; i < kids.length; i++) {
       var c = kids[i], x = +c.getAttribute('data-x'), y = +c.getAttribute('data-y');
@@ -1488,6 +1583,8 @@
       if (inShape !== c.classList.contains('preview')) c.classList.toggle('preview', inShape);
       var inr = !!reach && reach[x + ',' + y] === true;
       if (inr !== c.classList.contains('inreach')) c.classList.toggle('inreach', inr);
+      var self = moveCell === (x + ',' + y);
+      if (self !== c.classList.contains('movesel')) c.classList.toggle('movesel', self);
     }
   }
 
@@ -1503,7 +1600,7 @@
       if (cur.d >= mv.left) continue;
       for (var i = 0; i < 4; i++) {
         var nx = cur.x + dirs[i][0], ny = cur.y + dirs[i][1], k = nx + ',' + ny;
-        if (k in seen || !passable(nx, ny)) continue;
+        if (k in seen || !passable(nx, ny, mv)) continue;
         seen[k] = true;
         q.push({ x: nx, y: ny, d: cur.d + 1 });
       }
@@ -1699,6 +1796,8 @@
       /* it is on screen, so either it is yours or your scanners found it — either way it is
          not a piece the other side can see */
       if (o.stealth) cls += ' scanned';
+      /* standing inside another piece: legal on the way past, not somewhere to stop */
+      if (mine && Engine.insideSomething && Engine.insideSomething(o)) cls += ' stacked';
       if (rec.kind === 'mod' && !Engine.meetsReq(rec.side, o)) cls += ' badreq';
       /* movement state only means anything while a move prompt is open */
       if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
@@ -1719,7 +1818,11 @@
             : rec.side.name + ' — Unknown ' + (rec.kind === 'dep' ? 'Deployable' : 'Module');
     var tg = d.querySelector('.pc-tag');
     var bucket = rec.kind === 'dep' ? ambiguous.dep : rec.kind === 'mod' ? ambiguous.mod : null;
-    var tag = (rec.si === meIdx() && bucket && bucket[rec.shape]) ? shortName(o.name) : '';
+    var tag = '';
+    if (rec.si === meIdx()) {
+      if (bucket && bucket[rec.shape]) tag = shortName(o.name);
+      else if (showLabels && (rec.kind === 'mod' || rec.kind === 'dep')) tag = shortName(o.name);
+    }
     tg.textContent = tag;
     tg.style.display = tag ? '' : 'none';
     var ch = d.querySelector('.pc-charge'), mv = d.querySelector('.pc-move');
@@ -1776,7 +1879,8 @@
     var kids = piecesEl.children;
     for (var k = kids.length - 1; k >= 0; k--) {
       var id = kids[k].getAttribute('data-obj');
-      if (!want[id]) piecesEl.removeChild(kids[k]);
+      /* a piece a shot still on its way destroyed waits for that shot (attack-fx.js) */
+      if (!want[id] && !AttackFx.keep(kids[k], id)) piecesEl.removeChild(kids[k]);
     }
     var byId = {};
     for (var i = 0; i < piecesEl.children.length; i++)
@@ -1863,6 +1967,7 @@
     s.played.forEach(function (id) {
       var c = s.cards[id], t = Engine.findTech(c.name) || {};
       var e = Engine.fx(c.name, 'tech');
+      if (t.hidden) return;   /* tutorial prompts do their speaking via Notify, not the bar */
       /* A card with nothing to activate still sits in play doing its work — it needs showing,
          or a played Heat Sinks simply vanishes. It has no button and is never "unusable". */
       var passiveOnly = !e.activate;
@@ -2418,7 +2523,10 @@
     var h = '<div class="p-label">' + esc(p.label || p.kind) + '</div>';
     if (p.kind === 'choice')
       h += p.options.map(function (o, i) {
-        return '<button class="g-btn" style="margin:2px" data-choice="' + i + '">' + esc(o) + '</button>'; }).join('') +
+        /* an option that cannot be paid for is shown but not offered, saying why */
+        var why = p.disabled && p.disabled[i];
+        return '<button class="g-btn" style="margin:2px" data-choice="' + i + '"' +
+               (why ? ' disabled title="' + esc('Cannot: ' + why) + '"' : '') + '>' + esc(o) + '</button>'; }).join('') +
         cancelBtn();
     else if (p.kind === 'move') {
       var s = G.players[G.active], sm = s.modules[selMod];
@@ -2429,12 +2537,16 @@
            '<div style="font-size:11px;margin-bottom:4px">Selected: <b style="color:var(--cyan)">' +
            (sm ? esc(sm.name) + ' (' + sm.moveLeft + ' left)' : 'none') + '</b> — ' + total + ' Move unspent</div>' +
            movePad(!!sm && sm.moveLeft > 0) +
-           '<button class="g-btn" data-done="1">Done moving</button>' + cancelBtn();
+           stuckNote(G) +
+           '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
+           '>Done moving</button>' + cancelBtn();
     }
     else if (p.kind === 'moveObject')
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Click where it should go, ' +
            'or use the pad — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' + movePad(p.left > 0) +
-           '<button class="g-btn" data-done="1">Done</button>' + cancelBtn();
+           stuckNote(G) +
+           '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
+           '>Done</button>' + cancelBtn();
     else if (p.kind === 'space')
       h += '<div style="font-size:11px;color:var(--ink-dim)">Click a highlighted cell.</div>' +
            '<div style="margin-top:6px">' +
@@ -2480,6 +2592,20 @@
   /* Cancel is offered wherever an activation can still be taken back. It puts the pieces
      where they stood and hands back everything the cost took — the modules it exhausted, the
      charges it spent, the drone it ran over — not just the part you were being asked about. */
+  /* Pieces of the acting side that are standing inside another. Movement cannot be ended
+     while there are any, so the button is greyed and the reason is written out — the engine
+     refuses it too, so this is the explanation rather than the rule. */
+  function stuckIds(G) {
+    return (Engine.stacked ? Engine.stacked(G.active) : []) || [];
+  }
+  function stuckNote(G) {
+    var n = stuckIds(G).length;
+    if (!n) return '';
+    return '<div style="font-size:11px;color:var(--red);margin-bottom:6px">' +
+           (n === 1 ? 'A piece is' : n + ' pieces are') + ' still inside another ' +
+           '(outlined in red). Move ' + (n === 1 ? 'it' : 'them') + ' clear to finish.</div>';
+  }
+
   function cancelBtn(label) {
     if (!Engine.canUndo()) return '';
     return '<button class="g-btn ghost" style="margin-left:6px" data-cancel="1">' +
@@ -2741,7 +2867,7 @@
         return Engine.resolve(cell);
       /* clicking open ground walks the selected piece there along the previewed route */
       if (mover(G) && cell) {
-        var route = routeTo(mover(G).obj, cell.x, cell.y);
+        var route = routeTo(mover(G).obj, cell.x, cell.y, mover(G));
         if (route && route.length > 1) walkRoute(route);
       }
       return;
@@ -2884,6 +3010,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
+    var lbl = document.getElementById('labelOpts');
     var dbg = document.getElementById('debugOpts');
     var gfx = document.getElementById('gfxOpts');
     function mark() {
@@ -2892,6 +3019,9 @@
       });
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
+      });
+      [].forEach.call(lbl.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-label') === '1') === showLabels);
       });
       [].forEach.call(gfx.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-gfx') === 'low') === lowGfx);
@@ -2905,9 +3035,19 @@
       cog.setAttribute('aria-expanded', on ? 'true' : 'false');
     }
     setInstant(instantMoves);      /* apply whatever was remembered */
+    setLabels(showLabels);
     setLowGfx(lowGfx);
     setDebug(debugOn);
     mark();
+    if (lbl) {
+      lbl.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-label]');
+        if (!b) return;
+        setLabels(b.getAttribute('data-label') === '1');
+        mark();
+        Engine.emit();
+      });
+    }
     dbg.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-debug]');
       if (!b) return;
@@ -3138,6 +3278,20 @@
 
   document.getElementById('newBtn').addEventListener('click', exitToMenu);
   document.getElementById('modeHostBtn').addEventListener('click', function () { openSetup(); });
+  document.getElementById('tutorialBtn').addEventListener('click', function () {
+    start(undefined, true);
+    /* the tutorial is about watching your own ship, not the chat of the log — hide it, and
+       lead with a close look at your piece rather than the whole board */
+    setLogMode('off');
+    setLabels(true);
+    var lbl = document.getElementById('labelOpts');
+    if (lbl) {
+      [].forEach.call(lbl.children, function (b) {
+        b.classList.toggle('on', b.getAttribute('data-label') === '1');
+      });
+    }
+    focusViewOn(0, 2.5);
+  });
   document.getElementById('setupBack').addEventListener('click', askMode);
   rostCount.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-count]');
@@ -3820,6 +3974,14 @@
        is sent on, and the server decides whether you are the one who may grant it. */
     if (online() && Net.isLeader()) Net.setPace(instantMoves).catch(function () {});
   }
+
+  var showLabels = false;
+  try { showLabels = localStorage.getItem('frigateShowLabels') === '1'; } catch (e) {}
+  function setLabels(on) {
+    showLabels = !!on;
+    try { localStorage.setItem('frigateShowLabels', showLabels ? '1' : '0'); } catch (e) {}
+    Engine.emit();
+  }
   Engine.onAnnounce(function (e) {
     if (e.kind !== 'move' || !e.route || e.route.length < 2) return;
     if (e.side === meIdx()) return;              /* your own moves you are making yourself */
@@ -3896,6 +4058,7 @@
         head.appendChild(btn);
       }
     }
+    setLogMode = apply;
     apply(logMode);
     btn.addEventListener('click', function () { apply(NEXT[logMode]); });
   })();

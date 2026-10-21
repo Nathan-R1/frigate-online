@@ -976,6 +976,7 @@
       for (var i = 0; i < TECH_PRESETS.length; i++) {
         var t = TECH_PRESETS[i];
         if (used[t.name]) continue;
+        if (t.hidden) continue;
         if (techClasses(t).indexOf(cls) === -1) continue;
         if ((t.rarity || 'common') !== rarity) continue;
         pool.push(t.name);
@@ -1000,6 +1001,7 @@
       for (var i = 0; i < TECH_PRESETS.length; i++) {
         var t = TECH_PRESETS[i];
         if (used[t.name]) continue;
+        if (t.hidden) continue;
         if (techClasses(t).indexOf(cls) === -1) continue;
         used[t.name] = true;
         out.push({ name: t.name, cls: cls });

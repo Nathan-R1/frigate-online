@@ -76,15 +76,18 @@ tech: {
                                                 attacks:'heatSpent',dmg:1,dmgType:'energy'}] } },
 
 /* --- control / utility attacks --- */
+/* `anim` on an attack names how the board draws it (client/game/attack-fx.js). Left out, the
+   look follows the damage type; these two do no damage, and a beam that takes hold of its
+   target reads as one rather than as a shell bursting. */
 /* a beam, not a gun: it may take hold of anything it can see, friendly hull included */
 'Tract Beam':             { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'attack',range:'sensors',from:'offenseModule',
-                                                attacks:1,dmg:0,check:'Cyber',targets:'any',
+                                                attacks:1,dmg:0,check:'Cyber',targets:'any',anim:'tractor',
                                                 onSuccess:[{op:'moveObject',what:'target',n:2}]}] } },
 'Unwinder Array':         { onPlay:[{op:'addCharge',target:'self',n:4},{op:'exhaustSelf'}],
                             activate:{ cost:[{op:'exhaustSelf'},{op:'spendCharge',n:1}],
                                        effect:[{op:'attack',range:'sensors',from:'any',attacks:1,dmg:0,
-                                                check:'Cyber',
+                                                check:'Cyber',anim:'tractor',
                                                 onSuccess:[{op:'applyStatus',status:'noMove',
                                                             duration:'startOfYourNextTurn',target:'target'}]}] } },
 
@@ -172,7 +175,70 @@ tech: {
                                      pattern:'selfAndAllAdjacent'},
                                     {op:'trashSelf'}] },
 'SU Scanners':            { activate:{ cost:[{op:'exhaustSelf'}],
-                                       effect:[{op:'revealStealth',within:'sensors'}] } }
+                                        effect:[{op:'revealStealth',within:'sensors'}] } },
+
+/* --- tutorial aids: not rules, floating prompts -------------------------
+   Each listens for one moment in the player's own game, floats its words over the board, then
+   takes itself out of play so it can never prompt twice — a card that has left play is never
+   offered another event, so that is all the bookkeeping there is. `at` names the element the
+   bubble points at (none means the centre of the screen); `side` is which side of it.
+
+   Moving hands the player a spare Move 3, so someone who cut a module loose can walk it back
+   into the Core's reach. It leaves play before the grant, so the Done that ends that move finds
+   it gone; its last popup waits in the queue behind the move and speaks once it is made.
+
+   Enemy Moves answers the player's own first handover and swings the camera across to the
+   computer as it begins to move. Play a Card is dealt to the computer instead: it answers the
+   computer ending turn 1, so the turn-2 kit (Cannon Unit and P.D. Unit) is in both decks before
+   the player's new hand is drawn. Both swing the camera to whoever is now at the controls: the
+   computer as turn 1 hands over, then back to the player as turn 2 begins.
+
+   The weapon tips cover both of the kit's guns, whichever is fired first. */
+'Tutorial Prompt — Cards':       { passive:[{ trigger:'onPlayPhase', effect:[
+    {op:'popup', title:'Click to Begin'},
+    {op:'popup', title:'Cards', text:'Click Play to place cards from your hand into play.',
+     at:'hand', side:'above'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — Modules':     { passive:[{ trigger:'onActionPhase', effect:[
+    {op:'popup', title:'Modules',
+     text:'Modules in-play can be reused every turn. Click Activate to use a module.',
+     at:'hand', side:'above'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — Moving':      { passive:[{ trigger:'onMoveDone', effect:[
+    {op:'popup', title:'Moving',
+     text:'If your modules are not connected to your Core at the end of your turn you will lose them.\n' +
+          'A spare Move 3 has been granted to walk any back into reach.'},
+    {op:'trashSelf'},
+    {op:'gainMove', n:3},
+    {op:'popup', title:'End Your Turn', text:'Now press End Turn to hand over to your opponent.',
+     at:'endBtn', side:'below'}] }] },
+'Tutorial Prompt — Enemy Moves': { passive:[{ trigger:'onEndTurn', match:{turn:1}, effect:[
+    {op:'popup', title:'Enemy Moves', focus:true,
+     text:'Keep an eye on how your enemy uses their modules to try and identify them.'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — Play a Card': { passive:[{ trigger:'onEndTurn', match:{turn:1}, effect:[
+    {op:'addCardsToDeck', cards:['Cannon Unit','P.D. Unit']},
+    {op:'popup', title:'Play a card', focus:true, text:'You can only play 1 card each play phase so choose wisely.',
+     at:'hand', side:'above'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — Aim':         { passive:[{ trigger:'onAim',
+                                              match:{weapon:['Cannon','P.D.'], inRange:true}, effect:[
+    {op:'popup', title:'Choose a target', text:'Select a gold highlighted square to fire at it.'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — No Targets':  { passive:[{ trigger:'onAim',
+                                              match:{weapon:['Cannon','P.D.'], inRange:false}, effect:[
+    {op:'popup', title:'No targets in range', text:'Try again when you are closer to the enemy.'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — Great Shot':  { passive:[{ trigger:'onHit',
+                                              match:{weapon:['Cannon','P.D.'], foe:true}, effect:[
+    {op:'popup', title:'Great Shot!',
+     text:'Congrats you have attacked the enemy! See their shields and life here.',
+     at:'barRow', side:'below'},
+    {op:'trashSelf'}] }] },
+'Tutorial Prompt — Damage Taken':{ passive:[{ trigger:'onAttacked', match:{foe:true}, effect:[
+    {op:'popup', title:'Damage Taken', text:'You were attacked',
+     at:'barRow', side:'below'},
+    {op:'trashSelf'}] }] }
 },
 
 /* =========================== MODULES =========================== */
@@ -204,8 +270,9 @@ mod: {
                            asking for three OTHERS means a small ship can never fire it at all. */
                         activate:{ cost:[{op:'exhaustOther',filter:'offenseModule',n:3,
                                           includeSelf:true}],
+                                   /* bio damage, but it fires like the energy weapon it is */
                                    effect:[{op:'attack',range:12,from:'self',attacks:1,dmg:6,
-                                            check:'Sensors',dmgType:'bio'},
+                                            check:'Sensors',dmgType:'bio',anim:'energy'},
                                            {op:'createAnomaly',at:'random',fromSelf:true,minR:0,maxR:11}] } },
 'SPEAR Connector':    { placement:'adjacentToAny',
                         activate:{ cost:[{op:'exhaustOther',filter:'offenseModuleAdjacent',n:2}],
