@@ -2523,7 +2523,10 @@
     var h = '<div class="p-label">' + esc(p.label || p.kind) + '</div>';
     if (p.kind === 'choice')
       h += p.options.map(function (o, i) {
-        return '<button class="g-btn" style="margin:2px" data-choice="' + i + '">' + esc(o) + '</button>'; }).join('') +
+        /* an option that cannot be paid for is shown but not offered, saying why */
+        var why = p.disabled && p.disabled[i];
+        return '<button class="g-btn" style="margin:2px" data-choice="' + i + '"' +
+               (why ? ' disabled title="' + esc('Cannot: ' + why) + '"' : '') + '>' + esc(o) + '</button>'; }).join('') +
         cancelBtn();
     else if (p.kind === 'move') {
       var s = G.players[G.active], sm = s.modules[selMod];

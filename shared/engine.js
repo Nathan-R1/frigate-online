@@ -1680,6 +1680,21 @@ var Engine = (function () {
     return activationShortfall(a, ctx) || null;
   }
 
+  /* An activation that is a choice — Shield Generator's Charge or Shield. Every option is
+     offered, but one whose cost cannot be met (a Shield with no charge to spend) is offered
+     disabled with the reason beside it, rather than taken and refused: picking it would only
+     ever be a wasted click. */
+  function offerChoice(a, ctx, label) {
+    var why = a.options.map(function (opt) { return activationShortfall(opt, ctx) || null; });
+    prompt({ kind: 'choice', label: label, disabled: why,
+      options: a.options.map(function (x) { return x.label; }),
+      onResolve: function (idx) {
+        var opt = a.options[idx]; if (!opt || why[idx]) return;
+        activate(opt.cost, opt.effect, ctx, label, opt.label);
+      } });
+    return true;
+  }
+
   /* Run an activation, but only if its cost can be met in full. */
   function activate(cost, effect, ctx, label, option) {
     var why = costShortfall(cost, ctx) || effectShortfall(effect, ctx);
@@ -1987,14 +2002,7 @@ var Engine = (function () {
     if (!e.activate) return false;
     var a = e.activate;
     beginUndo(card.name);
-    if (a.mode === 'choice') {
-      prompt({ kind: 'choice', label: card.name, options: a.options.map(function (x) { return x.label; }),
-        onResolve: function (idx) {
-          var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, { side: s, card: card }, card.name, opt.label);
-        } });
-      return true;
-    }
+    if (a.mode === 'choice') return offerChoice(a, { side: s, card: card }, card.name);
     return activate(a.cost, a.effect, { side: s, card: card }, card.name);
   }
 
@@ -2010,14 +2018,7 @@ var Engine = (function () {
     if (!e.activate) return false;
     var a = e.activate;
     beginUndo(m.name);
-    if (a.mode === 'choice') {
-      prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
-        onResolve: function (idx) {
-          var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, { side: s, module: m }, m.name, opt.label);
-        } });
-      return true;
-    }
+    if (a.mode === 'choice') return offerChoice(a, { side: s, module: m }, m.name);
     return activate(a.cost, a.effect, { side: s, module: m }, m.name);
   }
 
@@ -2034,14 +2035,7 @@ var Engine = (function () {
     var a = e.activate;
     beginUndo(d.name);
     var ctx = { side: s, module: d, deployable: d };
-    if (a.mode === 'choice') {
-      prompt({ kind: 'choice', label: d.name, options: a.options.map(function (x) { return x.label; }),
-        onResolve: function (idx) {
-          var opt = a.options[idx]; if (!opt) return;
-          activate(opt.cost, opt.effect, ctx, d.name, opt.label);
-        } });
-      return true;
-    }
+    if (a.mode === 'choice') return offerChoice(a, ctx, d.name);
     return activate(a.cost, a.effect, ctx, d.name);
   }
 
@@ -2238,7 +2232,7 @@ var Engine = (function () {
     var p = G.pending;
     if (!p) return null;
     var out = { kind: p.kind, label: p.label };
-    ['options', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards'].forEach(function (k) {
+    ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards'].forEach(function (k) {
       if (p[k] !== undefined) out[k] = p[k];
     });
     if (typeof p.filter === 'function') {
