@@ -161,7 +161,7 @@ var AICommander = (function () {
         if (shown) {
           st.planShown = true;
           Engine.announce({ kind: 'move', side: s.idx, route: shown });
-          return;
+          return HOLD;
         }
       }
       st.planShown = false;
@@ -408,7 +408,7 @@ var AICommander = (function () {
      happened to be beside it — usually nothing at all. It now closes on the nearest enemy
      piece until it is adjacent or out of movement, so the attack that follows in the same
      activation has something within reach. */
-  function flyObject(s, p) {
+  function flyObject(s, st, p) {
     var found = Engine.objectById(p.objId);
     if (!found) return;
     var obj = found.obj;
@@ -420,6 +420,14 @@ var AICommander = (function () {
     /* the best square to shoot from, or failing that the best square to be in */
     var route = routeToShot(obj, tgts, reach, p.left) || routeCloser(obj, tgts, p.left);
     if (!route || !route.length) return;
+    /* telegraphed like the fleet's own move (see manoeuvre), so a torpedo is seen to fly
+       rather than appearing at the end of its run with its shot already going off */
+    if (Engine.telegraph() && st.flightShown !== p.objId) {
+      st.flightShown = p.objId;
+      Engine.announce({ kind: 'move', side: s.idx, route: [{ x: obj.x, y: obj.y }].concat(route) });
+      return HOLD;
+    }
+    st.flightShown = null;
     for (var i = 0; i < route.length; i++) {
       var pend = Engine.get().pending;
       if (!pend || pend.kind !== 'moveObject' || pend.left <= 0) break;
@@ -427,15 +435,24 @@ var AICommander = (function () {
     }
   }
 
-  /* ---------- prompt answers ---------- */
+  /* ---------- prompt answers ----------
+     An answer is handed straight to Engine.resolve, except HOLD: the route has just been
+     published for the board to draw, and the prompt stays open until the next tick commits. */
+  var HOLD = {};
   function answer(s, st, p) {
-    if (p.kind === 'choice') return chooseOption(s, st, p);
+    if (p.kind === 'choice') {
+      /* never settle on an option the engine has ruled out — fall back to the first it allows */
+      var pick = chooseOption(s, st, p), off = p.disabled || [];
+      if (!off[pick]) return pick;
+      for (var k = 0; k < p.options.length; k++) if (!off[k]) return k;
+      return pick;
+    }
     if (p.kind === 'target') return bestTarget(s, st, p.targets);
     /* an area weapon offers no choice of target, only whether to fire — and it was activated
        on purpose, so it fires */
     if (p.kind === 'confirm') return true;
-    if (p.kind === 'move') { manoeuvre(s, st); return null; }
-    if (p.kind === 'moveObject') { flyObject(s, p); return null; }
+    if (p.kind === 'move') return manoeuvre(s, st) || null;
+    if (p.kind === 'moveObject') return flyObject(s, st, p) || null;
     if (p.kind === 'space') {
       var name = AIPlacement.nameFromLabel(p.label);
       return AIPlacement.best(s, foeOf(s), name, p.filter);
@@ -466,7 +483,11 @@ var AICommander = (function () {
     var G = Engine.get();
     if (!G || G.over || G.active !== idx) return;
     var s = G.players[idx], st = brain(idx);
-    if (G.pending) { Engine.resolve(answer(s, st, G.pending)); return; }
+    if (G.pending) {
+      var a = answer(s, st, G.pending);
+      if (a !== HOLD) Engine.resolve(a);
+      return;
+    }
     updatePhase(s, st);
 
     if (G.phase === 'play') {
