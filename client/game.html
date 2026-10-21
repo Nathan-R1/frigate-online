@@ -1034,29 +1034,19 @@
   }
   /* The tutorial deals both sides the fixed kit the menu promises: a single Graviton Unit,
      promoted to a Starter Card so the pregame builds it into the ship, and a flat 2 in every
-     skill — no saved build or custom roster reaches in. The player also starts with the six
-     Tutorial Prompt techs already in play: their passives drive the teaching popups and each
-     takes itself out of play once it has shown its prompt. The opponent carries the turns-two
-     prompts — Play a Card and Enemy Moves — which speak when its own turn ends and turn 2
-     begins. */
+     skill — no saved build or custom roster reaches in. Both sides also start with Tutorial
+     Prompt techs already in play: their passives drive the teaching popups and each takes
+     itself out of play once it has spoken (card-effects.js). The opponent holds only Play a
+     Card, which answers its own end of turn 1 by handing both decks the turn-2 kit. */
   function tutorialConfig(i, seat) {
     var skills = {};
     ['Cyber', 'Diplomacy', 'Engineering', 'Leadership',
      'Logistics', 'Navigation', 'Piloting', 'Sensors', 'Science']
       .forEach(function (k) { skills[k] = 2; });
-    var played = i === 0 ? [
-      'Tutorial Prompt — Click to Begin',
-      'Tutorial Prompt — Cards',
-      'Tutorial Prompt — Modules',
-      'Tutorial Prompt — Moving',
-      'Tutorial Prompt — End Turn',
-      'Tutorial Prompt — Cannon Aim',
-      'Tutorial Prompt — Cannon No Targets',
-      'Tutorial Prompt — Cannon Fired'
-      /* the turn-2 kit lives with the opponent: it answers the enemy's end-of-turn, the very
-         handover that starts turn 2, adding the Cannon/P.D. units to both decks and floating
-         "Play a card". It queues behind the kit by appearing later in the deal. */
-    ] : ['Tutorial Prompt — Play a Card', 'Tutorial Prompt — Enemy Moves'];
+    var played = (i === 0
+      ? ['Cards', 'Modules', 'Moving', 'Enemy Moves', 'Aim', 'No Targets', 'Great Shot',
+         'Damage Taken']
+      : ['Play a Card']).map(function (n) { return 'Tutorial Prompt — ' + n; });
     return { name: i === 0 ? 'You' : 'Opponent', team: seat.team, ai: seat.ai,
              deck: [{ name: 'Graviton Unit', traits: 'Starter Card' }],
              modules: [], played: played, skills: skills };

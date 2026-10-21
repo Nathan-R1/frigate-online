@@ -296,8 +296,7 @@ var Engine = (function () {
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
           log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
-          seed: s0, rng: s0,
-          tut: { cannonActivated: false, cannonFiredAtEnemy: false, cannonNoTargetsShown: false, cannonAimShown: false } };
+          seed: s0, rng: s0 };
     /* Settled before a single piece is put down, because the Core is placed below and it has
        to be hidden with the rest of the hull it is about to grow. */
     if (!(opts && opts.autoSetup)) G.turn = 0;
@@ -342,12 +341,9 @@ var Engine = (function () {
       log(G.players.length + '-player game start.');
     }
     startTurn();
-    /* The first turn is under way before anything has happened, so the handover into it is
-       itself an event — the tutorial's opening prompt listens for it. Fired after startTurn
-       so it queues in front of the play-phase prompts and shows first, then the queue is
-       drained so the first bubbles appear at the start rather than on the player's next move
+    /* startTurn does not run the queue, so anything the opening play phase set off — the
+       tutorial's first prompts — is drained here rather than on the player's first move
        (nothing parks yet: the opening prompts cost nothing and ask nothing). */
-    fire(side(), 'onGameStart', {});
     step();
     return G;
   }
@@ -633,16 +629,16 @@ var Engine = (function () {
     s.moveLeft = 0;
     refresh(s);
     log(s.name + ' ends turn.', s);
+    var ended = G.turn;
     var nxt = nextLiving(G.active);
     if (nxt <= G.active) G.turn++;        /* wrapped past the end of the order */
     G.active = nxt;
-    /* The handover is itself an event — the tutorial's turn-2 kit listens for it, and it is
-       always the enemy ending their turn that rolls the counter up to turn 2, so a prompt
-       dealt to the computer's side naturally comes into effect right as turn 2 begins. It is
-       resolved here rather than left queued: anything it grants — the tutorial's deck additions —
-       must be in place before startTurn() draws the new hand below. The phase is 'action' by
-       now, so step()'s trailing endPlayPhase check cannot trip. */
-    fire(s, 'onEndTurn', {});
+    /* The handover is itself an event, and names the turn that just ended — the counter may
+       already have rolled over above. It is resolved here rather than left queued: anything it
+       grants — the tutorial's turn-2 kit — must be in place before startTurn() draws the new
+       hand below. The phase is 'action' by now, so step()'s trailing endPlayPhase check cannot
+       trip. */
+    fire(s, 'onEndTurn', { turn: ended });
     step();
     startTurn();
   }
@@ -893,6 +889,7 @@ var Engine = (function () {
            not every mine on the board. Such an event names the piece it happened to, and only
            that piece's own passive is offered the chance to answer. */
         if (payload && payload.self && h.obj !== payload.self) return;
+        if (!matches(pas.match, payload)) return;
         var ctx = {};
         for (var k in h.ctx) ctx[k] = h.ctx[k];
         for (var k2 in (payload || {})) ctx[k2] = payload[k2];
@@ -900,6 +897,16 @@ var Engine = (function () {
       });
     });
     if (items.length) G.queue = items.concat(G.queue);
+  }
+
+  /* A passive may narrow its trigger with `match`: each key names a field of the event and the
+     value it must have — or a list of values, any one of which will do. */
+  function matches(want, payload) {
+    for (var k in (want || {})) {
+      var v = payload ? payload[k] : undefined;
+      if (Array.isArray(want[k]) ? want[k].indexOf(v) < 0 : want[k] !== v) return false;
+    }
+    return true;
   }
 
   /* ---- op implementations ---- */
@@ -920,11 +927,13 @@ var Engine = (function () {
       onResolve: function (i) { if (i === 0) go(); } });
   };
 
-  /* A tutorial prompt, not a rule: tell the view to float the card's text over the board,
-     pointing at the piece the prompt is about. It holds no state and parks nothing, so the
-     queue runs straight on to the next op — the same way any other announcement leaves it. */
-  OPS.popup = function (o, ctx) {
-    notice({ card: ctx && ctx.card ? ctx.card.name : null });
+  /* A tutorial prompt, not a rule: tell the view to float some words over the board, pointing
+     at the element `at` names (the centre of the screen without one). `focus` also swings the
+     camera to whoever is now at the controls. It holds no state and parks nothing, so the queue
+     runs straight on to the next op — the same way any other announcement leaves it. */
+  OPS.popup = function (o) {
+    notice({ title: o.title, text: o.text || '', at: o.at || null, side: o.side || 'centre',
+             focus: o.focus ? G.active : null });
   };
 
   /* Set only while a board is being built with no player to ask — see autoDeployStarters.
@@ -1044,23 +1053,13 @@ var Engine = (function () {
          other, with nothing to click. Taking it back refunds the activation; skipping leaves
          it spent, which is what used to happen without being asked. */
       log(s.name + ' has no target in range with line of sight.', s);
-      if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonNoTargetsShown) {
-        G.tut.cannonNoTargetsShown = true;
-        fire(s, 'onActivateNoTargets', { module: ctx.module });
-      }
       /* Nothing paid, nobody to ask: a mine that finds nothing simply finds nothing, and the
          player whose turn it happens to be is not the one being offered the choice. */
       if (unattended(o, ctx)) return;
-      prompt({ kind: 'target', label: 'Nothing in range', targets: [],
-               envelope: firingEnvelope(origins, reach),
-               onResolve: function () {} });
+      aim(ctx, false, { kind: 'target', label: 'Nothing in range', targets: [],
+                        envelope: firingEnvelope(origins, reach),
+                        onResolve: function () {} });
       return;
-    } else {
-      if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonAimShown) {
-        G.tut.cannonAimShown = true;
-        // Trigger aim prompt immediately after activation when targets exist
-        fire(s, 'onActivate', { module: ctx.module, cannonTargets: true });
-      }
     }
     var ids = targets.map(function (m) { return m.id; });
     /* An area weapon does not pick: everything it can see is already a target, so the only
@@ -1081,25 +1080,20 @@ var Engine = (function () {
         } });
       return;
     }
-    if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonAimShown) {
-      G.tut.cannonAimShown = true;
-      fire(s, 'onActivate', { module: ctx.module });
-    }
-    prompt({ kind: 'target', label: 'Choose a target', targets: ids,
+    aim(ctx, true, { kind: 'target', label: 'Choose a target', targets: ids,
       envelope: firingEnvelope(origins, reach),
-      onResolve: function (targetId) {
-        var st = objectById(targetId);
-        if (ctx.module && ctx.module.name === 'Cannon' && G.tut) {
-          if (!G.tut.cannonFiredAtEnemy && st && st.owner && st.owner.team !== s.team) {
-            G.tut.cannonFiredAtEnemy = true;
-          }
-          if (G.tut.cannonFiredAtEnemy) {
-            fire(s, 'onAttackFirstHit', { module: ctx.module, target: st });
-          }
-        }
-        shoot(o, ctx, targetId);
-      } });
+      onResolve: function (targetId) { shoot(o, ctx, targetId); } });
   };
+
+  /* A weapon being pointed at something is an event (the tutorial's aiming tips listen for
+     it), and whatever answers it has to be heard before the target is asked for — a prompt
+     parks the queue, so anything left behind it would only speak once the shot was over. The
+     prompt is therefore queued too, and the answers are fired in front of it. */
+  function aim(ctx, inRange, p) {
+    enqueue([{ op: '__prompt', p: p }], ctx);
+    fire(ctx.side, 'onAim', { weapon: ctx.module ? ctx.module.name : null, inRange: inRange });
+  }
+  OPS.__prompt = function (o) { prompt(o.p); };
 
   OPS.__shot = function (o, ctx) { shoot(o.shot, ctx, o.targetId); };
 
@@ -1172,7 +1166,7 @@ var Engine = (function () {
     var base = resolveCount(s, o.dmg, ctx);
     /* a powered gun hits harder; a zero-damage beam is not a gun, and stays zero */
     var dmg = base > 0 ? base + powerOf(from) : 0;
-    var hit = false;
+    var hit = false, landed = false;
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
     var friendly = !!t.owner && t.owner.team === s.team;
@@ -1209,10 +1203,7 @@ var Engine = (function () {
           else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
           else damageModule(t.owner, t.obj, dmg);
         }
-        if (ctx.module && ctx.module.name === 'Cannon' && G.tut && !G.tut.cannonFiredAtEnemy && t && t.owner && t.owner.team !== s.team) {
-          G.tut.cannonFiredAtEnemy = true;
-          fire(s, 'onAttackFirstHit', { module: ctx.module, target: t });
-        }
+        landed = true;
         /* riders such as a tractor beam's shove run once, on the first hit that lands.
            Queued rather than run, because we are inside the prompt being resolved. */
         if (o.onSuccess && !hit) {
@@ -1224,6 +1215,12 @@ var Engine = (function () {
       } else log('  ' + c.text + ' — miss.');
       if (!objectById(targetId)) break;
     }
+    /* once per shot that lands, however many of its attacks did — the tutorial's "Great Shot"
+       listens for the one, and its "Damage Taken" for the other, which goes to the ship that
+       was hit: shields or hull, it has been attacked */
+    if (!landed) return;
+    fire(s, 'onHit', { weapon: ctx.module ? ctx.module.name : null, foe: !!t.owner && !friendly });
+    if (dmg > 0 && t.kind === 'module') fire(t.owner, 'onAttacked', { foe: !friendly });
   }
 
   /* Every square this shot can see: in range of some origin, with a clear line to it. Worked
@@ -1991,12 +1988,6 @@ var Engine = (function () {
     if (!e.activate) return false;
     var a = e.activate;
     beginUndo(m.name);
-    if (m.name === 'Cannon') {
-      if (G.tut && !G.tut.cannonActivated) {
-        G.tut.cannonActivated = true;
-        fire(s, 'onActivate', { module: m, card: null });
-      }
-    }
     if (a.mode === 'choice') {
       prompt({ kind: 'choice', label: m.name, options: a.options.map(function (x) { return x.label; }),
         onResolve: function (idx) {
