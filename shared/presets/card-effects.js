@@ -76,15 +76,18 @@ tech: {
                                                 attacks:'heatSpent',dmg:1,dmgType:'energy'}] } },
 
 /* --- control / utility attacks --- */
+/* `anim` on an attack names how the board draws it (client/game/attack-fx.js). Left out, the
+   look follows the damage type; these two do no damage, and a beam that takes hold of its
+   target reads as one rather than as a shell bursting. */
 /* a beam, not a gun: it may take hold of anything it can see, friendly hull included */
 'Tract Beam':             { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'attack',range:'sensors',from:'offenseModule',
-                                                attacks:1,dmg:0,check:'Cyber',targets:'any',
+                                                attacks:1,dmg:0,check:'Cyber',targets:'any',anim:'tractor',
                                                 onSuccess:[{op:'moveObject',what:'target',n:2}]}] } },
 'Unwinder Array':         { onPlay:[{op:'addCharge',target:'self',n:4},{op:'exhaustSelf'}],
                             activate:{ cost:[{op:'exhaustSelf'},{op:'spendCharge',n:1}],
                                        effect:[{op:'attack',range:'sensors',from:'any',attacks:1,dmg:0,
-                                                check:'Cyber',
+                                                check:'Cyber',anim:'tractor',
                                                 onSuccess:[{op:'applyStatus',status:'noMove',
                                                             duration:'startOfYourNextTurn',target:'target'}]}] } },
 
@@ -267,8 +270,9 @@ mod: {
                            asking for three OTHERS means a small ship can never fire it at all. */
                         activate:{ cost:[{op:'exhaustOther',filter:'offenseModule',n:3,
                                           includeSelf:true}],
+                                   /* bio damage, but it fires like the energy weapon it is */
                                    effect:[{op:'attack',range:12,from:'self',attacks:1,dmg:6,
-                                            check:'Sensors',dmgType:'bio'},
+                                            check:'Sensors',dmgType:'bio',anim:'energy'},
                                            {op:'createAnomaly',at:'random',fromSelf:true,minR:0,maxR:11}] } },
 'SPEAR Connector':    { placement:'adjacentToAny',
                         activate:{ cost:[{op:'exhaustOther',filter:'offenseModuleAdjacent',n:2}],
