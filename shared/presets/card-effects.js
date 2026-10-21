@@ -310,7 +310,7 @@ mod: {
                         activate:{ cost:[],
                                    effect:[{op:'moveSelf',n:12,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:3,
-                                            check:'Sensors',dmgType:'kinetic',targets:'ships'},
+                                            check:'Sensors',dmgType:'kinetic',targets:'ships',anim:'torpedo'},
                                            {op:'removeSelf'}] } },
 /* It arrives ready rather than spent — it can run the turn it is launched — and it is spent by
    firing rather than by existing. A round that connects is gone, which is what a guided round
@@ -321,7 +321,7 @@ mod: {
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'moveSelf',n:4,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:4,
-                                            check:'Sensors',dmgType:'kinetic',
+                                            check:'Sensors',dmgType:'kinetic',anim:'torpedo',
                                             onSuccess:[{op:'removeSelf'}]}] } },
 'Fusion Mine':        { deployable:true, speed:0,
                         passive:[{ trigger:'onDestroyedOrEnemyEnters',

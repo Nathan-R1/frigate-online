@@ -10,9 +10,10 @@
  * roll then sends its own round across. A hit ends in the style's impact; a miss ends in
  * nothing — the round simply fades where it was going.
  *
- * How a shot looks is a style. An attack may name one with `anim` (card-effects.js); left out,
- * the damage type picks it, and anything else falls back to the default ballistic round. A new
- * look is one entry in STYLES — and, for a damage type, one line in BY_TYPE.
+ * How a shot looks is a style: ballistic, energy, bio, tractor or torpedo. An attack may name
+ * one with `anim` (card-effects.js); left out, the damage type picks it, and anything else
+ * falls back to the default ballistic round. A new look is one entry in STYLES — and, for a
+ * damage type, one line in BY_TYPE.
  */
 var AttackFx = (function () {
   'use strict';
@@ -177,6 +178,45 @@ var AttackFx = (function () {
       return [hit ? 300 : null, hit ? 1300 : 900];
     }
   };
+  /* the torpedo is its own round: the piece throws itself at the target, picking up speed and
+     trailing exhaust, and a hit is a warhead going off — the ballistic fireball, bigger, with a
+     shockwave behind it. A miss runs on past and burns out. `launches` tells draw() the piece
+     has left its square, so the one left standing there (see keep) goes as it sets off. */
+  STYLES.torpedo = function (a, b, hit, t0, i) {
+    var from = a || b, end = hit ? b : wide(from, b, i);
+    var ms = a ? Math.min(560, 260 + Math.sqrt(Math.pow(end.x - a.x, 2) + Math.pow(end.y - a.y, 2)) / env.cell * 55) : 0;
+    if (a) {
+      var dx = end.x - a.x, dy = end.y - a.y, rot = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
+      var len = env.cell * .7, thick = Math.max(5, env.cell * .2);
+      var body = blob(a.x, a.y, len, 'height:' + thick + 'px;margin-top:' + (len - thick) / 2 + 'px;' +
+        'border-radius:' + thick + 'px ' + thick * 1.6 + 'px ' + thick * 1.6 + 'px ' + thick + 'px;' +
+        'background:linear-gradient(90deg,#ff9a3c 0,#ffe08a 12%,#cfd6de 22%,#8c97a3 70%,#e2483d 72%,#ff6a5c 100%);' +
+        'box-shadow:-6px 0 10px 2px rgba(255,150,60,.7);');
+      play(body, [{ opacity: 1, transform: 'translate(0,0) ' + rot },
+                  { opacity: 1, transform: 'translate(' + dx * .15 + 'px,' + dy * .15 + 'px) ' + rot, offset: .35 },
+                  { opacity: hit ? 1 : 0, transform: 'translate(' + dx + 'px,' + dy + 'px) ' + rot }],
+           ms, t0, 'cubic-bezier(.55,0,.85,.5)');
+      /* exhaust left hanging along the run */
+      for (var k = 1; k <= 5; k++) {
+        var f = k / 6, at = Math.pow(f, 1.8);
+        play(blob(a.x + dx * at, a.y + dy * at, env.cell * .35,
+                  'border-radius:50%;background:radial-gradient(circle,rgba(200,200,210,.6),transparent 70%);'),
+             [{ opacity: .8, transform: 'scale(.4)' }, { opacity: 0, transform: 'scale(1.6)' }],
+             520, t0 + ms * f);
+      }
+    }
+    if (hit) {
+      explode(b, t0 + ms);
+      play(blob(b.x, b.y, env.cell * 2.3, 'border-radius:50%;background:radial-gradient(circle,' +
+                                          'rgba(255,240,200,.95) 0,rgba(255,150,40,.8) 35%,rgba(180,40,0,.4) 55%,transparent 70%);'),
+           [{ opacity: 1, transform: 'scale(.15)' }, { opacity: .9, transform: 'scale(.9)', offset: .3 },
+            { opacity: 0, transform: 'scale(1.15)' }], 620, t0 + ms);
+      rings(b, '#ffb347', 1, t0 + ms + 40, 560);
+    }
+    return [hit ? ms : null, ms + (hit ? 760 : 0)];
+  };
+  STYLES.torpedo.launches = true;
+
   bar.r = function (a, b) { return 'rotate(' + Math.atan2(b.y - a.y, b.x - a.x) + 'rad)'; };
   STYLES['default'] = STYLES.ballistic;
 
@@ -226,6 +266,16 @@ var AttackFx = (function () {
     var total = 260 + end + 260;
     if (a) { markOrigin(a, env.colour(shot.side), total); guide(a, b, total); }
     markTarget(b, total);
+    /* a round that is the piece itself: the copy left on its square goes as it sets off */
+    if (style.launches && a && shot.from && shot.from.id) {
+      setTimeout(function () {
+        ghosts = ghosts.filter(function (g) {
+          if (g.id !== shot.from.id) return true;
+          vanish(g.node);
+          return false;
+        });
+      }, 260);
+    }
     var last = --playing === 0;
     setTimeout(function () {
       ghosts = ghosts.filter(function (g) {
