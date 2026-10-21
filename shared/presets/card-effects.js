@@ -249,7 +249,8 @@ mod: {
 'Citadel':            { placement:'adjacentToCore',
                         passive:[{ trigger:'static',
                                    effect:[{op:'shareHullWithCore'},{op:'countsAsCore'}] }] },
-'Armor':              { placement:'adjacentToAny' },
+'Armor':              { placement:'adjacentToAny',
+                        passive:[{ trigger:'static', effect:[{op:'noCoreDamageOnDestroy'}] }] },
 'Cannon':             { placement:'adjacentToCore',
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'attack',range:6,from:'self',attacks:2,dmg:2,
@@ -296,7 +297,8 @@ mod: {
                                             checks:2,saves:2}] }] },
 /* Not a mimic of some other module, but a silhouette its owner picks when it is built — and
    picked again for every decoy, so two of them need not look alike. */
-'Decoy Module':       { placement:'adjacentToAny', chooseShape:true },
+'Decoy Module':       { placement:'adjacentToAny', chooseShape:true,
+                        passive:[{ trigger:'static', effect:[{op:'noCoreDamageOnDestroy'}] }] },
 'Graviton Engine':    { placement:'adjacentToAny', movement:true,
                         activate:{ cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
                                    effect:[{op:'gainMove',n:3}] } },

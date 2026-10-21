@@ -5,7 +5,7 @@ var MOD_PRESETS = [
     {name:'Decoy Deployable', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'science', onbuild:'', passive:'This Deployable may appear as any other Deployable. This is a Stealth Effect.', onactivate:''},
     {name:'Directed Laser Beam', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to target an Object:\nRange: any, Attacks: 1, Dmg: 2 ⚡ (4 if range >= 10)'},
     {name:'Fusion Mine', traits:'', req:'', hull:'1', speed:'0', type:'deployable', tt:'offense', onbuild:'', passive:'When destroyed or an enemy enters this space activate.', onactivate:'Range: 1 AoE, Check: Sensors, Dmg: 2d6 💥\nAfter activating, remove.'},
-    {name:'Armor', traits:'', req:'Adjacent to any', hull:'2', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:''},
+    {name:'Armor', traits:'', req:'Adjacent to any', hull:'2', type:'module', tt:'defense', onbuild:'', passive:'When destroyed you do not suffer core damage.', onactivate:''},
     {name:'Cannon', traits:'', req:'Adjacent to Core', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust to Target an object:\nRange: 6 from self, Attacks: 2, Dmg: 2 💥'},
     {name:'Comms Unit', traits:'', req:'Adjacent to any', hull:'2', type:'module', tt:'science', onbuild:'', passive:'Allies within Sensor range of this gain a +2 bonus on all Checks and Saves.', onactivate:''},
     {name:'Graviton Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust all Graviton Modules to gain 3 Move for each Module.'},
@@ -16,6 +16,6 @@ var MOD_PRESETS = [
     {name:'Thrust Engine', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'movement', onbuild:'', passive:'', onactivate:'Exhaust to gain 2 Move for each module.'},
     {name:'Shield Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'defense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent modules to gain 2 shields.'},
     {name:'SPEAR Connector', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'offense', onbuild:'', passive:'', onactivate:'Exhaust 2 adjacent weapons modules to:\nRange: Sensors, Attacks: 4, Dmg: 2 \u26a1 (Exhaust the module hit for 1 round).'},
-    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'Choose the shape it appears as. Each Decoy may be given a different one.', passive:'', onactivate:''}
+    {name:'Decoy Module', traits:'', req:'Adjacent to any', hull:'1', type:'module', tt:'science', onbuild:'Choose the shape it appears as. Each Decoy may be given a different one.', passive:'When destroyed you do not suffer core damage.', onactivate:''}
   ];
 MOD_PRESETS.sort(function(a,b){return a.name.toLowerCase().localeCompare(b.name.toLowerCase());});

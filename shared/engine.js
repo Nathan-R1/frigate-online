@@ -694,7 +694,7 @@ var Engine = (function () {
     }
     if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage' +
                   (hit === mod ? '' : ' — off the Core') + '.', targetSide);
-    if (hit.hull <= 0) destroyModule(targetSide, hit);
+    if (hit.hull <= 0) { destroyModule(targetSide, hit); lossToCore(targetSide, hit); }
     dealtDamage(mod);
     checkWin();
     return rest;
@@ -729,6 +729,18 @@ var Engine = (function () {
     leaveCell(mod);
     delete s.modules[mod.id];
     checkWin();
+  }
+
+  /* A module shot away costs the ship 1 hull, straight off the Core — shields do not soak a
+     piece being torn away. Only a kill: a module that breaks apart for being cut off is lost
+     on its own. A module may say it is exempt (Armor, Decoy Module: static
+     noCoreDamageOnDestroy), and the Core's own loss is the end of the ship, not a cost to it. */
+  function lossToCore(s, mod) {
+    var core = s.modules[s.coreId];
+    if (!core || staticOp(mod.name, 'noCoreDamageOnDestroy')) return;
+    core.hull -= 1;
+    log(s.name + "'s Core takes 1 hull damage from the loss.", s);
+    if (core.hull <= 0) destroyModule(s, core);
   }
 
   function checkWin() {
@@ -2091,10 +2103,16 @@ var Engine = (function () {
   function isCoreLike(s, m) {
     if (!m) return false;
     if (m.id === s.coreId) return true;
-    var e = fx(m.name, 'mod');
-    if (e.core || e.countsAsCore) return true;
+    return !!fx(m.name, 'mod').core || staticOp(m.name, 'countsAsCore');
+  }
+  /* Does this module carry the given rule — as a flag on its definition, or as an op in one of
+     its passives? Rules a module simply has (the Citadel counting as the Core, Armor costing
+     nothing when it is lost) are written as static passives and read through here. */
+  function staticOp(name, op) {
+    var e = fx(name, 'mod');
+    if (e[op]) return true;
     return (e.passive || []).some(function (pas) {
-      return (pas.effect || []).some(function (o) { return o.op === 'countsAsCore'; });
+      return (pas.effect || []).some(function (o) { return o.op === op; });
     });
   }
   /* A module with no hull of its own: it is a piece of the Core, so damage to it comes off
@@ -2102,11 +2120,7 @@ var Engine = (function () {
      — read here the way isCoreLike reads countsAsCore, rather than hardcoded against a name. */
   function sharesHullWithCore(s, m) {
     if (!m || !s || m.id === s.coreId) return false;
-    var e = fx(m.name, 'mod');
-    if (e.shareHullWithCore) return true;
-    return (e.passive || []).some(function (pas) {
-      return (pas.effect || []).some(function (o) { return o.op === 'shareHullWithCore'; });
-    });
+    return staticOp(m.name, 'shareHullWithCore');
   }
   /* Where a module's hull actually lives. Every read and every write goes through this, so a
      shared pool is one number in one place and nothing can drift out of step with it. */

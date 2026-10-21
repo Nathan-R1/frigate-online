@@ -2064,7 +2064,10 @@
          and answers for it, so a card for it says nothing the stats bar does not. */
       if (id === s.coreId) return;
       if (Engine.isCoreLike && Engine.isCoreLike(s, m)) return;
-      if (!e.activate && !e.passive) return;
+      /* a passive that is only a standing rule — Armor costing nothing when it is lost — is
+         nothing to press and nothing to watch, so it earns no card here */
+      var acts = (e.passive || []).some(function (pas) { return pas.trigger !== 'static'; });
+      if (!e.activate && !acts) return;
       var mReady = !m.exhausted && (!e.activate || Engine.affordable(s, m, 'mod'));
       var off = !(myTurn && mReady);
       out.push({ key: id, id: id, kind: 'mod',
