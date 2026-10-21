@@ -754,6 +754,7 @@
 <script src="../shared/ai/ai-commander.js"></script>
 <script src="game/net.js"></script>
 <script src="game/notify.js"></script>
+<script src="game/attack-fx.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1513,10 +1514,16 @@
     syncSelection(G);
     paintCells(G);
     renderConnections(G);
+    /* shots the engine has recorded since the last look are drawn over the board, from where
+       you sit: a shooter hidden from you fires from nowhere you can see. Queued before the
+       pieces are painted, so a piece one of them destroyed can be held until it lands. */
+    AttackFx.sync(G, { layer: fxEl, cell: CELL, viewer: meIdx(), still: lowGfx || stillMotion,
+                       colour: function (i) { return SEAT_HEX[i % 4]; } });
     paintPieces(G);
     renderMoveHud(G);
     drawRoute(G);
   }
+  var stillMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   /* the Move counter from the tabletop board: what the selected piece has left, and what
      the rest of the fleet still has banked */
@@ -1872,7 +1879,8 @@
     var kids = piecesEl.children;
     for (var k = kids.length - 1; k >= 0; k--) {
       var id = kids[k].getAttribute('data-obj');
-      if (!want[id]) piecesEl.removeChild(kids[k]);
+      /* a piece a shot still on its way destroyed waits for that shot (attack-fx.js) */
+      if (!want[id] && !AttackFx.keep(kids[k], id)) piecesEl.removeChild(kids[k]);
     }
     var byId = {};
     for (var i = 0; i < piecesEl.children.length; i++)
