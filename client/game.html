@@ -590,6 +590,12 @@
             <button type="button" data-instant="1">On</button>
           </span>
         </div>
+        <div class="set-row"><span class="set-label">Lock camera</span>
+          <span class="set-opts" id="lockOpts">
+            <button type="button" data-lock="0">Off</button>
+            <button type="button" data-lock="1">On</button>
+          </span>
+        </div>
         <div class="set-row"><span class="set-label">Labels</span>
           <span class="set-opts" id="labelOpts">
             <button type="button" data-label="0">Off</button>
@@ -1118,9 +1124,36 @@
     if (live.length) VIEW = live[0];
   }
 
+  /* Lock camera: at the start of every turn the view centres on the seat at the controls, so
+     the ship being played is the one under the lens. On by default — the turn is the one thing
+     that travels around the board, and the camera is a window on it. */
+  var lockCamera = true;
+  try { lockCamera = localStorage.getItem('frigateLockCamera') !== '0'; } catch (e) {}
+  function setLockCamera(on) {
+    lockCamera = !!on;
+    try { localStorage.setItem('frigateLockCamera', lockCamera ? '1' : '0'); } catch (e) {}
+  }
+
+  /* The locked camera watches the turn: when the seat at the controls changes, the view
+     centres on that seat's Core. The key is the turn and the seat, so it fires once per
+     turn and never while the player is panning around of their own accord. */
+  var camLockKey = null;
+  function lockCameraTo(G) {
+    if (!G || G.over) return;
+    /* switched off — forget what was watched, so switching it back on re-centres at once */
+    if (!lockCamera) { camLockKey = null; return; }
+    if (menuOpen()) return;              /* a picker is over the board: leave the view alone */
+    var key = G.turn + ':' + G.active;
+    if (key === camLockKey) return;
+    /* the key is only remembered once the camera has actually moved: a pane with no size
+       yet must not be written off as done */
+    if (focusCore(G.active)) camLockKey = key;
+  }
+
   function render(G) {
     if (!G) return;
     syncView(G);
+    lockCameraTo(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
     if (G.over) document.getElementById('overTitle').innerHTML = overHtml(G);
@@ -1347,6 +1380,26 @@
   }
   /* the camera, lent to the tutorial prompts so they can pan across to the enemy ship */
   window.FrigateView = { focus: focusViewOn };
+
+  /* Centre the camera on one square of the board, leaving the zoom alone: the Core of the
+     seat at the controls, when the camera is locked on it. */
+  function centreOnCell(x, y) {
+    var r = boardEl.getBoundingClientRect();
+    if (!r.width || !r.height) return false;   /* the pane has no size yet — leave the view alone */
+    view.x = r.width / 2 - (x * CELL + CELL / 2) * view.zoom;
+    view.y = r.height / 2 - (y * CELL + CELL / 2) * view.zoom;
+    applyView();
+    return true;
+  }
+  /* a seat's Core — the heart of its ship, and the piece the locked camera watches */
+  function focusCore(idx) {
+    var G = Engine.get();
+    var s = G && G.players[idx];
+    if (!s || s.dead) return false;
+    var core = s.modules[s.coreId];
+    if (!core) return false;
+    return centreOnCell(core.x, core.y);
+  }
 
   function ensureLayers(n) {
     if (cellsEl) return;
@@ -3010,6 +3063,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
+    var lock = document.getElementById('lockOpts');
     var lbl = document.getElementById('labelOpts');
     var dbg = document.getElementById('debugOpts');
     var gfx = document.getElementById('gfxOpts');
@@ -3019,6 +3073,9 @@
       });
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
+      });
+      [].forEach.call(lock.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-lock') === '1') === lockCamera);
       });
       [].forEach.call(lbl.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-label') === '1') === showLabels);
@@ -3070,6 +3127,15 @@
       if (!b) return;
       setInstant(b.getAttribute('data-instant') === '1');
       mark();
+      Engine.emit();
+    });
+    lock.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-lock]');
+      if (!b) return;
+      setLockCamera(b.getAttribute('data-lock') === '1');
+      mark();
+      /* the paint that follows re-reads the lock, so switching it on centres the camera on
+         the seat at the controls there and then */
       Engine.emit();
     });
     cog.addEventListener('click', function (e) {
