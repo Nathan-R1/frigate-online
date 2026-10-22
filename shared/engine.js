@@ -797,11 +797,13 @@ var Engine = (function () {
       if (!s.dead && !s.modules[s.coreId]) {
         s.dead = true;
         /* the rest of the hull goes with the Core, so the wreck stops blocking the board */
+        /* leaveCell, not a bare vacate: a wreck piece may be standing inside an asteroid,
+           and the rock has to keep its square */
         Object.keys(s.modules).forEach(function (id) {
-          var m = s.modules[id]; vacate(m.x, m.y); delete s.modules[id];
+          var m = s.modules[id]; delete s.modules[id]; leaveCell(m);
         });
         Object.keys(s.deployables).forEach(function (id) {
-          var d = s.deployables[id]; vacate(d.x, d.y); delete s.deployables[id];
+          var d = s.deployables[id]; delete s.deployables[id]; leaveCell(d);
         });
         s.moveLeft = 0;
         log(s.name + ' is eliminated — their Core is destroyed.', s);
@@ -1100,6 +1102,12 @@ var Engine = (function () {
     /* 'ships' means crewed things only. A torpedo is spent whether it hits or not, and cracking
        an asteroid with one is a waste nobody would choose — so it is not offered the choice. */
     if (o.targets === 'ships') pool = pool.filter(function (m) { return !G.asteroids[m.id]; });
+    /* a beam that would drag a Core (or what stands in for one) off its own hull may not take
+       hold of it at all — the rest of that ship would be stranded and break apart */
+    if (o.notCore) pool = pool.filter(function (m) {
+      var owner = G.players[m.owner];
+      return !(owner && owner.modules[m.id] && isCoreLike(owner, m));
+    });
     var targets = pool.filter(function (m) {
       /* a beam cannot grab the very module it is firing from */
       if (ctx.module && m.id === ctx.module.id) return false;
@@ -1750,8 +1758,8 @@ var Engine = (function () {
     if (!near.length) return;
     var best = near[0], core = s.modules[s.coreId];
     if (core) near.forEach(function (r) { if (dist(core, r) < dist(core, best)) best = r; });
-    vacate(best.x, best.y);
     delete G.asteroids[best.id];
+    leaveCell(best);                     /* a piece standing in the rock keeps the square */
     log(s.name + ' consumes an asteroid at (' + best.x + ',' + best.y + ').', s);
   };
 
@@ -1923,7 +1931,7 @@ var Engine = (function () {
 
   OPS.removeSelf = function (o, ctx) {
     var d = ctx.deployable; if (!d) return;
-    vacate(d.x, d.y); delete ctx.side.deployables[d.id];
+    delete ctx.side.deployables[d.id]; leaveCell(d);
     log(d.name + ' is removed.');
   };
   /* Push whatever the shot caught. The prompt is the same one a deployable's own move uses,
@@ -1973,7 +1981,7 @@ var Engine = (function () {
       },
       onResolve: function (cell) {
         if (!cell) return;
-        vacate(mod.x, mod.y);
+        leaveCell(mod);
         mod.x = cell.x; mod.y = cell.y;
         occupy(cell.x, cell.y, { kind: 'module', owner: s.idx, id: mod.id });
         log(s.name + ' repositions ' + mod.name + ' to (' + cell.x + ',' + cell.y + ').', s);
@@ -2273,6 +2281,7 @@ var Engine = (function () {
   function moveShip(dx, dy) {
     var s = side();
     if (G.phase === 'play' || s.moveLeft <= 0) return false;
+    if (!G.pending || G.pending.kind !== 'move') return false;
     if (Math.abs(dx) + Math.abs(dy) !== 1) return false;   /* orthogonal steps only */
     var mods = shipModules(s);
     var how = mods.length ? shipStep(s, mods, 0, 0, dx, dy) : null;
@@ -2284,11 +2293,21 @@ var Engine = (function () {
       log('The ship has not the Move to pass through and get clear.', s);
       return false;
     }
+    var queued = G.queue.length;
     stepShip(s, mods, dx, dy);
     s.moveLeft--;
-    /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
-       outside the resolver, so nothing else will come along to drain it. A mine driven over
-       would have been queued to detonate and then simply sat there. */
+    /* Anything the move set off — a mine driven over — happens now, not once the move is over:
+       otherwise the ship could carry on out of the blast before it went off. The move prompt
+       is set aside behind what the step set off and comes back when that has resolved; the
+       queue would otherwise wait on it, since a prompt parks the queue. */
+    var fresh = G.queue.length - queued;
+    if (fresh > 0) {
+      var held = G.pending;
+      G.pending = null;
+      G.queue = G.queue.slice(0, fresh)
+        .concat([{ op: { op: '__prompt', p: held }, ctx: { side: s } }])
+        .concat(G.queue.slice(fresh));
+    }
     step();
     return true;
   }
@@ -2303,8 +2322,8 @@ var Engine = (function () {
       log(m.name + ' overruns ' + od.name + '.');
       /* "an enemy enters this space" — driving over a mine is what this is for */
       fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
-      vacate(od.x, od.y);
       delete G.players[c.owner].deployables[c.id];
+      leaveCell(od);
     });
     /* everyone off the board, then everyone back on one square along, so no module ever
        finds a sibling still standing where it is going */
@@ -2541,7 +2560,7 @@ var Engine = (function () {
       if (!t || !inBounds(x, y)) return false;
       var there = cellAt(x, y);
       if (there && there.id !== objId) return false;
-      vacate(t.obj.x, t.obj.y);
+      leaveCell(t.obj);
       t.obj.x = x; t.obj.y = y;
       occupy(x, y, { kind: t.kind === 'asteroid' ? 'asteroid' : t.kind,
                      owner: t.owner ? t.owner.idx : undefined, id: objId });
@@ -2553,10 +2572,10 @@ var Engine = (function () {
     remove: function (objId) {
       var t = objectById(objId);
       if (!t) return false;
-      vacate(t.obj.x, t.obj.y);
       if (t.kind === 'asteroid') delete G.asteroids[objId];
       else if (t.kind === 'deployable') delete t.owner.deployables[objId];
       else delete t.owner.modules[objId];
+      leaveCell(t.obj);
       log('debug: ' + labelOf(t) + ' removed.', t.owner || undefined);
       checkWin();
       emit();

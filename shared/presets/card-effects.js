@@ -82,7 +82,7 @@ tech: {
 /* a beam, not a gun: it may take hold of anything it can see, friendly hull included */
 'Tract Beam':             { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'attack',range:'sensors',from:'offenseModule',
-                                                attacks:1,dmg:0,check:'Cyber',targets:'any',anim:'tractor',
+                                                attacks:1,dmg:0,check:'Cyber',targets:'any',notCore:true,anim:'tractor',
                                                 onSuccess:[{op:'moveObject',what:'target',n:2}]}] } },
 'Unwinder Array':         { onPlay:[{op:'addCharge',target:'self',n:4},{op:'exhaustSelf'}],
                             activate:{ cost:[{op:'exhaustSelf'},{op:'spendCharge',n:1}],

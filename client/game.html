@@ -2914,7 +2914,7 @@
         var left = isDep ? now.pending.left : now.players[meIdx()].moveLeft;
         if (left <= 0) break;
         var dx = route[i].x - route[i-1].x, dy = route[i].y - route[i-1].y;
-        var ok = isDep ? Engine.stepObject(id, dx, dy) : Engine.moveShip(dx, dy);
+        var ok = isDep ? Engine.stepDeployable(id, dx, dy) : Engine.moveShip(dx, dy);
         if (!ok) { blockFlash(route[i].x, route[i].y); break; }
         ping(route[i].x, route[i].y);
       }
@@ -3954,7 +3954,9 @@
     if (p && p.kind === 'moveObject') {
       var t = Engine.objectById(p.objId);
       var to = t ? { x: t.obj.x + dx, y: t.obj.y + dy } : null;
-      if (!Engine.stepObject(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
+      /* stepDeployable, not stepObject: it is the name net.js forwards to the server when
+         online (the engine makes them the same function), so the step happens on the real game */
+      if (!Engine.stepDeployable(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
       else if (to) ping(to.x, to.y);
       return;
     }
