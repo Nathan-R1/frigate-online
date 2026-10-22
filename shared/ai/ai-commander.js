@@ -145,13 +145,6 @@ var AICommander = (function () {
     }
 
     var best = pick(P.reachable(s, horizon));
-    /* Nothing on the strict lattice beat standing still. That is usually a hull fenced in by
-       its own idle drones, leaving only routes that back away. Look again at the lattice that
-       lets us drive over them: a crushed decoy is cheaper than a game that never ends. */
-    if (!best || (!best.dx && !best.dy)) {
-      var loose = pick(P.reachable(s, horizon, true));
-      if (loose && (loose.dx || loose.dy)) best = loose;
-    }
     if (best && (best.dx || best.dy)) {
       /* Telegraph. When someone is watching, the first visit publishes the route and stops;
          the board draws it, and the commit happens on the next tick. That is what makes an
@@ -174,17 +167,6 @@ var AICommander = (function () {
         st.goal = { x: rx, y: ry };
       } else st.goal = null;
     } else { st.goal = null; st.planShown = false; }
-    /* Whatever Move survives the approach is spent here, in priority order. Clearing a firing
-       line comes before tidying berths: a gun that can shoot this turn is worth more than a
-       gun in the right place next turn. Both must happen before the Move is committed away. */
-    var tgts = allFoeObjects(s);
-    for (var r = 0; r < 3; r++) {
-      var rotated = AIPlacement.repositionForLos(s, tgts);
-      if (!rotated) break;
-      log2(s, rotated.name + ' shifts to clear its line of fire.');
-    }
-    AIPlacement.reconfigure(s, foe);
-    K.modList(s).forEach(function (m) { m.moveLeft = 0; });   /* commit the turn's movement */
   }
 
   /* ---------- target choice ---------- */
@@ -447,6 +429,8 @@ var AICommander = (function () {
       for (var k = 0; k < p.options.length; k++) if (!off[k]) return k;
       return pick;
     }
+    /* the computer has no plan for rearranging its hull: a swap it is somehow handed is skipped */
+    if (p.kind === 'target' && p.swap) return null;
     if (p.kind === 'target') return bestTarget(s, st, p.targets);
     /* an area weapon offers no choice of target, only whether to fire — and it was activated
        on purpose, so it fires */
@@ -501,17 +485,10 @@ var AICommander = (function () {
     var readyGun = gunWithShot(s);
     if (readyGun) { Engine.activateModule(readyGun.id); return; }
 
-    /* 2. no shot, but is a target merely screened? Stepping one gun clear of its own hull is
-       far cheaper than hauling the whole formation into a new position. */
-    if (K.modList(s).some(function (m) { return m.moveLeft > 0; })) {
-      var rotated = AIPlacement.repositionForLos(s, allFoeObjects(s));
-      if (rotated) { log2(s, rotated.name + ' shifts to clear its line of fire.'); return; }
-    }
+    /* 2. still nothing: spend Move we already hold before generating more */
+    if (s.moveLeft > 0) { manoeuvre(s, st); return; }
 
-    /* 3. still nothing: spend Move we already hold before generating more */
-    if (K.modList(s).some(function (m) { return m.moveLeft > 0; })) { manoeuvre(s, st); return; }
-
-    /* 4. still no shot: bring ONE engine online, then loop back to step 1 — after moving we
+    /* 3. still no shot: bring ONE engine online, then loop back to step 1 — after moving we
        may already be in range, and the remaining engines stay ready for next turn */
     var mv = K.modList(s).filter(function (m) {
       return !m.exhausted && K.isEngine(m) && Engine.fx(m.name, 'mod').activate &&
@@ -562,6 +539,7 @@ var AICommander = (function () {
     var card = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
       if (c.exhausted || !Engine.fx(c.name, 'tech').activate) return false;
       if (!Engine.affordable(s, c, 'tech')) return false;
+      if (swaps(c.name)) return false;              /* nothing for it to do with a swap */
       if (K.attackReach(s, c.name) === null) return true;
       /* a card fires from the hull, so any module may serve as its origin */
       return K.modList(s).some(function (m) { return hasTargetFor(s, m, c.name, 0); });
@@ -569,6 +547,11 @@ var AICommander = (function () {
     if (card) { Engine.activateCard(card.id); return; }
 
     Engine.endTurn();
+  }
+
+  function swaps(name) {
+    var a = Engine.fx(name, 'tech').activate;
+    return !!a && (a.effect || []).some(function (o) { return o.op === 'swap'; });
   }
 
   function describe(idx) {

@@ -92,6 +92,8 @@ tech: {
                                                             duration:'startOfYourNextTurn',target:'target'}]}] } },
 
 /* --- movement --- */
+'Swap Jet':               { activate:{ cost:[{op:'exhaustSelf'}],
+                                       effect:[{op:'swap',n:2}] } },
 'Grav Jet':               { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'gainMove',from:'stat',stat:'speed'}] } },
 'Rotating Jet':           { activate:{ cost:[{op:'exhaustSelf'}],
@@ -183,9 +185,8 @@ tech: {
    offered another event, so that is all the bookkeeping there is. `at` names the element the
    bubble points at (none means the centre of the screen); `side` is which side of it.
 
-   Moving hands the player a spare Move 3, so someone who cut a module loose can walk it back
-   into the Core's reach. It leaves play before the grant, so the Done that ends that move finds
-   it gone; its last popup waits in the queue behind the move and speaks once it is made.
+   Moving speaks twice: as the first Move is granted (onMove, before the move prompt opens) it
+   explains how the ship moves, and when that move is done it points at End Turn and leaves.
 
    Enemy Moves answers the player's own first handover and swings the camera across to the
    computer as it begins to move. Play a Card is dealt to the computer instead: it answers the
@@ -204,14 +205,15 @@ tech: {
      text:'Modules in-play can be reused every turn. Click Activate to use a module.',
      at:'hand', side:'above'},
     {op:'trashSelf'}] }] },
-'Tutorial Prompt — Moving':      { passive:[{ trigger:'onMoveDone', effect:[
+'Tutorial Prompt — Moving':      { passive:[
+  { trigger:'onMove', effect:[
     {op:'popup', title:'Moving',
-     text:'If your modules are not connected to your Core at the end of your turn you will lose them.\n' +
-          'A spare Move 3 has been granted to walk any back into reach.'},
-    {op:'trashSelf'},
-    {op:'gainMove', n:3},
+     text:'Your whole ship moves with its Core. Click a highlighted square to take the Core there.\n' +
+          'Red squares are blocked: some part of your hull would hit something on the way.'}] },
+  { trigger:'onMoveDone', effect:[
     {op:'popup', title:'End Your Turn', text:'Now press End Turn to hand over to your opponent.',
-     at:'endBtn', side:'below'}] }] },
+     at:'endBtn', side:'below'},
+    {op:'trashSelf'}] }] },
 'Tutorial Prompt — Enemy Moves': { passive:[{ trigger:'onEndTurn', match:{turn:1}, effect:[
     {op:'popup', title:'Enemy Moves', focus:true,
      text:'Keep an eye on how your enemy uses their modules to try and identify them.'},
@@ -300,8 +302,11 @@ mod: {
 'Decoy Module':       { placement:'adjacentToAny', chooseShape:true,
                         passive:[{ trigger:'static', effect:[{op:'noCoreDamageOnDestroy'}] }] },
 'Graviton Engine':    { placement:'adjacentToAny', movement:true,
-                        activate:{ cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
-                                   effect:[{op:'gainMove',n:3}] } },
+                        activate:{ mode:'choice', options:[
+                          { label:'Move', cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
+                            effect:[{op:'gainMove',n:3}] },
+                          { label:'Swap', cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
+                            effect:[{op:'swap',n:1}] } ] } },
 'Thrust Engine':      { placement:'adjacentToAny', movement:true,
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'gainMove',n:2}] } },

@@ -483,7 +483,7 @@ var Net = (function () {
   /* Every call that would advance the game. Each carries a sequence number so that a retry
      after a lost reply is recognised and dropped rather than played a second time. */
   var SENT = ['playCard', 'activateCard', 'activateModule', 'activateDeployable',
-              'moveModule', 'stepDeployable', 'resolve', 'cancel', 'undo',
+              'moveShip', 'stepDeployable', 'resolve', 'cancel', 'undo',
               'endPlayPhase', 'endTurn'];
 
   function send(cmd, args) {

@@ -205,7 +205,7 @@ var Engine = (function () {
     var id = uid('m');
     var rec = { id: id, name: modName, x: x, y: y,
                 exhausted: false, tokens: {}, charges: num(m.charges, 0),
-                moveLeft: 0, owner: s.idx, stealth: pregame() };
+                owner: s.idx, stealth: pregame() };
     /* A module that shares the Core's hull carries no hull fields at all. Leaving it a pool
        nothing reads is how the Citadel came to own a second, private 5 HP. */
     if (!sharesHullWithCore(s, rec)) {
@@ -625,7 +625,6 @@ var Engine = (function () {
       destroyModule(s, m);
     });
     if (G.over) { emit(); return; }
-    Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
     s.moveLeft = 0;
     refresh(s);
     log(s.name + ' ends turn.', s);
@@ -1287,11 +1286,11 @@ var Engine = (function () {
     /* A passive answering onMove adds to the grant rather than starting its own — otherwise
        an After Burner would open a second move prompt inside the first. */
     if (ctx.moveBonus) { s.moveBonus = (s.moveBonus || 0) + resolveCount(s, o.n, ctx); return; }
-    /* Move N is N for EACH module. "gain N Move for each module" is therefore just N —
-       multiplying by the module count here would apply the same factor twice. */
+    /* Move N is how many squares the ship may travel — the whole ship moves as one, so there
+       is a single pool, not one per module. */
     var n = (o.from === 'stat' && o.stat === 'speed') ? speedOf(s) : resolveCount(s, o.n, ctx);
-    /* Power on the module making the grant raises the grant itself, for every piece it reaches
-       — a powered Graviton Engine gives Move 4 per module rather than Move 3 and a limp. It
+    /* Power on the module making the grant raises the grant itself — a powered Graviton
+       Engine gives Move 4 rather than Move 3. It
        belongs here rather than where the Move is handed out, because it is a property of the
        engine being run, not of whoever receives its output. */
     n += powerOf(ctx.module);
@@ -1306,16 +1305,15 @@ var Engine = (function () {
     var s = ctx.side, n = o.n;
     if (s.moveBonus) { n += s.moveBonus; log(s.name + ' gains +' + s.moveBonus + ' Move from a passive.', s); }
     s.moveBonus = 0;
-    Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft += n; });
     s.moveLeft = n;
-    log(s.name + ' gains Move ' + n + ' per module.', s);
+    log(s.name + ' gains Move ' + n + '.', s);
     openFleetMove(s, n);
   };
 
-  /* Move your whole fleet. A piece may pass through your own hull, so the phase cannot be
-     ended while one is still standing inside another — the prompt simply comes back. */
+  /* Move the ship. It may pass through your own pieces, so the phase cannot be ended while one
+     is still standing inside another — the prompt simply comes back. */
   function openFleetMove(s, n) {
-    prompt({ kind: 'move', label: 'Move your modules — ' + n + ' each',
+    prompt({ kind: 'move', label: 'Move your ship',
       /* Done means done: unspent Move is lost rather than banked onto the next engine */
       onResolve: function () {
         var stuck = stackedPieces(s);
@@ -1325,10 +1323,44 @@ var Engine = (function () {
           openFleetMove(s, n);
           return;
         }
-        Object.keys(s.modules).forEach(function (id) { s.modules[id].moveLeft = 0; });
         s.moveLeft = 0;
         fire(s, 'onMoveDone', {});
       } });
+  }
+
+  /* Swap N: two of your modules trade places, N times over. Each swap is two clicks — the
+     first module, then the one it changes places with — and any of your modules will do, the
+     Core included. The hull keeps its shape; only who stands where changes, so a module may
+     end up somewhere its own requirement is not met (it breaks apart at the end of the turn,
+     as anything out of position does). Skipping a pick ends the swapping there. */
+  OPS.swap = function (o, ctx) {
+    var s = ctx.side, n = resolveCount(s, o.n, ctx);
+    if (n > 0) swapRound(s, 1, n);
+  };
+  function swapRound(s, i, n) {
+    var ids = Object.keys(s.modules);
+    if (ids.length < 2) return;
+    var of = n > 1 ? ' (' + i + ' of ' + n + ')' : '';
+    prompt({ kind: 'target', swap: true, label: 'Swap' + of + ' — first module', targets: ids,
+      hint: 'Click one of your modules, then the module it should trade places with.',
+      onResolve: function (a) {
+        if (!a || !s.modules[a]) return;
+        prompt({ kind: 'target', swap: true, label: 'Swap' + of + ' — trade places with',
+          targets: ids.filter(function (id) { return id !== a; }),
+          hint: 'Click the module to trade places with ' + s.modules[a].name + '.',
+          onResolve: function (b) {
+            if (!b || !s.modules[b] || !s.modules[a]) return;
+            swapModules(s, s.modules[a], s.modules[b]);
+            if (i < n) swapRound(s, i + 1, n);
+          } });
+      } });
+  }
+  function swapModules(s, a, b) {
+    leaveCell(a); leaveCell(b);
+    var x = a.x, y = a.y;
+    a.x = b.x; a.y = b.y; b.x = x; b.y = y;
+    enterCell(a, 'module', s.idx); enterCell(b, 'module', s.idx);
+    log(s.name + "'s " + a.name + ' and ' + b.name + ' swap places.', s);
   }
 
   OPS.gainShield = function (o, ctx) {
@@ -2051,45 +2083,94 @@ var Engine = (function () {
     return activate(a.cost, a.effect, ctx, d.name);
   }
 
-  /* one module steps one square, spending that module's own Move */
-  function moveModule(modId, dx, dy) {
-    var s = side();
-    if (G.phase === 'play') return false;
-    var m = s.modules[modId];
-    if (!m || m.moveLeft <= 0) return false;
-    if (Math.abs(dx) + Math.abs(dy) !== 1) return false;   /* orthogonal steps only */
-    var nx = m.x + dx, ny = m.y + dy;
-    if (!inBounds(nx, ny)) return false;
-    var c = cellAt(nx, ny);
-    if (c) {
-      var ours = c.owner === s.idx;
-      /* Your own hull is something you can move through — you end up standing inside it, and
-         the move phase will not let you stop there. Anybody else's still blocks. */
-      if (c.kind === 'module') {
-        if (!ours) return false;
-        /* You must have the Move to get out again. Without this a piece could spend its last
-           step going inside your hull, and then be unable to leave a square it is not allowed
-           to stop on — the move phase would refuse to end with no legal way to fix it. */
-        if (m.moveLeft <= 1) { log(m.name + ' has not the Move to pass through and get clear.', s); return false; }
-      }
-      else if (c.kind === 'deployable') {
-        /* Your own deployable is passed over, not driven over. An enemy's is overrun, which is
-           the case the rule exists for. */
-        if (!ours) {
-          var od = G.players[c.owner].deployables[c.id];
-          if (od) {
-            log(m.name + ' overruns ' + od.name + '.');
-            /* "an enemy enters this space" — driving over a mine is what this is for */
-            fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
-            vacate(od.x, od.y);
-            delete G.players[c.owner].deployables[c.id];
-          }
-        }
-      } else return false;                     /* a rock or an anomaly stops you dead */
+  /* ---- moving the ship ----
+     The ship moves as one: the Core and every module joined to it by a chain of neighbours
+     step together, a square at a time, out of a single pool of Move. A module cut adrift is
+     not part of the ship and stays where it is (it breaks apart at the end of the turn). A step
+     is legal only when every module of the ship can make it: each lands on empty ground, on a
+     square another of the ship's modules is leaving, on an enemy deployable (overrun), or
+     inside one of your own pieces — which may be passed through but not stopped in. Enemy
+     hull, rocks and anomalies stop the whole ship, so a big hull has fewer ways through. */
+  function shipModules(s) {
+    var on = connectedToCore(s);
+    return Object.keys(s.modules).filter(function (id) { return on[id]; })
+      .map(function (id) { return s.modules[id]; });
+  }
+
+  /* One step of the ship, `ox,oy` already travelled: 'free', 'through' (it would end standing
+     inside one of your own pieces) or null when something stops it. Read off the board as it
+     stands — the squares the ship itself fills count as open, since it is the one leaving. */
+  function shipStep(s, mods, ox, oy, dx, dy) {
+    var self = {}, through = false;
+    mods.forEach(function (m) { self[m.id] = true; });
+    for (var i = 0; i < mods.length; i++) {
+      var nx = mods[i].x + ox + dx, ny = mods[i].y + oy + dy;
+      if (!inBounds(nx, ny)) return null;
+      var c = cellAt(nx, ny);
+      if (!c || self[c.id]) continue;
+      if (c.owner === s.idx && (c.kind === 'module' || c.kind === 'deployable')) { through = true; continue; }
+      if (c.kind === 'deployable') continue;               /* an enemy's: driven over */
+      return null;
     }
-    leaveCell(m);
-    m.x = nx; m.y = ny; m.moveLeft--;
-    enterCell(m, 'module', s.idx);
+    return through ? 'through' : 'free';
+  }
+
+  /* Every offset the ship can reach within `max` steps, keyed "dx,dy", each with its cost, the
+     step that got there and the node before it — and `stand`, whether the move may end there.
+     The page shades these for the Core, and the computer plans its route over the same map. */
+  function shipReach(s, max) {
+    var mods = shipModules(s);
+    var seen = { '0,0': { dx: 0, dy: 0, cost: 0, from: null, step: null, stand: true } };
+    if (!mods.length) return seen;
+    var q = [seen['0,0']], dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    while (q.length) {
+      var cur = q.shift();
+      if (cur.cost >= max) continue;
+      for (var i = 0; i < 4; i++) {
+        var nx = cur.dx + dirs[i][0], ny = cur.dy + dirs[i][1], k = nx + ',' + ny;
+        if (seen[k]) continue;
+        var how = shipStep(s, mods, cur.dx, cur.dy, dirs[i][0], dirs[i][1]);
+        if (!how) continue;
+        seen[k] = { dx: nx, dy: ny, cost: cur.cost + 1, from: cur, step: dirs[i],
+                    stand: how === 'free' };
+        q.push(seen[k]);
+      }
+    }
+    return seen;
+  }
+
+  /* the ship steps one square, spending one Move */
+  function moveShip(dx, dy) {
+    var s = side();
+    if (G.phase === 'play' || s.moveLeft <= 0) return false;
+    if (Math.abs(dx) + Math.abs(dy) !== 1) return false;   /* orthogonal steps only */
+    var mods = shipModules(s);
+    var how = mods.length ? shipStep(s, mods, 0, 0, dx, dy) : null;
+    if (!how) return false;
+    /* You must have the Move to get out again. Without this the ship could spend its last
+       step going inside your own piece, and then be unable to leave a square it is not allowed
+       to stop on — the move phase would refuse to end with no legal way to fix it. */
+    if (how === 'through' && s.moveLeft <= 1) {
+      log('The ship has not the Move to pass through and get clear.', s);
+      return false;
+    }
+    mods.forEach(function (m) {
+      var c = cellAt(m.x + dx, m.y + dy);
+      if (!c || c.kind !== 'deployable' || c.owner === s.idx) return;
+      var od = G.players[c.owner].deployables[c.id];
+      if (!od) return;
+      log(m.name + ' overruns ' + od.name + '.');
+      /* "an enemy enters this space" — driving over a mine is what this is for */
+      fire(G.players[c.owner], 'onDestroyedOrEnemyEnters', { self: od, source: od });
+      vacate(od.x, od.y);
+      delete G.players[c.owner].deployables[c.id];
+    });
+    /* everyone off the board, then everyone back on one square along, so no module ever
+       finds a sibling still standing where it is going */
+    mods.forEach(leaveCell);
+    mods.forEach(function (m) { m.x += dx; m.y += dy; });
+    mods.forEach(function (m) { enterCell(m, 'module', s.idx); });
+    s.moveLeft--;
     /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
        outside the resolver, so nothing else will come along to drain it. A mine driven over
        would have been queued to detonate and then simply sat there. */
@@ -2167,29 +2248,6 @@ var Engine = (function () {
       return others.some(function (o) { return adjacent(m, o); });
     return true;
   }
-  /* let a planner try a whole manoeuvre and roll it back if the end state is illegal */
-  function snapshotModules(idx) {
-    var s = G.players[idx];
-    return Object.keys(s.modules).map(function (id) {
-      var m = s.modules[id];
-      return { id: id, x: m.x, y: m.y, moveLeft: m.moveLeft };
-    });
-  }
-  function restoreModules(idx, snap) {
-    var s = G.players[idx];
-    Object.keys(s.modules).forEach(function (id) { vacate(s.modules[id].x, s.modules[id].y); });
-    snap.forEach(function (r) {
-      var m = s.modules[r.id];
-      if (!m) return;                       /* destroyed since the snapshot; leave it gone */
-      m.x = r.x; m.y = r.y; m.moveLeft = r.moveLeft;
-    });
-    Object.keys(s.modules).forEach(function (id) {
-      var m = s.modules[id];
-      occupy(m.x, m.y, { kind: 'module', owner: idx, id: id });
-    });
-    emit();
-  }
-
   function failingModules(s) {
     return Object.keys(s.modules).map(function (id) { return s.modules[id]; })
       .filter(function (m) { return !meetsReq(s, m); });
@@ -2246,7 +2304,8 @@ var Engine = (function () {
     var p = G.pending;
     if (!p) return null;
     var out = { kind: p.kind, label: p.label };
-    ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards'].forEach(function (k) {
+    ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards', 'swap',
+     'hint'].forEach(function (k) {
       if (p[k] !== undefined) out[k] = p[k];
     });
     if (typeof p.filter === 'function') {
@@ -2271,7 +2330,7 @@ var Engine = (function () {
       var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead,
                      shield: s.shield, shieldMax: s.shieldMax, skills: s.skills, stats: s.stats,
                      coreId: s.coreId, modules: s.modules, deployables: s.deployables,
-                     playsLeft: s.playsLeft, moveBonus: s.moveBonus });
+                     playsLeft: s.playsLeft, moveLeft: s.moveLeft, moveBonus: s.moveBonus });
       if (i === viewer) {
         p.cards = copy(s.cards);
         ['hand', 'deck'].concat(PUBLIC_PILES).forEach(function (k) { p[k] = s[k].slice(); });
@@ -2408,8 +2467,9 @@ var Engine = (function () {
     RULES: RULES,
     newGame: newGame, get: function () { return G; }, onChange: onChange, emit: emit,
     playCard: playCard, activateCard: activateCard, activateModule: activateModule,
-    moveModule: moveModule, meetsReq: meetsReq, failingModules: failingModules,
-    snapshotModules: snapshotModules, restoreModules: restoreModules,
+    moveShip: moveShip, meetsReq: meetsReq, failingModules: failingModules,
+    shipModules: function (s2) { return shipModules(s2); },
+    shipReach: function (s2, max) { return shipReach(s2, max); },
     activateDeployable: activateDeployable, stepDeployable: stepDeployable,
     endPlayPhase: endPlayPhase, hasLos: hasLos, lineBlocked: lineBlocked,
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
