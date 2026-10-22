@@ -93,17 +93,34 @@ var Engine = (function () {
     var c = p && cellAt(p.x, p.y);
     return !!c && c.id !== p.id;
   }
-  /* every piece of this side's that is standing inside another; movement cannot end while any
-     of them is */
+  /* Standing inside an asteroid — something only AI Piloting allows — is a different thing:
+     the move may end there, and it is the end of the turn that wrecks the piece. */
+  function onRock(p) {
+    var c = p && cellAt(p.x, p.y);
+    return !!c && c.kind === 'asteroid' && c.id !== p.id;
+  }
+  /* every piece of this side's that is standing inside another of its own; movement cannot
+     end while any of them is */
   function stackedPieces(s) {
     var out = [];
     ['modules', 'deployables'].forEach(function (k) {
       Object.keys(s[k]).forEach(function (id) {
-        if (insideSomething(s[k][id])) out.push(s[k][id]);
+        if (insideSomething(s[k][id]) && !onRock(s[k][id])) out.push(s[k][id]);
       });
     });
     return out;
   }
+  /* A rule one of this side's cards in play carries (AI Piloting letting it into asteroid
+     fields), read off the card's static passive the way staticOp reads a module's. */
+  function playedRule(s, op) {
+    return !!s && s.played.some(function (id) {
+      var c = s.cards[id], e = c && fx(c.name, 'tech');
+      return !!e && (e.passive || []).some(function (pas) {
+        return (pas.effect || []).some(function (o) { return o.op === op; });
+      });
+    });
+  }
+  function rockRunner(s) { return playedRule(s, 'allowMoveOntoAsteroid'); }
   /* Find whatever is standing on a square other than `notId`, so it can take the square over
      when the piece holding it leaves. */
   function occupantAt(x, y, notId) {
@@ -460,7 +477,7 @@ var Engine = (function () {
     a.hull -= amount;
     log('Asteroid takes ' + amount + ' damage.');
     dealtDamage(a);
-    if (a.hull <= 0) { log('Asteroid is destroyed.'); vacate(a.x, a.y); delete G.asteroids[a.id]; }
+    if (a.hull <= 0) { log('Asteroid is destroyed.'); leaveCell(a); delete G.asteroids[a.id]; }
     return amount;
   }
 
@@ -624,6 +641,16 @@ var Engine = (function () {
       log(m.name + ' does not meet its requirement and breaks apart.', s);
       destroyModule(s, m);
     });
+    /* AI Piloting: a piece that ends the turn inside an asteroid is wrecked on it. A module lost
+       this way is a module destroyed, and costs the Core its point of hull like any other. */
+    Object.keys(s.deployables).map(function (id) { return s.deployables[id]; }).filter(onRock)
+      .forEach(function (d) { log(d.name + ' ends the turn on an asteroid.', s); destroyDeployable(s, d); });
+    Object.keys(s.modules).map(function (id) { return s.modules[id]; }).filter(onRock)
+      .forEach(function (m) {
+        if (!s.modules[m.id]) return;              /* gone with the wreck already */
+        log(m.name + ' ends the turn on an asteroid.', s);
+        destroyModule(s, m); lossToCore(s, m);
+      });
     if (G.over) { emit(); return; }
     s.moveLeft = 0;
     refresh(s);
@@ -710,17 +737,18 @@ var Engine = (function () {
     dep.hull -= amount;
     log(s.name + "'s " + dep.name + ' takes ' + amount + ' damage.', s);
     dealtDamage(dep);
-    if (dep.hull <= 0) {
-      log(s.name + "'s " + dep.name + ' is destroyed.', s);
-      /* Fired while it is still listed, because the passive is found by walking its owner's
-         deployables — a mine asked to detonate after it has been taken off the board is not
-         found at all. The queued effect keeps a direct reference, so the blast still knows
-         where the mine was standing. */
-      fire(s, 'onDestroyedOrEnemyEnters', { self: dep, source: dep });
-      leaveCell(dep);
-      delete s.deployables[dep.id];
-    }
+    if (dep.hull <= 0) destroyDeployable(s, dep);
     return amount;
+  }
+  function destroyDeployable(s, dep) {
+    log(s.name + "'s " + dep.name + ' is destroyed.', s);
+    /* Fired while it is still listed, because the passive is found by walking its owner's
+       deployables — a mine asked to detonate after it has been taken off the board is not
+       found at all. The queued effect keeps a direct reference, so the blast still knows
+       where the mine was standing. */
+    fire(s, 'onDestroyedOrEnemyEnters', { self: dep, source: dep });
+    leaveCell(dep);
+    delete s.deployables[dep.id];
   }
 
   function destroyModule(s, mod) {
@@ -1818,7 +1846,7 @@ var Engine = (function () {
     var p = { kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
               objId: obj.id, left: n,
               onResolve: function () {
-                if (!insideSomething(obj)) return;
+                if (!insideSomething(obj) || onRock(obj)) return;
                 log(obj.name + ' cannot stop inside another piece — move it clear.');
                 openStepMove(obj, p.left);
               } };
@@ -2098,10 +2126,11 @@ var Engine = (function () {
   }
 
   /* One step of the ship, `ox,oy` already travelled: 'free', 'through' (it would end standing
-     inside one of your own pieces) or null when something stops it. Read off the board as it
+     inside one of your own pieces), 'rock' (inside an asteroid, under AI Piloting — a place it
+     may stop, at the price of the turn's end) or null when something stops it. Read off the board as it
      stands — the squares the ship itself fills count as open, since it is the one leaving. */
   function shipStep(s, mods, ox, oy, dx, dy) {
-    var self = {}, through = false;
+    var self = {}, through = false, rock = false, rocks = rockRunner(s);
     mods.forEach(function (m) { self[m.id] = true; });
     for (var i = 0; i < mods.length; i++) {
       var nx = mods[i].x + ox + dx, ny = mods[i].y + oy + dy;
@@ -2110,9 +2139,10 @@ var Engine = (function () {
       if (!c || self[c.id]) continue;
       if (c.owner === s.idx && (c.kind === 'module' || c.kind === 'deployable')) { through = true; continue; }
       if (c.kind === 'deployable') continue;               /* an enemy's: driven over */
+      if (c.kind === 'asteroid' && rocks) { rock = true; continue; }   /* AI Piloting */
       return null;
     }
-    return through ? 'through' : 'free';
+    return through ? 'through' : rock ? 'rock' : 'free';
   }
 
   /* Every offset the ship can reach within `max` steps, keyed "dx,dy", each with its cost, the
@@ -2132,7 +2162,7 @@ var Engine = (function () {
         var how = shipStep(s, mods, cur.dx, cur.dy, dirs[i][0], dirs[i][1]);
         if (!how) continue;
         seen[k] = { dx: nx, dy: ny, cost: cur.cost + 1, from: cur, step: dirs[i],
-                    stand: how === 'free' };
+                    stand: how !== 'through', rock: how === 'rock' };
         q.push(seen[k]);
       }
     }
@@ -2268,7 +2298,13 @@ var Engine = (function () {
          by a deployable: overrunning is a module's doing. */
       var through = t.kind === 'deployable' && t.owner && c.owner === t.owner.idx &&
                     (c.kind === 'deployable' || c.kind === 'module');
-      if (!through) return false;
+      /* AI Piloting: your own pieces may fly into an asteroid, and even stop there — when you
+         are the one moving them, not when somebody else's beam is dragging them */
+      var rock = c.kind === 'asteroid' && t.owner && t.owner.idx === G.active &&
+                 t.kind !== 'asteroid' && rockRunner(t.owner);
+      if (!through && !rock) return false;
+    }
+    if (c && c.kind !== 'asteroid') {
       /* It has to have the Move to get out again, or it would be stranded on a square it is
          not allowed to stop on with no legal step left — the prompt would refuse to close and
          there would be no way to fix it. */
@@ -2489,6 +2525,8 @@ var Engine = (function () {
       return s ? stackedPieces(s).map(function (p) { return p.id; }) : [];
     },
     insideSomething: function (p) { return insideSomething(p); },
+    onRock: function (p) { return onRock(p); },
+    rockRunner: function (s2) { return rockRunner(s2); },
     reveal: reveal,
     sharesHullWithCore: function (s2, m) { return sharesHullWithCore(s2, m); },
     hullHolder: function (s2, m) { return hullHolder(s2, m); },

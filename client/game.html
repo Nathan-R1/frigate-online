@@ -1458,6 +1458,9 @@
     var kind = mv && mv.kind ? mv.kind : 'module';
     var owner = mv && mv.owner !== undefined && mv.owner !== null ? mv.owner : meIdx();
     if (c.owner === owner && (c.kind === 'module' || c.kind === 'deployable')) return true;
+    /* AI Piloting: your own pieces may fly into an asteroid when you are the one moving them */
+    if (c.kind === 'asteroid')
+      return kind !== 'asteroid' && owner === meIdx() && Engine.rockRunner(Engine.get().players[owner]);
     return kind === 'module' && c.kind === 'deployable';
   }
   function routeTo(from, tx, ty, mv) {
@@ -2643,14 +2646,14 @@
            '<div style="font-size:11px;margin-bottom:4px"><b style="color:var(--cyan)">' + left +
            '</b> Move left</div>' +
            movePad(left > 0) +
-           stuckNote(G) +
+           rockNote(G) + stuckNote(G) +
            '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
            '>Done moving</button>' + cancelBtn();
     }
     else if (p.kind === 'moveObject')
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Click where it should go, ' +
            'or use the pad — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' + movePad(p.left > 0) +
-           stuckNote(G) +
+           rockNote(G) + stuckNote(G) +
            '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
            '>Done</button>' + cancelBtn();
     else if (p.kind === 'space')
@@ -2705,6 +2708,17 @@
      refuses it too, so this is the explanation rather than the rule. */
   function stuckIds(G) {
     return (Engine.stacked ? Engine.stacked(G.active) : []) || [];
+  }
+  /* AI Piloting lets a piece stop inside an asteroid, but the end of the turn wrecks it */
+  function rockNote(G) {
+    var s = G.players[G.active];
+    var n = ['modules', 'deployables'].reduce(function (a, k) {
+      return a + Object.keys(s[k]).filter(function (id) { return Engine.onRock(s[k][id]); }).length;
+    }, 0);
+    if (!n) return '';
+    return '<div style="font-size:11px;color:var(--amber);margin-bottom:6px">' +
+           (n === 1 ? 'A piece is' : n + ' pieces are') + ' on an asteroid and will be destroyed ' +
+           'at the end of your turn unless moved off.</div>';
   }
   function stuckNote(G) {
     var n = stuckIds(G).length;
