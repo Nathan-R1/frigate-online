@@ -113,16 +113,12 @@ tech: {
                                                {op:'destroyIfEndTurnOnAsteroid'}] }] },
 
 /* --- defence / reaction --- */
-'Reactive Armor':         { passive:[{ trigger:'onDamaged', optional:true,
-                                       effect:[{op:'negateDamage'},{op:'trashSelf'}] }] },
-'Chaff Clouds':           { passive:[{ trigger:'onTargeted', by:'enemyDeployable',
-                                       checkOrSave:true,
-                                       effect:[{op:'negateEffect'},{op:'trashSelf'}] }] },
-'Phantom':                { passive:[{ trigger:'onTargeted', within:'sensors', optional:true,
-                                       effect:[{op:'exhaustSelf'},
-                                               {op:'skillCheck',skill:'Piloting',
-                                                onSuccess:[{op:'gainMove',n:1},
-                                                           {op:'mayNegateIfTargetMoved'}]}] }] },
+'Reactive Armor':         { passive:[{ trigger:'static', effect:[{op:'negateHullDamageOnce'}] }] },
+/* Reactions that land on somebody else's turn are rules the engine applies where they bite —
+   Chaff Clouds and Phantom inside the attack, Reactive Armor where hull is lost — because
+   nobody can be asked mid-attack whose turn it is not. */
+'Chaff Clouds':           { passive:[{ trigger:'static', effect:[{op:'shrugDeployableCheck'}] }] },
+'Phantom':                { passive:[{ trigger:'static', effect:[{op:'phantomDodge'}] }] },
 'Shield Generator':       { activate:{ mode:'choice', options:[
                               { label:'Charge', cost:[{op:'exhaustSelf'}],
                                 effect:[{op:'addCharge',target:'self',n:1}] },
@@ -139,14 +135,11 @@ tech: {
 'Heat Stores':            { onPlay:[{op:'addHeat',target:'allOwnCards',filter:'takesHeat',n:1},
                                     {op:'discardSelf'}] },
 'Heat Sinks':             { passive:[
-                              { trigger:'onFailCheck', optional:true,
+                              { trigger:'onFailCheck', optional:true, ownTurn:true,
                                 effect:[{op:'spendHeat',n:2,target:'self'},{op:'reroll',n:1}] },
-                              { trigger:'onExhaustMovementModule',
+                              { trigger:'onExhaustMovementModule', ownTurn:true,
                                 effect:[{op:'addHeat',target:'choose',n:1,filter:'takesHeat'}] }] },
-'Revitaliser':            { onPlay:[{op:'addCharge',target:'self',n:6}],
-                            passive:[{ trigger:'onWouldTrash', optional:true,
-                                       effect:[{op:'spendCharge',n:3,target:'self'},
-                                               {op:'convertTrashToDiscard'}] }] },
+'Revitaliser':            { onPlay:[{op:'recoverFromTrash',exhaust:2},{op:'discardSelf'}] },
 'Vital Burst':            { onPlay:[{op:'chooseCard',filter:'ownCardInPlayWithActivate',as:'t'},
                                     {op:'activateCard',ref:'t',times:2,payCosts:true},
                                     {op:'trashCard',ref:'t',keepFixedDurations:true},

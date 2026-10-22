@@ -111,15 +111,21 @@ var Engine = (function () {
     return out;
   }
   /* A rule one of this side's cards in play carries (AI Piloting letting it into asteroid
-     fields), read off the card's static passive the way staticOp reads a module's. */
-  function playedRule(s, op) {
-    return !!s && s.played.some(function (id) {
-      var c = s.cards[id], e = c && fx(c.name, 'tech');
-      return !!e && (e.passive || []).some(function (pas) {
+     fields, Reactive Armor waiting for a hit), read off the card's static passive the way
+     staticOp reads a module's. Reactions that happen on somebody else's turn are written this
+     way and resolved automatically where they apply, because nobody can be asked mid-attack
+     whose turn it is not — the same reason Point Defence is decided inside shoot(). */
+  function playedWith(s, op) {
+    if (!s) return null;
+    for (var i = 0; i < s.played.length; i++) {
+      var c = s.cards[s.played[i]], e = c && fx(c.name, 'tech');
+      if (e && (e.passive || []).some(function (pas) {
         return (pas.effect || []).some(function (o) { return o.op === op; });
-      });
-    });
+      })) return c;
+    }
+    return null;
   }
+  function playedRule(s, op) { return !!playedWith(s, op); }
   function rockRunner(s) { return playedRule(s, 'allowMoveOntoAsteroid'); }
   /* Find whatever is standing on a square other than `notId`, so it can take the square over
      when the piece holding it leaves. */
@@ -713,6 +719,7 @@ var Engine = (function () {
     /* A Citadel is the Core wearing another silhouette: the damage lands in the Core's pool,
        and it is the Core that dies when that pool runs out — the Citadel goes with the wreck. */
     var hit = hullHolder(targetSide, mod);
+    rest = armoured(targetSide, rest);
     hit.hull -= rest;
     if (absorbed) {
       log(targetSide.name + "'s shields absorb " + absorbed + '.', targetSide);
@@ -751,6 +758,18 @@ var Engine = (function () {
     delete s.deployables[dep.id];
   }
 
+  /* Reactive Armor: the first hull damage this side takes — to a module or to the Core, never
+     to shields or a deployable — is negated, and the card goes to the trash. Returns what is
+     left of the damage. */
+  function armoured(s, amount) {
+    if (amount <= 0) return amount;
+    var card = playedWith(s, 'negateHullDamageOnce');
+    if (!card) return amount;
+    log(s.name + "'s " + card.name + ' negates ' + amount + ' hull damage.', s);
+    moveCard(s, card, 'trash');
+    return 0;
+  }
+
   function destroyModule(s, mod) {
     log(s.name + "'s " + mod.name + ' is destroyed.', s);
     leaveCell(mod);
@@ -765,6 +784,7 @@ var Engine = (function () {
   function lossToCore(s, mod) {
     var core = s.modules[s.coreId];
     if (!core || staticOp(mod.name, 'noCoreDamageOnDestroy')) return;
+    if (!armoured(s, 1)) return;
     core.hull -= 1;
     log(s.name + "'s Core takes 1 hull damage from the loss.", s);
     if (core.hull <= 0) destroyModule(s, core);
@@ -929,6 +949,7 @@ var Engine = (function () {
            that piece's own passive is offered the chance to answer. */
         if (payload && payload.self && h.obj !== payload.self) return;
         if (!matches(pas.match, payload)) return;
+        if (pas.ownTurn && s.idx !== G.active) return;      /* "on your turn" only */
         var ctx = {};
         for (var k in h.ctx) ctx[k] = h.ctx[k];
         for (var k2 in (payload || {})) ctx[k2] = payload[k2];
@@ -1161,6 +1182,48 @@ var Engine = (function () {
     return false;
   }
 
+  /* ---- Phantom ----
+     "When an Object within Sensors range targets you with an Attack, Check or Save, Exhaust
+     this to make a Piloting Check. On a success Move 1." It answers on the attacker's turn, so
+     it fires by itself: a ready Phantom always tries, and a success steps the whole ship one
+     square — away from the attacker where it can, onto a square where nothing else of the ship
+     has moved into the line of fire where that is a choice. The shot still lands on the square
+     it was aimed at: on whatever is standing there now, or on nothing at all. Returns the id
+     the shot now lands on, or null. */
+  function phantom(o, ctx, t, targetId) {
+    var d = t.owner, s = ctx.side;
+    if (!d || t.kind !== 'module' || d.team === s.team) return targetId;
+    var card = playedWith(d, 'phantomDodge');
+    if (!card || card.exhausted) return targetId;
+    var src = ctx.module || attackOrigins(s, o, ctx)[0];
+    if (!src) return targetId;
+    var near = Object.keys(d.modules).some(function (id) { return dist(src, d.modules[id]) <= sensorsOf(d); });
+    if (!near) return targetId;
+    /* dice are cast and another player's ship may move: the activation can no longer be
+       taken back, any more than the shot itself could */
+    clearUndo();
+    card.exhausted = true;
+    var c = check(d, 'Piloting', RULES.dc);
+    log(d.name + "'s " + card.name + ' — Piloting ' + c.text + (c.hit ? ', evades.' : ', fails.'), d);
+    if (!c.hit) return targetId;
+    var mods = shipModules(d), was = { x: t.obj.x, y: t.obj.y }, best = null, bs = -1e9;
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(function (st) {
+      var how = mods.length ? shipStep(d, mods, 0, 0, st[0], st[1]) : null;
+      if (!how || how === 'through') return;
+      var away = dist(src, { x: t.obj.x + st[0], y: t.obj.y + st[1] }) - dist(src, t.obj);
+      var clear = mods.every(function (m) { return m.x + st[0] !== was.x || m.y + st[1] !== was.y; });
+      var sc = away * 10 + (clear ? 5 : 0) - (how === 'rock' ? 20 : 0);
+      if (sc > bs) { bs = sc; best = st; }
+    });
+    if (!best) { log(d.name + "'s ship has nowhere to go.", d); return targetId; }
+    stepShip(d, mods, best[0], best[1]);
+    var now = cellAt(was.x, was.y);
+    if (now && now.kind !== 'anomaly') return now.id;
+    log('The shot strikes empty space.');
+    recordShot(o, s, ctx.module || src, was, [false]);
+    return null;
+  }
+
   /* ---- point defence ----
      Is this module standing under one of its owner's P.D. modules? Range 1, as the card says,
      measured from the P.D. to the piece being shot at — so a P.D. covers itself and everything
@@ -1193,6 +1256,9 @@ var Engine = (function () {
     var s = ctx.side;
     var t = objectById(targetId);
     if (!t) return;
+    targetId = phantom(o, ctx, t, targetId);
+    if (!targetId) return;                       /* dodged: the shot found empty space */
+    t = objectById(targetId);
     var origins = attackOrigins(s, o, ctx);
     var reach = resolveRange(s, o.range);
     /* name the piece that actually fires: the origin nearest the target that can see it */
@@ -1236,6 +1302,16 @@ var Engine = (function () {
         log('  ' + c.text + ' — miss; Decomp Strikes rerolls.');
         c = again;
       }
+      /* Chaff Clouds: an enemy deployable's Check that hits leaves the ship unaffected, once */
+      if (c.hit && o.check && ctx.deployable && !friendly && t.kind === 'module') {
+        var chaff = playedWith(t.owner, 'shrugDeployableCheck');
+        if (chaff) {
+          log('  ' + c.text + ' — hit, but ' + t.owner.name + "'s " + chaff.name +
+              ' leaves the ship unaffected.', t.owner);
+          moveCard(t.owner, chaff, 'trash');
+          c = { hit: false, text: c.text, chaffed: true };
+        }
+      }
       rolls.push(c.hit);
       if (c.hit) {
         log('  ' + c.text + ' — hit.');
@@ -1253,7 +1329,7 @@ var Engine = (function () {
           sub.target = objectById(targetId);
           enqueue(o.onSuccess, sub);
         }
-      } else log('  ' + c.text + ' — miss.');
+      } else if (!c.chaffed) log('  ' + c.text + ' — miss.');
       if (!objectById(targetId)) break;
     }
     recordShot(o, s, shot.from, shot.to, rolls);
@@ -1390,6 +1466,30 @@ var Engine = (function () {
     enterCell(a, 'module', s.idx); enterCell(b, 'module', s.idx);
     log(s.name + "'s " + a.name + ' and ' + b.name + ' swap places.', s);
   }
+
+  /* Revitaliser: exhaust two of your modules to take a card back out of the trash and shuffle
+     it into your deck. Picked by name; the trash has no hand on screen to click in. Nothing is
+     spent if there is nothing to take back or nobody to exhaust. */
+  OPS.recoverFromTrash = function (o, ctx) {
+    var s = ctx.side, need = num(o.exhaust, 0);
+    var ready = exhaustPool(s, {}, ctx);
+    var ids = s.trash.filter(function (id) { return s.cards[id] && id !== (ctx.card && ctx.card.id); });
+    if (!ids.length) { log(s.name + ' has nothing in the trash to recover.', s); return; }
+    if (ready.length < need) {
+      log(s.name + ' needs ' + need + ' ready modules to exhaust, and has ' + ready.length + '.', s);
+      return;
+    }
+    prompt({ kind: 'choice', label: 'Return to your deck',
+      options: ids.map(function (id) { return s.cards[id].name; }),
+      onResolve: function (i) {
+        var id = ids[i]; if (!id) return;
+        ready.slice(0, need).forEach(function (m) { exhaustPiece(s, m); });
+        s.trash.splice(s.trash.indexOf(id), 1);
+        s.deck.push(id);
+        shuffle(s.deck);
+        log(s.name + ' returns ' + s.cards[id].name + ' from the trash to the deck.', s);
+      } });
+  };
 
   OPS.gainShield = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
@@ -2184,6 +2284,17 @@ var Engine = (function () {
       log('The ship has not the Move to pass through and get clear.', s);
       return false;
     }
+    stepShip(s, mods, dx, dy);
+    s.moveLeft--;
+    /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
+       outside the resolver, so nothing else will come along to drain it. A mine driven over
+       would have been queued to detonate and then simply sat there. */
+    step();
+    return true;
+  }
+  /* carry the ship's modules one square, overrunning enemy deployables on the way; the
+     caller has already judged the step legal */
+  function stepShip(s, mods, dx, dy) {
     mods.forEach(function (m) {
       var c = cellAt(m.x + dx, m.y + dy);
       if (!c || c.kind !== 'deployable' || c.owner === s.idx) return;
@@ -2200,12 +2311,6 @@ var Engine = (function () {
     mods.forEach(leaveCell);
     mods.forEach(function (m) { m.x += dx; m.y += dy; });
     mods.forEach(function (m) { enterCell(m, 'module', s.idx); });
-    s.moveLeft--;
-    /* Anything the move set off is queued, not run — and unlike an op, a move is entered from
-       outside the resolver, so nothing else will come along to drain it. A mine driven over
-       would have been queued to detonate and then simply sat there. */
-    step();
-    return true;
   }
 
   /* ---- placement requirements are ongoing, not just a build-time check ---- */

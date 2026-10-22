@@ -33,8 +33,11 @@ var AIKnowledge = (function () {
     if (atk && (atk.dmg === 0 || atk.onSuccess || atk.check)) return 'control';
     if (has('gainMove')) return 'mobility';
     if (has('addCharge') && e.activate) return 'bank';
+    /* reactions: a passive that answers a hit, or a standing rule the engine applies mid-attack
+       (Phantom, Chaff Clouds, Reactive Armor) */
     if ((e.passive || []).some(function (p) {
-      return /onDamaged|onTargeted|onWouldTrash|onFailCheck/.test(p.trigger); })) return 'reactive';
+      return /onDamaged|onTargeted|onWouldTrash|onFailCheck/.test(p.trigger); }) ||
+        has('phantomDodge') || has('shrugDeployableCheck') || has('negateHullDamageOnce')) return 'reactive';
     if (has('moveObject')) return 'mobility';
     if (atk) return 'burst';
     return 'other';
