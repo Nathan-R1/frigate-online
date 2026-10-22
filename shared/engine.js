@@ -680,7 +680,20 @@ var Engine = (function () {
       s.cards[id].durations = (s.cards[id].durations || []).filter(function (d) { return --d.turns > 0; });
     });
     s.statuses = {};
+    /* "until the start of your next turn": what this side put on anybody's pieces, and the
+       buffs it gave itself, end now */
+    s.buffs = (s.buffs || []).filter(function (b) { return b.until !== s.idx; });
+    G.players.forEach(function (p) {
+      ['modules', 'deployables'].forEach(function (bag) {
+        Object.keys(p[bag]).forEach(function (id) {
+          var st = p[bag][id].status;
+          if (!st) return;
+          Object.keys(st).forEach(function (k) { if (st[k] === s.idx) delete st[k]; });
+        });
+      });
+    });
   }
+  function hasStatus(o, name) { return !!(o && o.status && o.status[name] !== undefined); }
 
   function drawCards(s, n) {
     for (var i = 0; i < n; i++) {
@@ -703,11 +716,38 @@ var Engine = (function () {
     return { roll: r, hit: r >= RULES.attackHitsOn, text: 'd6=' + r };
   }
   /* a check is d12 + the named skill against DC 7 */
-  function check(s, skillName, dc) {
-    var mod = skillName ? skill(s, skillName) : 0;
+  function check(s, skillName, dc, at) {
+    var mod = (skillName ? skill(s, skillName) : 0) + commsBonus(s, at);
     var r = die(RULES.checkDie), t = r + mod, d = dc || RULES.dc;
     return { roll: r, mod: mod, total: t, dc: d, hit: t >= d,
              text: 'd12=' + r + (mod ? '+' + mod : '') + ' vs ' + d };
+  }
+
+  /* Comms Unit: "Allies within Sensor range of this gain a +2 bonus on all Checks and Saves" —
+     a check made from a piece within Sensors (of the Comms Unit's owner) of any Comms Unit
+     on this side or an allied one. It does not stack. */
+  function commsBonus(s, at) {
+    if (!s || !at) return 0;
+    var near = G.players.some(function (p) {
+      if (p.team !== s.team) return false;
+      return Object.keys(p.modules).some(function (id) {
+        var m = p.modules[id];
+        return staticOp(m.name, 'checkBonus') && dist(m, at) <= sensorsOf(p);
+      });
+    });
+    return near ? 2 : 0;
+  }
+  /* a check that may be rerolled: Heat Sinks, on its owner's own turn, spends 2 Heat to try a
+     failed check once more */
+  function checkRolled(s, skillName, at) {
+    var c = check(s, skillName, RULES.dc, at);
+    if (c.hit || s.idx !== G.active) return c;
+    var hs = playedWith(s, 'rerollFailedCheck');
+    if (!hs || (hs.heat || 0) < 2) return c;
+    hs.heat -= 2;
+    var again = check(s, skillName, RULES.dc, at);
+    log('  ' + c.text + ' — failed; ' + hs.name + ' spends 2 Heat to reroll.', s);
+    return again;
   }
 
   /* ================= damage ================= */
@@ -874,7 +914,7 @@ var Engine = (function () {
     undoPoint = {
       label: label, active: G.active, turn: G.turn,
       cells: copy(G.cells), moveLeft: s.moveLeft, playsLeft: s.playsLeft, shield: s.shield,
-      cards: copy(s.cards), asteroids: copy(G.asteroids),
+      cards: copy(s.cards), asteroids: copy(G.asteroids), buffs: copy(s.buffs || []),
       /* Where the cards were, not just what they were. Taking back a card you played has to
          put it back in your hand; without the piles it stayed in play with the play refunded,
          and a cancelled draw kept the card it drew. */
@@ -898,6 +938,7 @@ var Engine = (function () {
     G.asteroids = u.asteroids;
     s.moveLeft = u.moveLeft; s.playsLeft = u.playsLeft;
     s.cards = u.cards;
+    s.buffs = u.buffs;
     if (u.piles) PILES.forEach(function (k) { s[k] = u.piles[k].slice(); });
     G.players.forEach(function (pl, i) {
       pl.modules = u.modules[i];
@@ -1027,7 +1068,7 @@ var Engine = (function () {
      same silhouette — the one thing a decoy must not do. A shape stored on the piece itself
      overrides the deal for that piece alone. */
   function askShape(s, modName, then) {
-    if (!fx(modName, 'mod').chooseShape) return then(null);
+    if (!fx(modName, 'mod').chooseShape && !staticOp(modName, 'stealthMimic')) return then(null);
     /* Settled before the piece is put down. Asked afterwards, everyone watches the decoy
        arrive wearing one silhouette and then turn into another, which points straight at it.
        The answer is never logged either — the log goes to every seat. */
@@ -1056,10 +1097,18 @@ var Engine = (function () {
 
   OPS.createDeployable = function (o, ctx) {
     var s = ctx.side;
+    /* a Decoy Deployable "may appear as any other Deployable": asked before it is put down */
+    askShape(s, o.deployable, function (shape) {
     prompt({ kind: 'space', label: 'Deploy ' + o.deployable, filter: deployFilter(s),
       onResolve: function (cell) {
-        if (cell) { placeDeployable(s, o.deployable, cell.x, cell.y); log(s.name + ' deploys ' + o.deployable + '.', s); }
+        if (!cell) return;
+        var id = placeDeployable(s, o.deployable, cell.x, cell.y);
+        if (id && shape) s.deployables[id].shape = shape;
+        log(s.name + ' deploys ' + o.deployable + '.', s);
+        var d = id && s.deployables[id], e = d && fx(d.name, 'mod');
+        if (e && e.onPlay) enqueue(e.onPlay, { side: s, module: d, deployable: d });
       } });
+    });
   };
 
   /* everything a given side is allowed to shoot at, across every enemy team plus the rocks */
@@ -1102,6 +1151,11 @@ var Engine = (function () {
     /* 'ships' means crewed things only. A torpedo is spent whether it hits or not, and cracking
        an asteroid with one is a waste nobody would choose — so it is not offered the choice. */
     if (o.targets === 'ships') pool = pool.filter(function (m) { return !G.asteroids[m.id]; });
+    /* "Target the locked Object" — whatever this card last banked charges against */
+    if (o.target === 'locked') {
+      var lockHolder = holderOf(ctx);
+      pool = pool.filter(function (m) { return lockHolder && m.id === lockHolder.lockedOn; });
+    }
     /* a beam that would drag a Core (or what stands in for one) off its own hull may not take
        hold of it at all — the rest of that ship would be stranded and break apart */
     if (o.notCore) pool = pool.filter(function (m) {
@@ -1112,7 +1166,7 @@ var Engine = (function () {
       /* a beam cannot grab the very module it is firing from */
       if (ctx.module && m.id === ctx.module.id) return false;
       return origins.some(function (or) {
-        return dist(or, m) <= reach + powerOf(or) && hasLos(or, m);
+        return dist(or, m) <= reach + rangeBonus(s, or) && hasLos(or, m);
       });
     });
     if (!targets.length) {
@@ -1173,6 +1227,15 @@ var Engine = (function () {
      it describes. Hull is handled where the token is placed, because hull is a pool rather
      than a reading. */
   function powerOf(m) { return (m && m.tokens && m.tokens.Power) || 0; }
+  /* Overcharge: "+1 Dmg and +2 Range to all Cannons and P.D. modules until the start of your
+     next turn" — a buff on the side, matched to the module that fires */
+  function buffOf(s, m, key) {
+    if (!s || !m) return 0;
+    return (s.buffs || []).reduce(function (a, b) {
+      return a + (matchModule(m, b.filter, null) ? (b[key] || 0) : 0);
+    }, 0);
+  }
+  function rangeBonus(s, m) { return powerOf(m) + buffOf(s, m, 'range'); }
 
   /* ---- Decomp Strikes ----
      "When you make an attack roll with a module adjacent to an Asteroid or other terrain you
@@ -1211,7 +1274,7 @@ var Engine = (function () {
        taken back, any more than the shot itself could */
     clearUndo();
     card.exhausted = true;
-    var c = check(d, 'Piloting', RULES.dc);
+    var c = check(d, 'Piloting', RULES.dc, t.obj);
     log(d.name + "'s " + card.name + ' — Piloting ' + c.text + (c.hit ? ', evades.' : ', fails.'), d);
     if (!c.hit) return targetId;
     var mods = shipModules(d), was = { x: t.obj.x, y: t.obj.y }, best = null, bs = -1e9;
@@ -1273,13 +1336,16 @@ var Engine = (function () {
     var from = null, fd = 1e9;
     origins.forEach(function (or) {
       var d = dist(or, t.obj);
-      if (d <= reach + powerOf(or) && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
+      if (d <= reach + rangeBonus(s, or) && hasLos(or, t.obj) && d < fd) { fd = d; from = or; }
     });
     var n = resolveCount(s, o.attacks, ctx);
     var base = resolveCount(s, o.dmg, ctx);
     /* a powered gun hits harder; a zero-damage beam is not a gun, and stays zero */
-    var dmg = base > 0 ? base + powerOf(from) : 0;
-    var hit = false, landed = false, rolls = [];
+    /* Directed Laser Beam: "Dmg 2 (4 if range >= 10)" */
+    if (o.dmgIfRangeAtLeast && from && dist(from, t.obj) >= o.dmgIfRangeAtLeast.range)
+      base = o.dmgIfRangeAtLeast.dmg;
+    var dmg = base > 0 ? base + powerOf(from) + buffOf(s, from, 'dmg') : 0;
+    var hit = false, landed = false, rolls = [], chained = 0;
     var shot = { from: from || ctx.module || null, to: t.obj };
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
@@ -1288,7 +1354,7 @@ var Engine = (function () {
        a module under that umbrella cannot be hit by one. Only deployables: a P.D. is close-in
        defence, not a shield against the enemy fleet's guns. */
     var swatted = !!ctx.deployable && !friendly && pointDefenceCovers(t);
-    var decomp = hasInPlay(s, 'Decomp Strikes') && besideTerrain(from);
+    var decomp = playedRule(s, 'rerollMissBesideTerrain') && besideTerrain(from);
     /* The dice are about to be cast, so the activation can no longer be taken back. A
        rider's prompt may still be cancelled, but that cancels only the rider — the cost
        stays paid and the card stays exhausted. */
@@ -1303,10 +1369,10 @@ var Engine = (function () {
       /* a card naming a Check rolls d12 + that skill; everything else is a flat d6 */
       var c = (o.check && friendly) ? { hit: true, text: o.check + ' — no resistance' }
             : swatted ? { hit: false, text: 'P.D. covers the target — the shot is swatted down' }
-            : o.check ? check(s, o.check, RULES.dc) : attackRoll();
+            : o.check ? checkRolled(s, o.check, from || ctx.module) : attackRoll();
       /* one second swing per missed shot, when the gun is working beside terrain */
       if (!c.hit && !swatted && decomp) {
-        var again = o.check ? check(s, o.check, RULES.dc) : attackRoll();
+        var again = o.check ? check(s, o.check, RULES.dc, from || ctx.module) : attackRoll();
         log('  ' + c.text + ' — miss; Decomp Strikes rerolls.');
         c = again;
       }
@@ -1326,7 +1392,12 @@ var Engine = (function () {
         if (dmg > 0) {
           if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
           else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
-          else damageModule(t.owner, t.obj, dmg);
+          /* "For each hit to Hull roll an attack against the same target" — a hit the shields
+             soaked entirely is not a hit to hull */
+          else if (damageModule(t.owner, t.obj, dmg) > 0 && o.chainOnHullHit && chained < 12) {
+            n++; chained++;
+            log('  Hull hit — another attack.');
+          }
         }
         landed = true;
         /* riders such as a tractor beam's shove run once, on the first hit that lands.
@@ -1410,7 +1481,7 @@ var Engine = (function () {
     /* queue the grant, then the passives in front of it: an optional one may stop to ask,
        and its answer has to be in before the Move is handed out */
     enqueue([{ op: '__grantMove', n: n }], ctx);
-    fire(s, 'onMove', { moveBonus: true });
+    fire(s, 'onMove', { moveBonus: true, move: n });
   };
 
   OPS.__grantMove = function (o, ctx) {
@@ -1474,6 +1545,99 @@ var Engine = (function () {
     enterCell(a, 'module', s.idx); enterCell(b, 'module', s.idx);
     log(s.name + "'s " + a.name + ' and ' + b.name + ' swap places.', s);
   }
+
+  /* A status on the piece an attack hit. "cannot gain Move" lasts until the start of the
+     applier's next turn (the piece cannot move, and a ship with it aboard cannot move); an
+     exhaust on the hit module simply exhausts it — a side refreshes at the end of its own turn,
+     so that already holds through the victim's whole next turn, which is the round. */
+  OPS.applyStatus = function (o, ctx) {
+    var t = ctx.target; if (!t || !t.obj) return;
+    if (o.target === 'hitModule' && t.kind !== 'module') return;
+    if (o.status === 'exhausted') {
+      if (t.owner) exhaustPiece(t.owner, t.obj); else t.obj.exhausted = true;
+      log((t.owner ? t.owner.name + "'s " : '') + t.obj.name + ' is exhausted.', t.owner);
+      return;
+    }
+    if (t.kind === 'asteroid') return;
+    t.obj.status = t.obj.status || {};
+    t.obj.status[o.status] = ctx.side.idx;
+    log((t.owner ? t.owner.name + "'s " : '') + t.obj.name +
+        (o.status === 'noMove' ? ' cannot move until ' + ctx.side.name + "'s next turn." : ' is ' + o.status + '.'), t.owner);
+  };
+
+  /* Overcharge and the like: a buff on your own side, until the start of your next turn */
+  OPS.buff = function (o, ctx) {
+    var s = ctx.side;
+    s.buffs = (s.buffs || []).concat([{ filter: o.filter, dmg: o.dmg || 0, range: o.range || 0,
+                                        until: s.idx }]);
+    log(s.name + "'s " + (ctx.card ? ctx.card.name : 'buff') + ' — ' +
+        [o.dmg && '+' + o.dmg + ' Dmg', o.range && '+' + o.range + ' Range'].filter(Boolean).join(', ') +
+        ' until the start of their next turn.', s);
+  };
+
+  /* Vital Burst: pick a card of yours in play that has an ability, activate it twice paying
+     each activation's costs, then trash it. The steps share one context, so the card picked
+     here is the one the next two ops act on. */
+  OPS.chooseCard = function (o, ctx) {
+    var s = ctx.side;
+    var ids = s.played.filter(function (id) {
+      var c = s.cards[id];
+      return c && id !== (ctx.card && ctx.card.id) && fx(c.name, 'tech').activate;
+    });
+    if (!ids.length) { log(s.name + ' has no card in play with an ability.', s); return; }
+    prompt({ kind: 'choice', label: 'Activate which card twice?',
+      options: ids.map(function (id) { return s.cards[id].name; }),
+      onResolve: function (i) { if (ids[i]) ctx[o.as] = s.cards[ids[i]]; } });
+  };
+  OPS.activateCard = function (o, ctx) {
+    if (!ctx[o.ref]) return;
+    var times = num(o.times, 1), ops = [];
+    for (var i = 0; i < times; i++) ops.push({ op: '__activateOnce', ref: o.ref });
+    enqueue(ops, ctx);
+  };
+  OPS.__activateOnce = function (o, ctx) {
+    var s = ctx.side, card = ctx[o.ref];
+    if (!card || s.played.indexOf(card.id) < 0) return;
+    var a = fx(card.name, 'tech').activate, cctx = { side: s, card: card };
+    log(s.name + ' activates ' + card.name + '.', s, 'act');
+    if (a.mode === 'choice') { offerChoice(a, cctx, card.name); return; }
+    var why = costShortfall(a.cost, cctx) || effectShortfall(a.effect, cctx);
+    if (why) { log(card.name + ' cannot activate — it ' + why + '.', s); return; }
+    enqueue((a.cost || []).concat(a.effect || []), cctx);
+  };
+  OPS.trashCard = function (o, ctx) {
+    var card = ctx[o.ref];
+    if (!card) return;
+    moveCard(ctx.side, card, 'trash');
+    log(ctx.side.name + ' trashes ' + card.name + '.', ctx.side);
+  };
+
+  /* Cosmic Shepherd: "When you Move, you may also Move Asteroids adjacent to your Modules (e.g.
+     Move 3, and each Asteroid may also Move 3)." Each one is offered in turn, as its own move. */
+  OPS.moveAsteroids = function (o, ctx) {
+    var s = ctx.side, n = resolveCount(s, o.n, ctx);
+    if (n <= 0) return;
+    var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
+    var rocks = Object.keys(G.asteroids).filter(function (id) {
+      return mods.some(function (m) { return dist(m, G.asteroids[id]) === 1; });
+    });
+    enqueue(rocks.map(function (id) { return { op: '__moveRock', id: id, n: n }; }), ctx);
+  };
+  OPS.__moveRock = function (o) { if (G.asteroids[o.id]) openStepMove(G.asteroids[o.id], o.n); };
+
+  /* Quantum Disrupter's drawback: an anomaly on a random empty square minR..maxR from it */
+  OPS.createAnomaly = function (o, ctx) {
+    var from = ctx.module; if (!from) return;
+    var lo = num(o.minR, 0), hi = num(o.maxR, 11), spots = [];
+    for (var y = 0; y < RULES.boardSize; y++) for (var x = 0; x < RULES.boardSize; x++) {
+      var d = dist(from, { x: x, y: y });
+      if (d >= lo && d <= hi && !cellAt(x, y)) spots.push({ x: x, y: y });
+    }
+    if (!spots.length) return;
+    var at = spots[Math.floor(rand() * spots.length)];
+    occupy(at.x, at.y, { kind: 'anomaly', id: 'anom:' + at.x + ',' + at.y });
+    log('An anomaly opens at (' + at.x + ',' + at.y + ').');
+  };
 
   /* Revitaliser: exhaust two of your modules to take a card back out of the trash and shuffle
      it into your deck. Picked by name; the trash has no hand on screen to click in. Nothing is
@@ -1550,7 +1714,7 @@ var Engine = (function () {
     });
     if (!pool.length) { log(s.name + ' has no module in Sensor range to reinforce.', s); return; }
     if (pool.length === 1) { give(pool[0].m, pool[0].p); return; }
-    prompt({ kind: 'target', label: 'Reinforce which module?',
+    prompt({ kind: 'target', label: 'Reinforce which module?', purpose: 'reinforce',
       targets: pool.map(function (x) { return x.m.id; }),
       onResolve: function (id) {
         pool.forEach(function (x) { if (x.m.id === id) give(x.m, x.p); });
@@ -1591,7 +1755,7 @@ var Engine = (function () {
       m.cloak = true;
       m.stealth = true;
       log(s.name + ' cloaks a module.', s);
-    }, s.name + ' has no module to cloak.');
+    }, s.name + ' has no module to cloak.', 'cloak');
   };
 
   OPS.draw = function (o, ctx) { drawCards(ctx.side, resolveCount(ctx.side, o.n, ctx)); log(ctx.side.name + ' draws ' + o.n + '.', ctx.side); };
@@ -1735,7 +1899,8 @@ var Engine = (function () {
         onResolve: function (id) {
           var pick = null;
           src.forEach(function (c) { if (c.id === id) pick = c; });
-          if (!pick) return;
+          /* the cost has to be paid: no pick, no skipping it — Cancel takes the activation back */
+          if (!pick) { step(left); return; }
           var k = takeToken(o, pick);
           if (k) log(s.name + ' removes a ' + k + ' from ' + pick.name + '.', s);
           step(left - 1);
@@ -1894,6 +2059,7 @@ var Engine = (function () {
       case 'movementModule':       return isMovementModule(m);
       case 'offenseModule':        return isOffenseModule(m);
       case 'gravitonModule':       return m.name.indexOf('Graviton') === 0;
+      case 'cannonOrPD':           return m.name === 'Cannon' || m.name === 'P.D.';
       case 'adjacentModule':       return self ? adjacent(m, self) : true;
       case 'offenseModuleAdjacent':return isOffenseModule(m) && (self ? adjacent(m, self) : true);
       default:                     return true;
@@ -1990,11 +2156,12 @@ var Engine = (function () {
 
   /* Ask which of your modules this is about, then hand it to `then`. One candidate needs no
      asking; none means the ability simply has nothing to work with. */
-  function withOwnModule(s, label, then, noneMsg) {
+  function withOwnModule(s, label, then, noneMsg, purpose) {
     var mods = Object.keys(s.modules).map(function (id) { return s.modules[id]; });
     if (!mods.length) { log(noneMsg || (s.name + ' has no module to move.'), s); return; }
     if (mods.length === 1) { then(mods[0]); return; }
-    prompt({ kind: 'target', label: label, targets: mods.map(function (m) { return m.id; }),
+    prompt({ kind: 'target', label: label, purpose: purpose || 'move',
+      targets: mods.map(function (m) { return m.id; }),
       onResolve: function (id) {
         var m = s.modules[id];
         if (m) then(m);
@@ -2055,7 +2222,7 @@ var Engine = (function () {
       log(s.name + ' diverts power to ' + m.name + '.', s);
       emit();
     }
-    if (o.target === 'choose') { withOwnModule(s, 'Give a Power token to…', give); return; }
+    if (o.target === 'choose') { withOwnModule(s, 'Give a Power token to…', give, null, 'power'); return; }
     if (ctx.module) give(ctx.module);
   };
 
@@ -2090,6 +2257,7 @@ var Engine = (function () {
     if (v === '2xEngineering') return 2 * skill(s, 'Engineering');
     if (v === '2d6') return roll6() + roll6();
     if (v === 'upTo4') return Math.min(4, ctx.card ? ctx.card.heat : 0);
+    if (v === 'sameAsMove') return ctx.move || 0;
     return num(v, 0);
   }
   function attackOrigins(s, o, ctx) {
@@ -2238,6 +2406,7 @@ var Engine = (function () {
      may stop, at the price of the turn's end) or null when something stops it. Read off the board as it
      stands — the squares the ship itself fills count as open, since it is the one leaving. */
   function shipStep(s, mods, ox, oy, dx, dy) {
+    if (mods.some(function (m) { return hasStatus(m, 'noMove'); })) return null;
     var self = {}, through = false, rock = false, rocks = rockRunner(s);
     mods.forEach(function (m) { self[m.id] = true; });
     for (var i = 0; i < mods.length; i++) {
@@ -2246,6 +2415,7 @@ var Engine = (function () {
       var c = cellAt(nx, ny);
       if (!c || self[c.id]) continue;
       if (c.owner === s.idx && (c.kind === 'module' || c.kind === 'deployable')) { through = true; continue; }
+      if (c.kind === 'deployable' && G.players[c.owner].team === s.team) { through = true; continue; }
       if (c.kind === 'deployable') continue;               /* an enemy's: driven over */
       if (c.kind === 'asteroid' && rocks) { rock = true; continue; }   /* AI Piloting */
       return null;
@@ -2316,7 +2486,7 @@ var Engine = (function () {
   function stepShip(s, mods, dx, dy) {
     mods.forEach(function (m) {
       var c = cellAt(m.x + dx, m.y + dy);
-      if (!c || c.kind !== 'deployable' || c.owner === s.idx) return;
+      if (!c || c.kind !== 'deployable' || G.players[c.owner].team === s.team) return;
       var od = G.players[c.owner].deployables[c.id];
       if (!od) return;
       log(m.name + ' overruns ' + od.name + '.');
@@ -2413,6 +2583,7 @@ var Engine = (function () {
   function stepObject(objId, dx, dy) {
     var t = objectById(objId);
     if (!t || !G.pending || G.pending.left <= 0) return false;
+    if (hasStatus(t.obj, 'noMove')) { log(t.obj.name + ' cannot move.'); return false; }
     var o = t.obj, nx = o.x + dx, ny = o.y + dy;
     if (!inBounds(nx, ny)) return false;
     var c = cellAt(nx, ny);
@@ -2465,7 +2636,7 @@ var Engine = (function () {
     if (!p) return null;
     var out = { kind: p.kind, label: p.label };
     ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards', 'swap',
-     'hint'].forEach(function (k) {
+     'hint', 'purpose'].forEach(function (k) {
       if (p[k] !== undefined) out[k] = p[k];
     });
     if (typeof p.filter === 'function') {
@@ -2490,7 +2661,8 @@ var Engine = (function () {
       var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead,
                      shield: s.shield, shieldMax: s.shieldMax, skills: s.skills, stats: s.stats,
                      coreId: s.coreId, modules: s.modules, deployables: s.deployables,
-                     playsLeft: s.playsLeft, moveLeft: s.moveLeft, moveBonus: s.moveBonus });
+                     playsLeft: s.playsLeft, moveLeft: s.moveLeft, moveBonus: s.moveBonus,
+                     buffs: s.buffs || [] });
       if (i === viewer) {
         p.cards = copy(s.cards);
         ['hand', 'deck'].concat(PUBLIC_PILES).forEach(function (k) { p[k] = s[k].slice(); });

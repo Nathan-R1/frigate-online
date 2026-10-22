@@ -109,8 +109,7 @@ tech: {
 'Cosmic Shepherd':        { passive:[{ trigger:'onMove', optional:true,
                                        effect:[{op:'moveAsteroids',adjacentTo:'ownModules',n:'sameAsMove'}] }] },
 'AI Piloting':            { passive:[{ trigger:'static',
-                                       effect:[{op:'allowMoveOntoAsteroid'},
-                                               {op:'destroyIfEndTurnOnAsteroid'}] }] },
+                                       effect:[{op:'allowMoveOntoAsteroid'}] }] },
 
 /* --- defence / reaction --- */
 'Reactive Armor':         { passive:[{ trigger:'static', effect:[{op:'negateHullDamageOnce'}] }] },
@@ -135,8 +134,7 @@ tech: {
 'Heat Stores':            { onPlay:[{op:'addHeat',target:'allOwnCards',filter:'takesHeat',n:1},
                                     {op:'discardSelf'}] },
 'Heat Sinks':             { passive:[
-                              { trigger:'onFailCheck', optional:true, ownTurn:true,
-                                effect:[{op:'spendHeat',n:2,target:'self'},{op:'reroll',n:1}] },
+                              { trigger:'static', effect:[{op:'rerollFailedCheck',heat:2}] },
                               { trigger:'onExhaustMovementModule', ownTurn:true,
                                 effect:[{op:'addHeat',target:'choose',n:1,filter:'takesHeat'}] }] },
 'Revitaliser':            { onPlay:[{op:'recoverFromTrash',exhaust:2},{op:'discardSelf'}] },
@@ -158,9 +156,9 @@ tech: {
                             passive:[{ trigger:'static',
                                        effect:[{op:'buff',scope:'modules',filter:'hasPowerToken',
                                                 hull:1,move:1,range:1,dmg:1}] }] },
-'Decomp Strikes':         { passive:[{ trigger:'onAttackRoll', optional:true,
-                                       condition:'attackerAdjacentToTerrain',
-                                       effect:[{op:'reroll',n:1,scope:'missedAttacks'}] }] },
+/* rerolls that happen in the middle of a roll are applied inside the dice (shoot, checkRolled),
+   so these are rules the card carries rather than passives that wait for an event */
+'Decomp Strikes':         { passive:[{ trigger:'static', effect:[{op:'rerollMissBesideTerrain'}] }] },
 'Asteroid Builder':       { activate:{ mode:'choice', options:[
                               { label:'Charge', cost:[{op:'exhaustSelf'}],
                                 effect:[{op:'addCharge',target:'self',n:2}] },
@@ -239,8 +237,7 @@ tech: {
 /* =========================== MODULES =========================== */
 mod: {
 
-'Core':               { placement:'start', core:true,
-                        passive:[{ trigger:'static', effect:[{op:'shareHullWithCoreModules'}] }] },
+'Core':               { placement:'start', core:true },
 'Citadel':            { placement:'adjacentToCore',
                         passive:[{ trigger:'static',
                                    effect:[{op:'shareHullWithCore'},{op:'countsAsCore'}] }] },
@@ -287,9 +284,9 @@ mod: {
                             effect:[{op:'gainShield',n:4,target:'choose',
                                      filter:'alliedShipWithinSensors'}] } ] } },
 'Comms Unit':         { placement:'adjacentToAny',
+                        /* read where checks are rolled (engine.js: commsBonus) */
                         passive:[{ trigger:'static',
-                                   effect:[{op:'buff',scope:'allies',within:'sensors',
-                                            checks:2,saves:2}] }] },
+                                   effect:[{op:'checkBonus',within:'sensors',n:2}] }] },
 /* Not a mimic of some other module, but a silhouette its owner picks when it is built — and
    picked again for every decoy, so two of them need not look alike. */
 'Decoy Module':       { placement:'adjacentToAny', chooseShape:true,

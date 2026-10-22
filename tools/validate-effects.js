@@ -27,5 +27,19 @@ const walk=v=>{ if(Array.isArray(v))return v.forEach(walk);
 walk(CARD_EFFECTS);
 console.log('\ndistinct ops used ('+ops.size+'):');
 console.log('  '+[...ops].sort().join(' '));
+// every op must mean something to the engine: an OPS handler, or a rule the engine looks up by
+// name (a static marker such as 'phantomDodge', read with staticOp/playedWith) — otherwise the
+// card pays its cost and the engine only logs "not yet simulated"
+const engine=fs.readFileSync(path.join(__dirname,'..','shared','engine.js'),'utf8');
+const known=o=>new RegExp('OPS\\.'+o+'\\b').test(engine)||engine.includes("'"+o+"'");
+const unknownOps=[...ops].filter(o=>!known(o));
+if(unknownOps.length){bad++;console.log('   UNIMPLEMENTED ops: '+unknownOps.join(', '));}
+// and every trigger a passive listens for must be fired somewhere
+const triggers=new Set();
+const walkT=v=>{ if(Array.isArray(v))return v.forEach(walkT);
+  if(v&&typeof v==='object'){ if(typeof v.trigger==='string')triggers.add(v.trigger); Object.values(v).forEach(walkT);} };
+walkT(CARD_EFFECTS);
+const unfired=[...triggers].filter(t=>t!=='static'&&!engine.includes("'"+t+"'"));
+if(unfired.length){bad++;console.log('   NEVER-FIRED triggers: '+unfired.join(', '));}
 console.log(bad?'\nFAILED: '+bad+' problem(s)':'\nOK: every preset has behaviour, no orphans');
 process.exit(bad?1:0);

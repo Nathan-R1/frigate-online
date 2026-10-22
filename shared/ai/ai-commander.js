@@ -431,6 +431,10 @@ var AICommander = (function () {
     }
     /* the computer has no plan for rearranging its hull: a swap it is somehow handed is skipped */
     if (p.kind === 'target' && p.swap) return null;
+    /* one of its own pieces, picked for what the card does with it */
+    if (p.kind === 'target' && p.purpose) return ownPick(s, p);
+    /* a card to take a token from (or add Heat to) — the cost has to be paid, so pay it */
+    if (p.kind === 'card') return (p.cards || [])[0] || null;
     if (p.kind === 'target') return bestTarget(s, st, p.targets);
     /* an area weapon offers no choice of target, only whether to fire — and it was activated
        on purpose, so it fires */
@@ -495,7 +499,7 @@ var AICommander = (function () {
              Engine.meetsReq(s, m) && Engine.affordable(s, m, 'mod'); })[0];
     if (mv) { Engine.activateModule(mv.id); return; }
     var mvCard = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
-      return !c.exhausted && Engine.fx(c.name, 'tech').activate &&
+      return !c.exhausted && Engine.fx(c.name, 'tech').activate && !noPlan(c.name) &&
              K.roleOf(c.name) === 'mobility' && Engine.affordable(s, c, 'tech'); })[0];
     if (mvCard) { Engine.activateCard(mvCard.id); return; }
 
@@ -539,7 +543,8 @@ var AICommander = (function () {
     var card = s.played.map(function (i) { return s.cards[i]; }).filter(function (c) {
       if (c.exhausted || !Engine.fx(c.name, 'tech').activate) return false;
       if (!Engine.affordable(s, c, 'tech')) return false;
-      if (swaps(c.name)) return false;              /* nothing for it to do with a swap */
+      if (noPlan(c.name)) return false;             /* rearranging its own hull: no plan for it */
+      if (nothingToRefresh(s, c.name)) return false;
       if (K.attackReach(s, c.name) === null) return true;
       /* a card fires from the hull, so any module may serve as its origin */
       return K.modList(s).some(function (m) { return hasTargetFor(s, m, c.name, 0); });
@@ -549,9 +554,39 @@ var AICommander = (function () {
     Engine.endTurn();
   }
 
-  function swaps(name) {
+  /* Abilities that rearrange its own hull — Swap, or walking one module somewhere: the
+     computer has no plan for them, so it does not spend a card on them. */
+  function noPlan(name) {
     var a = Engine.fx(name, 'tech').activate;
-    return !!a && (a.effect || []).some(function (o) { return o.op === 'swap'; });
+    return !!a && (a.effect || []).some(function (o) {
+      return o.op === 'swap' || (o.op === 'moveObject' && o.what === 'ownModule');
+    });
+  }
+  /* Full Volley with no spent gun is a card thrown away */
+  function nothingToRefresh(s, name) {
+    var a = Engine.fx(name, 'tech').activate;
+    if (!a || !(a.effect || []).some(function (o) { return o.op === 'refresh'; })) return false;
+    return !K.weapons(s).some(function (w) { return w.mod.exhausted; });
+  }
+  /* Which of its own pieces gets it: hull to the most damaged, Power to the strongest gun,
+     a cloak over the Core. Anything else it has no plan for is declined. */
+  function ownPick(s, p) {
+    var ids = p.targets || [], objs = ids.map(function (id) { return Engine.objectById(id); })
+      .filter(function (t) { return t && t.kind === 'module'; });
+    if (!objs.length) return null;
+    if (p.purpose === 'reinforce') {
+      objs.sort(function (a, b) {
+        return (a.obj.hull / (a.obj.hullMax || 1)) - (b.obj.hull / (b.obj.hullMax || 1));
+      });
+      return objs[0].obj.id;
+    }
+    if (p.purpose === 'power') {
+      var guns = K.weapons(s).filter(function (w) { return ids.indexOf(w.mod.id) >= 0; })
+        .sort(function (a, b) { return (b.dmg * b.attacks) - (a.dmg * a.attacks) || b.range - a.range; });
+      return guns.length ? guns[0].mod.id : objs[0].obj.id;
+    }
+    if (p.purpose === 'cloak') return ids.indexOf(s.coreId) >= 0 ? s.coreId : objs[0].obj.id;
+    return null;
   }
 
   function describe(idx) {
