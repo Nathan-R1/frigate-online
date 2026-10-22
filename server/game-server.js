@@ -437,7 +437,7 @@ function broadcast(room) {
    belong to whoever's turn it is — there is no legal off-turn action in this game. */
 var COMMANDS = {
   playCard: 1, activateCard: 1, activateModule: 1, activateDeployable: 1,
-  moveModule: 3, stepDeployable: 3, resolve: 1, cancel: 0, undo: 0,
+  moveShip: 2, stepDeployable: 3, resolve: 1, cancel: 0, undo: 0,
   endPlayPhase: 0, endTurn: 0,
   /* not an engine call: a whole walk in one intent, applied a square at a time */
   moveRoute: 2
@@ -460,9 +460,10 @@ function walkRoute(room, seat, objId, steps) {
   for (var i = 0; i < steps.length; i++) {
     var st = steps[i];
     if (!Array.isArray(st) || st.length !== 2) return 'bad route';
+    /* any of your modules stands for the ship: it moves as one */
     var ok = onBeam ? room.E.stepObject(objId, st[0] | 0, st[1] | 0)
                     : (mine && mine.modules[objId])
-                        ? room.E.moveModule(objId, st[0] | 0, st[1] | 0)
+                        ? room.E.moveShip(st[0] | 0, st[1] | 0)
                         : room.E.stepDeployable(objId, st[0] | 0, st[1] | 0);
     if (!ok) break;
   }

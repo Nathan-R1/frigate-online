@@ -82,7 +82,7 @@ tech: {
 /* a beam, not a gun: it may take hold of anything it can see, friendly hull included */
 'Tract Beam':             { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'attack',range:'sensors',from:'offenseModule',
-                                                attacks:1,dmg:0,check:'Cyber',targets:'any',anim:'tractor',
+                                                attacks:1,dmg:0,check:'Cyber',targets:'any',notCore:true,anim:'tractor',
                                                 onSuccess:[{op:'moveObject',what:'target',n:2}]}] } },
 'Unwinder Array':         { onPlay:[{op:'addCharge',target:'self',n:4},{op:'exhaustSelf'}],
                             activate:{ cost:[{op:'exhaustSelf'},{op:'spendCharge',n:1}],
@@ -92,6 +92,8 @@ tech: {
                                                             duration:'startOfYourNextTurn',target:'target'}]}] } },
 
 /* --- movement --- */
+'Swap Jet':               { activate:{ cost:[{op:'exhaustSelf'}],
+                                       effect:[{op:'swap',n:2}] } },
 'Grav Jet':               { activate:{ cost:[{op:'exhaustSelf'}],
                                        effect:[{op:'gainMove',from:'stat',stat:'speed'}] } },
 'Rotating Jet':           { activate:{ cost:[{op:'exhaustSelf'}],
@@ -107,20 +109,15 @@ tech: {
 'Cosmic Shepherd':        { passive:[{ trigger:'onMove', optional:true,
                                        effect:[{op:'moveAsteroids',adjacentTo:'ownModules',n:'sameAsMove'}] }] },
 'AI Piloting':            { passive:[{ trigger:'static',
-                                       effect:[{op:'allowMoveOntoAsteroid'},
-                                               {op:'destroyIfEndTurnOnAsteroid'}] }] },
+                                       effect:[{op:'allowMoveOntoAsteroid'}] }] },
 
 /* --- defence / reaction --- */
-'Reactive Armor':         { passive:[{ trigger:'onDamaged', optional:true,
-                                       effect:[{op:'negateDamage'},{op:'trashSelf'}] }] },
-'Chaff Clouds':           { passive:[{ trigger:'onTargeted', by:'enemyDeployable',
-                                       checkOrSave:true,
-                                       effect:[{op:'negateEffect'},{op:'trashSelf'}] }] },
-'Phantom':                { passive:[{ trigger:'onTargeted', within:'sensors', optional:true,
-                                       effect:[{op:'exhaustSelf'},
-                                               {op:'skillCheck',skill:'Piloting',
-                                                onSuccess:[{op:'gainMove',n:1},
-                                                           {op:'mayNegateIfTargetMoved'}]}] }] },
+'Reactive Armor':         { passive:[{ trigger:'static', effect:[{op:'negateHullDamageOnce'}] }] },
+/* Reactions that land on somebody else's turn are rules the engine applies where they bite —
+   Chaff Clouds and Phantom inside the attack, Reactive Armor where hull is lost — because
+   nobody can be asked mid-attack whose turn it is not. */
+'Chaff Clouds':           { passive:[{ trigger:'static', effect:[{op:'shrugDeployableCheck'}] }] },
+'Phantom':                { passive:[{ trigger:'static', effect:[{op:'phantomDodge'}] }] },
 'Shield Generator':       { activate:{ mode:'choice', options:[
                               { label:'Charge', cost:[{op:'exhaustSelf'}],
                                 effect:[{op:'addCharge',target:'self',n:1}] },
@@ -137,14 +134,10 @@ tech: {
 'Heat Stores':            { onPlay:[{op:'addHeat',target:'allOwnCards',filter:'takesHeat',n:1},
                                     {op:'discardSelf'}] },
 'Heat Sinks':             { passive:[
-                              { trigger:'onFailCheck', optional:true,
-                                effect:[{op:'spendHeat',n:2,target:'self'},{op:'reroll',n:1}] },
-                              { trigger:'onExhaustMovementModule',
+                              { trigger:'static', effect:[{op:'rerollFailedCheck',heat:2}] },
+                              { trigger:'onExhaustMovementModule', ownTurn:true,
                                 effect:[{op:'addHeat',target:'choose',n:1,filter:'takesHeat'}] }] },
-'Revitaliser':            { onPlay:[{op:'addCharge',target:'self',n:6}],
-                            passive:[{ trigger:'onWouldTrash', optional:true,
-                                       effect:[{op:'spendCharge',n:3,target:'self'},
-                                               {op:'convertTrashToDiscard'}] }] },
+'Revitaliser':            { onPlay:[{op:'recoverFromTrash',exhaust:2},{op:'discardSelf'}] },
 'Vital Burst':            { onPlay:[{op:'chooseCard',filter:'ownCardInPlayWithActivate',as:'t'},
                                     {op:'activateCard',ref:'t',times:2,payCosts:true},
                                     {op:'trashCard',ref:'t',keepFixedDurations:true},
@@ -163,9 +156,9 @@ tech: {
                             passive:[{ trigger:'static',
                                        effect:[{op:'buff',scope:'modules',filter:'hasPowerToken',
                                                 hull:1,move:1,range:1,dmg:1}] }] },
-'Decomp Strikes':         { passive:[{ trigger:'onAttackRoll', optional:true,
-                                       condition:'attackerAdjacentToTerrain',
-                                       effect:[{op:'reroll',n:1,scope:'missedAttacks'}] }] },
+/* rerolls that happen in the middle of a roll are applied inside the dice (shoot, checkRolled),
+   so these are rules the card carries rather than passives that wait for an event */
+'Decomp Strikes':         { passive:[{ trigger:'static', effect:[{op:'rerollMissBesideTerrain'}] }] },
 'Asteroid Builder':       { activate:{ mode:'choice', options:[
                               { label:'Charge', cost:[{op:'exhaustSelf'}],
                                 effect:[{op:'addCharge',target:'self',n:2}] },
@@ -183,9 +176,8 @@ tech: {
    offered another event, so that is all the bookkeeping there is. `at` names the element the
    bubble points at (none means the centre of the screen); `side` is which side of it.
 
-   Moving hands the player a spare Move 3, so someone who cut a module loose can walk it back
-   into the Core's reach. It leaves play before the grant, so the Done that ends that move finds
-   it gone; its last popup waits in the queue behind the move and speaks once it is made.
+   Moving speaks twice: as the first Move is granted (onMove, before the move prompt opens) it
+   explains how the ship moves, and when that move is done it points at End Turn and leaves.
 
    Enemy Moves answers the player's own first handover and swings the camera across to the
    computer as it begins to move. Play a Card is dealt to the computer instead: it answers the
@@ -204,14 +196,15 @@ tech: {
      text:'Modules in-play can be reused every turn. Click Activate to use a module.',
      at:'hand', side:'above'},
     {op:'trashSelf'}] }] },
-'Tutorial Prompt — Moving':      { passive:[{ trigger:'onMoveDone', effect:[
+'Tutorial Prompt — Moving':      { passive:[
+  { trigger:'onMove', effect:[
     {op:'popup', title:'Moving',
-     text:'If your modules are not connected to your Core at the end of your turn you will lose them.\n' +
-          'A spare Move 3 has been granted to walk any back into reach.'},
-    {op:'trashSelf'},
-    {op:'gainMove', n:3},
+     text:'Your whole ship moves with its Core. Click a highlighted square to take the Core there.\n' +
+          'Red squares are blocked: some part of your hull would hit something on the way.'}] },
+  { trigger:'onMoveDone', effect:[
     {op:'popup', title:'End Your Turn', text:'Now press End Turn to hand over to your opponent.',
-     at:'endBtn', side:'below'}] }] },
+     at:'endBtn', side:'below'},
+    {op:'trashSelf'}] }] },
 'Tutorial Prompt — Enemy Moves': { passive:[{ trigger:'onEndTurn', match:{turn:1}, effect:[
     {op:'popup', title:'Enemy Moves', focus:true,
      text:'Keep an eye on how your enemy uses their modules to try and identify them.'},
@@ -244,12 +237,12 @@ tech: {
 /* =========================== MODULES =========================== */
 mod: {
 
-'Core':               { placement:'start', core:true,
-                        passive:[{ trigger:'static', effect:[{op:'shareHullWithCoreModules'}] }] },
+'Core':               { placement:'start', core:true },
 'Citadel':            { placement:'adjacentToCore',
                         passive:[{ trigger:'static',
                                    effect:[{op:'shareHullWithCore'},{op:'countsAsCore'}] }] },
-'Armor':              { placement:'adjacentToAny' },
+'Armor':              { placement:'adjacentToAny',
+                        passive:[{ trigger:'static', effect:[{op:'noCoreDamageOnDestroy'}] }] },
 'Cannon':             { placement:'adjacentToCore',
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'attack',range:6,from:'self',attacks:2,dmg:2,
@@ -291,15 +284,19 @@ mod: {
                             effect:[{op:'gainShield',n:4,target:'choose',
                                      filter:'alliedShipWithinSensors'}] } ] } },
 'Comms Unit':         { placement:'adjacentToAny',
+                        /* read where checks are rolled (engine.js: commsBonus) */
                         passive:[{ trigger:'static',
-                                   effect:[{op:'buff',scope:'allies',within:'sensors',
-                                            checks:2,saves:2}] }] },
+                                   effect:[{op:'checkBonus',within:'sensors',n:2}] }] },
 /* Not a mimic of some other module, but a silhouette its owner picks when it is built — and
    picked again for every decoy, so two of them need not look alike. */
-'Decoy Module':       { placement:'adjacentToAny', chooseShape:true },
+'Decoy Module':       { placement:'adjacentToAny', chooseShape:true,
+                        passive:[{ trigger:'static', effect:[{op:'noCoreDamageOnDestroy'}] }] },
 'Graviton Engine':    { placement:'adjacentToAny', movement:true,
-                        activate:{ cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
-                                   effect:[{op:'gainMove',n:3}] } },
+                        activate:{ mode:'choice', options:[
+                          { label:'Move', cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
+                            effect:[{op:'gainMove',n:3}] },
+                          { label:'Swap', cost:[{op:'exhaustOther',filter:'gravitonModule',n:'all',includeSelf:true}],
+                            effect:[{op:'swap',n:1}] } ] } },
 'Thrust Engine':      { placement:'adjacentToAny', movement:true,
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'gainMove',n:2}] } },
@@ -310,7 +307,7 @@ mod: {
                         activate:{ cost:[],
                                    effect:[{op:'moveSelf',n:12,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:3,
-                                            check:'Sensors',dmgType:'kinetic',targets:'ships'},
+                                            check:'Sensors',dmgType:'kinetic',targets:'ships',anim:'torpedo'},
                                            {op:'removeSelf'}] } },
 /* It arrives ready rather than spent — it can run the turn it is launched — and it is spent by
    firing rather than by existing. A round that connects is gone, which is what a guided round
@@ -321,7 +318,7 @@ mod: {
                         activate:{ cost:[{op:'exhaustSelf'}],
                                    effect:[{op:'moveSelf',n:4,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:4,
-                                            check:'Sensors',dmgType:'kinetic',
+                                            check:'Sensors',dmgType:'kinetic',anim:'torpedo',
                                             onSuccess:[{op:'removeSelf'}]}] } },
 'Fusion Mine':        { deployable:true, speed:0,
                         passive:[{ trigger:'onDestroyedOrEnemyEnters',

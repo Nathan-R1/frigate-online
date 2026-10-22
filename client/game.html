@@ -218,6 +218,10 @@
   .pathlayer.over .move-beacon::after { border-color:rgba(210,84,78,.85); }
   /* cells the selected piece can still reach this turn */
   .cell.inreach { background:rgba(79,216,201,.09); border-color:rgba(79,216,201,.22); }
+  /* within the ship's Move, but somewhere the hull would hit something */
+  .cell.noreach { background:rgba(210,84,78,.10); border-color:rgba(210,84,78,.28); }
+  /* the ship's footprint under the cursor sits on top of the reach shading */
+  .cell.inreach.preview, .cell.noreach.preview { background:rgba(232,169,74,.3); border-color:var(--amber); }
   /* the tile the piece being moved still stands on — its gold home square, picked out while
      the cyan reachable ground fans out from it */
   .cell.movesel { background:rgba(232,192,74,.35); border-color:#e8c04a;
@@ -588,6 +592,12 @@
           <span class="set-opts" id="instantOpts">
             <button type="button" data-instant="0">Off</button>
             <button type="button" data-instant="1">On</button>
+          </span>
+        </div>
+        <div class="set-row"><span class="set-label">Lock camera</span>
+          <span class="set-opts" id="lockOpts">
+            <button type="button" data-lock="0">Off</button>
+            <button type="button" data-lock="1">On</button>
           </span>
         </div>
         <div class="set-row"><span class="set-label">Labels</span>
@@ -1118,9 +1128,36 @@
     if (live.length) VIEW = live[0];
   }
 
+  /* Lock camera: at the start of every turn the view centres on the seat at the controls, so
+     the ship being played is the one under the lens. On by default — the turn is the one thing
+     that travels around the board, and the camera is a window on it. */
+  var lockCamera = true;
+  try { lockCamera = localStorage.getItem('frigateLockCamera') !== '0'; } catch (e) {}
+  function setLockCamera(on) {
+    lockCamera = !!on;
+    try { localStorage.setItem('frigateLockCamera', lockCamera ? '1' : '0'); } catch (e) {}
+  }
+
+  /* The locked camera watches the turn: when the seat at the controls changes, the view
+     centres on that seat's Core. The key is the turn and the seat, so it fires once per
+     turn and never while the player is panning around of their own accord. */
+  var camLockKey = null;
+  function lockCameraTo(G) {
+    if (!G || G.over) return;
+    /* switched off — forget what was watched, so switching it back on re-centres at once */
+    if (!lockCamera) { camLockKey = null; return; }
+    if (menuOpen()) return;              /* a picker is over the board: leave the view alone */
+    var key = G.turn + ':' + G.active;
+    if (key === camLockKey) return;
+    /* the key is only remembered once the camera has actually moved: a pane with no size
+       yet must not be written off as done */
+    if (focusCore(G.active)) camLockKey = key;
+  }
+
   function render(G) {
     if (!G) return;
     syncView(G);
+    lockCameraTo(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
     if (G.over) document.getElementById('overTitle').innerHTML = overHtml(G);
@@ -1348,6 +1385,26 @@
   /* the camera, lent to the tutorial prompts so they can pan across to the enemy ship */
   window.FrigateView = { focus: focusViewOn };
 
+  /* Centre the camera on one square of the board, leaving the zoom alone: the Core of the
+     seat at the controls, when the camera is locked on it. */
+  function centreOnCell(x, y) {
+    var r = boardEl.getBoundingClientRect();
+    if (!r.width || !r.height) return false;   /* the pane has no size yet — leave the view alone */
+    view.x = r.width / 2 - (x * CELL + CELL / 2) * view.zoom;
+    view.y = r.height / 2 - (y * CELL + CELL / 2) * view.zoom;
+    applyView();
+    return true;
+  }
+  /* a seat's Core — the heart of its ship, and the piece the locked camera watches */
+  function focusCore(idx) {
+    var G = Engine.get();
+    var s = G && G.players[idx];
+    if (!s || s.dead) return false;
+    var core = s.modules[s.coreId];
+    if (!core) return false;
+    return centreOnCell(core.x, core.y);
+  }
+
   function ensureLayers(n) {
     if (cellsEl) return;
     var px = n * CELL;
@@ -1401,10 +1458,14 @@
     var kind = mv && mv.kind ? mv.kind : 'module';
     var owner = mv && mv.owner !== undefined && mv.owner !== null ? mv.owner : meIdx();
     if (c.owner === owner && (c.kind === 'module' || c.kind === 'deployable')) return true;
+    /* AI Piloting: your own pieces may fly into an asteroid when you are the one moving them */
+    if (c.kind === 'asteroid')
+      return kind !== 'asteroid' && owner === meIdx() && Engine.rockRunner(Engine.get().players[owner]);
     return kind === 'module' && c.kind === 'deployable';
   }
   function routeTo(from, tx, ty, mv) {
     if (from.x === tx && from.y === ty) return [{ x: from.x, y: from.y }];
+    if (mv && mv.kind === 'ship') return shipRoute(mv, tx, ty);
     if (!passable(tx, ty, mv)) return null;
     var seen = {}, q = [{ x: from.x, y: from.y, prev: null }], head = 0;
     seen[from.x + ',' + from.y] = 1;
@@ -1439,11 +1500,33 @@
       return t ? { obj: t.obj, left: p.left, kind: t.kind,
                    owner: t.owner ? t.owner.idx : null } : null;
     }
-    if (p.kind === 'move' && selMod) {
-      var m = G.players[meIdx()].modules[selMod];
-      return m ? { obj: m, left: m.moveLeft, kind: 'module', owner: meIdx() } : null;
+    if (p.kind === 'move') {
+      /* the ship moves as one, and the Core is the handle: every route and every shaded
+         square is about where the Core ends up */
+      var s = G.players[meIdx()], core = s.modules[s.coreId];
+      return core ? { obj: core, left: s.moveLeft || 0, kind: 'ship', owner: meIdx(), side: s } : null;
     }
     return null;
+  }
+
+  /* ---------- the ship's move ----------
+     Where the Core can be taken, from the engine's own map of the ship's reach
+     (Engine.shipReach), in board squares. `stand` marks the ones the move may end on — the
+     rest the ship can only pass through on the way somewhere else. */
+  function shipMap(mv) {
+    var reach = Engine.shipReach(mv.side, mv.left), out = {};
+    Object.keys(reach).forEach(function (k) {
+      var n = reach[k];
+      out[(mv.obj.x + n.dx) + ',' + (mv.obj.y + n.dy)] = n;
+    });
+    return out;
+  }
+  function shipRoute(mv, tx, ty) {
+    var node = shipMap(mv)[tx + ',' + ty];
+    if (!node || !node.stand) return null;
+    var out = [];
+    for (var n = node; n; n = n.from) out.unshift({ x: mv.obj.x + n.dx, y: mv.obj.y + n.dy });
+    return out;
   }
 
   var hoverCell = null;
@@ -1533,12 +1616,7 @@
     if (!mv) { mc.classList.add('hidden'); return; }
     mc.classList.remove('hidden');
     document.getElementById('mcVal').textContent = mv.left;
-    var s = G.players[meIdx()];
-    var rest = Object.keys(s.modules).reduce(function (a, i) {
-      return a + (i === selMod ? 0 : s.modules[i].moveLeft); }, 0);
-    document.getElementById('mcSub').textContent =
-      G.pending.kind === 'move' ? esc(mv.obj.name) + (rest ? ' · ' + rest + ' left on other modules' : '')
-                                : esc(mv.obj.name);
+    document.getElementById('mcSub').textContent = mv.kind === 'ship' ? 'Ship' : mv.obj.name;
   }
 
   /* Who the movement controls point at. This has to settle before anything is painted: the
@@ -1552,10 +1630,8 @@
        otherwise the last piece moved keeps its ring long after the movement is over, and a
        computer's turn would pick up a selection you never made */
     if (!isMyTurn(G) || !G.pending || G.pending.kind !== 'move') { selMod = null; return; }
-    /* pass the controls to the next module with Move left once this one is spent, so the
-       whole fleet can be moved without reselecting after every module */
-    if (!selMod || mine[selMod].moveLeft <= 0)
-      selMod = Object.keys(mine).filter(function (i) { return mine[i].moveLeft > 0; })[0] || selMod;
+    /* the ship moves as one, so the controls are always on its Core */
+    selMod = G.players[meIdx()].coreId;
   }
 
   function paintCells(G) {
@@ -1566,6 +1642,25 @@
     var shape = {};
     if (p && p.kind === 'space' && p.pattern && hoverCell && legal(hoverCell.x, hoverCell.y))
       p.pattern.forEach(function (d) { shape[(hoverCell.x + d[0]) + ',' + (hoverCell.y + d[1])] = true; });
+    /* moving the ship: within the Move left, every square the Core cannot be taken to is
+       marked red, and hovering one it can shows where the whole hull would stand */
+    var ship = actingHere(G) && p && p.kind === 'move' ? mover(G) : null;
+    var blocked = null;
+    if (ship && ship.left > 0) {
+      var map = shipMap(ship), n = Engine.RULES.boardSize;
+      blocked = {};
+      for (var by = 0; by < n; by++) for (var bx = 0; bx < n; bx++) {
+        var dd = Math.abs(bx - ship.obj.x) + Math.abs(by - ship.obj.y);
+        if (!dd || dd > ship.left) continue;
+        var node = map[bx + ',' + by];
+        if (!node || !node.stand) blocked[bx + ',' + by] = true;
+      }
+      var hov = hoverCell && map[hoverCell.x + ',' + hoverCell.y];
+      if (hov && hov.stand && (hov.dx || hov.dy))
+        Engine.shipModules(ship.side).forEach(function (m) {
+          shape[(m.x + hov.dx) + ',' + (m.y + hov.dy)] = true;
+        });
+    }
     /* the same tint carries two meanings, both "where this can reach": squares the selected
        piece can move to, and squares the shot being aimed can see */
     var reach = (p && (p.kind === 'target' || p.kind === 'confirm')) ? p.envelope
@@ -1583,6 +1678,8 @@
       if (inShape !== c.classList.contains('preview')) c.classList.toggle('preview', inShape);
       var inr = !!reach && reach[x + ',' + y] === true;
       if (inr !== c.classList.contains('inreach')) c.classList.toggle('inreach', inr);
+      var no = !!blocked && blocked[x + ',' + y] === true;
+      if (no !== c.classList.contains('noreach')) c.classList.toggle('noreach', no);
       var self = moveCell === (x + ',' + y);
       if (self !== c.classList.contains('movesel')) c.classList.toggle('movesel', self);
     }
@@ -1592,6 +1689,13 @@
   function reachSet(G) {
     var mv = mover(G);
     if (!mv || mv.left <= 0) return null;
+    if (mv.kind === 'ship') {
+      var map = shipMap(mv), out = {};
+      Object.keys(map).forEach(function (k) {
+        if (map[k].stand && (map[k].dx || map[k].dy)) out[k] = true;
+      });
+      return out;
+    }
     var seen = {}, q = [{ x: mv.obj.x, y: mv.obj.y, d: 0 }], head = 0;
     seen[mv.obj.x + ',' + mv.obj.y] = false;
     var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -1800,7 +1904,8 @@
       if (mine && Engine.insideSomething && Engine.insideSomething(o)) cls += ' stacked';
       if (rec.kind === 'mod' && !Engine.meetsReq(rec.side, o)) cls += ' badreq';
       /* movement state only means anything while a move prompt is open */
-      if (mine && p && p.kind === 'move' && o.moveLeft > 0) cls += ' moving';
+      if (mine && p && p.kind === 'move' && rec.id === rec.side.coreId && rec.side.moveLeft > 0)
+        cls += ' moving';
       if (mine && rec.id === selMod && p && p.kind === 'move') cls += ' sel';
       var canAct = mine && isMyTurn(G) && G.phase === 'action' && !p && !o.exhausted &&
                    !!fx.activate &&
@@ -1834,9 +1939,10 @@
     pw.innerHTML = power ? POWER_ICON + power : '';
     pw.style.display = power ? '' : 'none';
     /* Move remaining is only shown while you are actually moving pieces */
-    var showMv = p && p.kind === 'move' && rec.si === meIdx() && o.moveLeft > 0;
+    var showMv = p && p.kind === 'move' && rec.si === meIdx() && rec.id === rec.side.coreId &&
+                 rec.side.moveLeft > 0;
     var pushed = p && p.kind === 'moveObject' && p.objId === rec.id;
-    mv.textContent = pushed ? p.left : (showMv ? o.moveLeft : '');
+    mv.textContent = pushed ? p.left : (showMv ? rec.side.moveLeft : '');
     showMv = showMv || pushed;
     mv.style.display = showMv ? '' : 'none';
   }
@@ -2011,7 +2117,10 @@
          and answers for it, so a card for it says nothing the stats bar does not. */
       if (id === s.coreId) return;
       if (Engine.isCoreLike && Engine.isCoreLike(s, m)) return;
-      if (!e.activate && !e.passive) return;
+      /* a passive that is only a standing rule — Armor costing nothing when it is lost — is
+         nothing to press and nothing to watch, so it earns no card here */
+      var acts = (e.passive || []).some(function (pas) { return pas.trigger !== 'static'; });
+      if (!e.activate && !acts) return;
       var mReady = !m.exhausted && (!e.activate || Engine.affordable(s, m, 'mod'));
       var off = !(myTurn && mReady);
       out.push({ key: id, id: id, kind: 'mod',
@@ -2529,22 +2638,22 @@
                (why ? ' disabled title="' + esc('Cannot: ' + why) + '"' : '') + '>' + esc(o) + '</button>'; }).join('') +
         cancelBtn();
     else if (p.kind === 'move') {
-      var s = G.players[G.active], sm = s.modules[selMod];
-      var total = Object.keys(s.modules).reduce(function (a, i) { return a + s.modules[i].moveLeft; }, 0);
-      h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Each module moves on its own. ' +
-           'Click one to select it, then click open ground to walk it there — or use the pad ' +
-           'and arrow keys.</div>' +
-           '<div style="font-size:11px;margin-bottom:4px">Selected: <b style="color:var(--cyan)">' +
-           (sm ? esc(sm.name) + ' (' + sm.moveLeft + ' left)' : 'none') + '</b> — ' + total + ' Move unspent</div>' +
-           movePad(!!sm && sm.moveLeft > 0) +
-           stuckNote(G) +
+      var left = G.players[G.active].moveLeft || 0;
+      h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">The whole ship moves ' +
+           'with its Core. Click a highlighted square to take the Core there — red squares are ' +
+           'blocked, because some part of the hull would hit something. Or use the pad and arrow ' +
+           'keys.</div>' +
+           '<div style="font-size:11px;margin-bottom:4px"><b style="color:var(--cyan)">' + left +
+           '</b> Move left</div>' +
+           movePad(left > 0) +
+           rockNote(G) + stuckNote(G) +
            '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
            '>Done moving</button>' + cancelBtn();
     }
     else if (p.kind === 'moveObject')
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Click where it should go, ' +
            'or use the pad — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' + movePad(p.left > 0) +
-           stuckNote(G) +
+           rockNote(G) + stuckNote(G) +
            '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
            '>Done</button>' + cancelBtn();
     else if (p.kind === 'space')
@@ -2578,11 +2687,13 @@
            (noTargets
              ? 'Nothing is in range with line of sight. Take it back to keep the weapon ready, ' +
                'or skip to spend it anyway.'
+             : p.hint ? esc(p.hint)
              : 'Shaded squares are in this weapon\'s line of fire. Click an outlined target.') +
            '</div>' +
            '<div style="margin-top:6px">' +
            '<button class="g-btn ghost" data-done="1">' +
-           (noTargets ? 'Skip — spend it anyway' : 'Skip — hold fire') + '</button>' +
+           (p.swap ? 'Done swapping' : noTargets ? 'Skip — spend it anyway' : 'Skip — hold fire') +
+           '</button>' +
            (Engine.canUndo() ? cancelBtn('Cancel — take it back') : '') +
            '</div>';
     }
@@ -2597,6 +2708,17 @@
      refuses it too, so this is the explanation rather than the rule. */
   function stuckIds(G) {
     return (Engine.stacked ? Engine.stacked(G.active) : []) || [];
+  }
+  /* AI Piloting lets a piece stop inside an asteroid, but the end of the turn wrecks it */
+  function rockNote(G) {
+    var s = G.players[G.active];
+    var n = ['modules', 'deployables'].reduce(function (a, k) {
+      return a + Object.keys(s[k]).filter(function (id) { return Engine.onRock(s[k][id]); }).length;
+    }, 0);
+    if (!n) return '';
+    return '<div style="font-size:11px;color:var(--amber);margin-bottom:6px">' +
+           (n === 1 ? 'A piece is' : n + ' pieces are') + ' on an asteroid and will be destroyed ' +
+           'at the end of your turn unless moved off.</div>';
   }
   function stuckNote(G) {
     var n = stuckIds(G).length;
@@ -2754,6 +2876,8 @@
     if (!c) { hoverCell = null; clearRoute(); return; }
     if (hoverCell && hoverCell.x === c.x && hoverCell.y === c.y) { drawRoute(G); return; }
     hoverCell = c;
+    /* the ship's footprint follows the cursor, and that is painted with the cells */
+    if (mover(G).kind === 'ship') { Engine.emit(); return; }
     drawRoute(G);
   });
   gridEl.addEventListener('mouseleave', function () { hoverCell = null; debugCell = null; clearRoute(); });
@@ -2768,7 +2892,7 @@
     var G = Engine.get(), mv = mover(G);
     if (!mv || !route || walking) return;
     var pend = G.pending, isDep = pend.kind === 'moveObject';
-    var id = isDep ? pend.objId : selMod;
+    var id = isDep ? pend.objId : mv.obj.id;
     /* Online the server walks it. Sending the whole route in one intent keeps the rules in
        one place: each square is still judged on its own, and the walk stops where they say. */
     if (online()) {
@@ -2787,10 +2911,10 @@
         var found = isDep ? Engine.objectById(id) : null;
         var piece = isDep ? (found && found.obj) : now.players[meIdx()].modules[id];
         if (!piece || !now.pending) break;                 /* gone, or the prompt closed */
-        var left = isDep ? now.pending.left : piece.moveLeft;
+        var left = isDep ? now.pending.left : now.players[meIdx()].moveLeft;
         if (left <= 0) break;
         var dx = route[i].x - route[i-1].x, dy = route[i].y - route[i-1].y;
-        var ok = isDep ? Engine.stepObject(id, dx, dy) : Engine.moveModule(id, dx, dy);
+        var ok = isDep ? Engine.stepDeployable(id, dx, dy) : Engine.moveShip(dx, dy);
         if (!ok) { blockFlash(route[i].x, route[i].y); break; }
         ping(route[i].x, route[i].y);
       }
@@ -2859,10 +2983,6 @@
     }
     if (p) {
       if (p.kind === 'target' && id && p.targets.indexOf(id) >= 0) return Engine.resolve(id);
-      /* during a move prompt, clicking one of your modules picks which one the controls drive */
-      if (p.kind === 'move' && id && G.players[meIdx()].modules[id]) {
-        selMod = id; hoverCell = null; Engine.emit(); return;
-      }
       if (p.kind === 'space' && cell && p.filter && p.filter(cell.x, cell.y))
         return Engine.resolve(cell);
       /* clicking open ground walks the selected piece there along the previewed route */
@@ -3010,6 +3130,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
+    var lock = document.getElementById('lockOpts');
     var lbl = document.getElementById('labelOpts');
     var dbg = document.getElementById('debugOpts');
     var gfx = document.getElementById('gfxOpts');
@@ -3019,6 +3140,9 @@
       });
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
+      });
+      [].forEach.call(lock.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-lock') === '1') === lockCamera);
       });
       [].forEach.call(lbl.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-label') === '1') === showLabels);
@@ -3070,6 +3194,15 @@
       if (!b) return;
       setInstant(b.getAttribute('data-instant') === '1');
       mark();
+      Engine.emit();
+    });
+    lock.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-lock]');
+      if (!b) return;
+      setLockCamera(b.getAttribute('data-lock') === '1');
+      mark();
+      /* the paint that follows re-reads the lock, so switching it on centres the camera on
+         the seat at the controls there and then */
       Engine.emit();
     });
     cog.addEventListener('click', function (e) {
@@ -3815,25 +3948,23 @@
     else warmServer();
   })();
 
-  /* one nudge function for the pad and the keyboard: fleet move, or a deployable step */
+  /* one nudge function for the pad and the keyboard: the ship's move, or a deployable step */
   function nudge(dx, dy) {
     var G = Engine.get(), p = G.pending, s = G.players[meIdx()];
     if (p && p.kind === 'moveObject') {
       var t = Engine.objectById(p.objId);
       var to = t ? { x: t.obj.x + dx, y: t.obj.y + dy } : null;
-      if (!Engine.stepObject(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
+      /* stepDeployable, not stepObject: it is the name net.js forwards to the server when
+         online (the engine makes them the same function), so the step happens on the real game */
+      if (!Engine.stepDeployable(p.objId, dx, dy)) { if (to) blockFlash(to.x, to.y); }
       else if (to) ping(to.x, to.y);
       return;
     }
-    if (!selMod || !s.modules[selMod] || s.modules[selMod].moveLeft <= 0) selMod = nextMovable(s);
-    if (!selMod) return;
-    var m = s.modules[selMod], tx = m.x + dx, ty = m.y + dy;
-    if (Engine.moveModule(selMod, dx, dy)) ping(tx, ty);
+    var core = s.modules[s.coreId];
+    if (!p || p.kind !== 'move' || !core) return;
+    var tx = core.x + dx, ty = core.y + dy;
+    if (Engine.moveShip(dx, dy)) ping(tx, ty);
     else blockFlash(tx, ty);
-  }
-  function nextMovable(s) {
-    var ids = Object.keys(s.modules).filter(function (i) { return s.modules[i].moveLeft > 0; });
-    return ids[0] || null;
   }
   var DIRS = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0],
                w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] };
