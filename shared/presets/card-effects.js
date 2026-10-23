@@ -307,7 +307,7 @@ mod: {
                         activate:{ cost:[],
                                    effect:[{op:'moveSelf',n:12,optional:true},
                                            {op:'attack',range:1,from:'self',attacks:1,dmg:3,
-                                            check:'Sensors',dmgType:'ion',targets:'ships',anim:'torpedo'},
+                                            check:'Sensors',dmgType:'ion',targets:'ships',anim:'ionTorpedo'},
                                            {op:'removeSelf'}] } },
 /* It arrives ready rather than spent — it can run the turn it is launched — and it is spent by
    firing rather than by existing. A round that connects is gone, which is what a guided round

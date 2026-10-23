@@ -1905,19 +1905,33 @@
     return out;
   }
 
-  function buildPiece(rec) {
+  /* a seat colour, greyed and darkened: what a spent piece wears in low graphics */
+  function dullHex(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return hex;
+    var n = parseInt(m[1], 16), c = [n >> 16, (n >> 8) & 255, n & 255];
+    var grey = (c[0] + c[1] + c[2]) / 3;
+    return '#' + c.map(function (v) {
+      var x = Math.round((v * 0.45 + grey * 0.55) * 0.62);
+      return ('0' + Math.max(0, Math.min(255, x)).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  function buildPiece(rec, col) {
+    col = col || rec.color;
     var d = document.createElement('div');
     d.setAttribute('data-obj', rec.id);
     d.setAttribute('data-shape', rec.shape);
+    d.setAttribute('data-color', col);
     d.style.width = d.style.height = CELL + 'px';
-    d.style.setProperty('--pc', rec.color);
+    d.style.setProperty('--pc', col);
     if (rec.kind === 'ast') {
       var seed = GamePieces.hash(rec.id);
       d.style.setProperty('--astro-start', Math.floor(seed * 360) + 'deg');
       d.style.setProperty('--astro-speed', (28 + seed * 42).toFixed(0) + 's');
-      d.appendChild(GamePieces.build(rec.shape, rec.color, seed));
+      d.appendChild(GamePieces.build(rec.shape, col, seed));
     } else {
-      d.appendChild(GamePieces.build(rec.shape, rec.color));
+      d.appendChild(GamePieces.build(rec.shape, col));
     }
     ['mc-tl','mc-tr','mc-bl','mc-br'].forEach(function (k) {
       var sp = document.createElement('span');
@@ -2044,11 +2058,15 @@
     recs.forEach(function (rec, idx) {
       /* a rock that has broken up needs new art, not just new classes */
       var node = byId[rec.id];
-      if (node && node.getAttribute('data-shape') !== rec.shape) {
+      /* Low graphics draws no filters, so a spent piece cannot be dimmed the usual way — it is
+         drawn in a duller version of its own colour instead, and rebuilt only when that flips */
+      var col = (lowGfx && rec.kind !== 'ast' && rec.o && rec.o.exhausted) ? dullHex(rec.color) : rec.color;
+      if (node && (node.getAttribute('data-shape') !== rec.shape ||
+                   node.getAttribute('data-color') !== col)) {
         piecesEl.removeChild(node);
         node = null;
       }
-      node = node || buildPiece(rec);
+      node = node || buildPiece(rec, col);
       var ref = piecesEl.children[idx];
       if (ref !== node) piecesEl.insertBefore(node, ref || null);
       paintPiece(node, rec, G);

@@ -10,10 +10,10 @@
  * roll then sends its own round across. A hit ends in the style's impact; a miss ends in
  * nothing — the round simply fades where it was going.
  *
- * How a shot looks is a style: ballistic, energy, bio, tractor or torpedo. An attack may name
- * one with `anim` (card-effects.js); left out, the damage type picks it, and anything else
- * falls back to the default ballistic round. A new look is one entry in STYLES — and, for a
- * damage type, one line in BY_TYPE.
+ * How a shot looks is a style: ballistic, energy, bio, tractor, torpedo or ionTorpedo. An
+ * attack may name one with `anim` (card-effects.js); left out, the damage type picks it, and
+ * anything else falls back to the default ballistic round. A new look is one entry in STYLES —
+ * and, for a damage type, one line in BY_TYPE.
  */
 var AttackFx = (function () {
   'use strict';
@@ -182,40 +182,103 @@ var AttackFx = (function () {
      trailing exhaust, and a hit is a warhead going off — the ballistic fireball, bigger, with a
      shockwave behind it. A miss runs on past and burns out. `launches` tells draw() the piece
      has left its square, so the one left standing there (see keep) goes as it sets off. */
-  STYLES.torpedo = function (a, b, hit, t0, i) {
-    var from = a || b, end = hit ? b : wide(from, b, i);
-    var ms = a ? Math.min(560, 260 + Math.sqrt(Math.pow(end.x - a.x, 2) + Math.pow(end.y - a.y, 2)) / env.cell * 55) : 0;
-    if (a) {
-      var dx = end.x - a.x, dy = end.y - a.y, rot = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
-      var len = env.cell * .7, thick = Math.max(5, env.cell * .2);
-      var body = blob(a.x, a.y, len, 'height:' + thick + 'px;margin-top:' + (len - thick) / 2 + 'px;' +
-        'border-radius:' + thick + 'px ' + thick * 1.6 + 'px ' + thick * 1.6 + 'px ' + thick + 'px;' +
-        'background:linear-gradient(90deg,#ff9a3c 0,#ffe08a 12%,#cfd6de 22%,#8c97a3 70%,#e2483d 72%,#ff6a5c 100%);' +
-        'box-shadow:-6px 0 10px 2px rgba(255,150,60,.7);');
-      play(body, [{ opacity: 1, transform: 'translate(0,0) ' + rot },
-                  { opacity: 1, transform: 'translate(' + dx * .15 + 'px,' + dy * .15 + 'px) ' + rot, offset: .35 },
-                  { opacity: hit ? 1 : 0, transform: 'translate(' + dx + 'px,' + dy + 'px) ' + rot }],
-           ms, t0, 'cubic-bezier(.55,0,.85,.5)');
-      /* exhaust left hanging along the run */
-      for (var k = 1; k <= 5; k++) {
-        var f = k / 6, at = Math.pow(f, 1.8);
-        play(blob(a.x + dx * at, a.y + dy * at, env.cell * .35,
-                  'border-radius:50%;background:radial-gradient(circle,rgba(200,200,210,.6),transparent 70%);'),
-             [{ opacity: .8, transform: 'scale(.4)' }, { opacity: 0, transform: 'scale(1.6)' }],
-             520, t0 + ms * f);
+  /* A torpedo's flight is the same whatever it carries; what it looks like and what happens
+     when it lands is the warhead's. */
+  function torpedoStyle(look) {
+    var style = function (a, b, hit, t0, i) {
+      var from = a || b, end = hit ? b : wide(from, b, i);
+      var ms = a ? Math.min(560, 260 + Math.sqrt(Math.pow(end.x - a.x, 2) + Math.pow(end.y - a.y, 2)) / env.cell * 55) : 0;
+      if (a) {
+        var dx = end.x - a.x, dy = end.y - a.y, rot = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
+        var len = env.cell * .7, thick = Math.max(5, env.cell * .2);
+        var body = blob(a.x, a.y, len, 'height:' + thick + 'px;margin-top:' + (len - thick) / 2 + 'px;' +
+          'border-radius:' + thick + 'px ' + thick * 1.6 + 'px ' + thick * 1.6 + 'px ' + thick + 'px;' +
+          'background:' + look.body + ';box-shadow:' + look.glow + ';');
+        play(body, [{ opacity: 1, transform: 'translate(0,0) ' + rot },
+                    { opacity: 1, transform: 'translate(' + dx * .15 + 'px,' + dy * .15 + 'px) ' + rot, offset: .35 },
+                    { opacity: hit ? 1 : 0, transform: 'translate(' + dx + 'px,' + dy + 'px) ' + rot }],
+             ms, t0, 'cubic-bezier(.55,0,.85,.5)');
+        /* exhaust left hanging along the run */
+        for (var k = 1; k <= 5; k++) {
+          var f = k / 6, at = Math.pow(f, 1.8);
+          play(blob(a.x + dx * at, a.y + dy * at, env.cell * .35,
+                    'border-radius:50%;background:radial-gradient(circle,' + look.exhaust + ',transparent 70%);'),
+               [{ opacity: .8, transform: 'scale(.4)' }, { opacity: 0, transform: 'scale(1.6)' }],
+               520, t0 + ms * f);
+        }
       }
-    }
-    if (hit) {
-      explode(b, t0 + ms);
+      if (hit) look.impact(b, t0 + ms);
+      return [hit ? ms : null, ms + (hit ? look.linger : 0)];
+    };
+    /* the piece itself is the round: draw() lets the copy left on its square go at launch */
+    style.launches = true;
+    return style;
+  }
+
+  /* the ballistic warhead: the fireball, bigger, with a shockwave behind it */
+  STYLES.torpedo = torpedoStyle({
+    body: 'linear-gradient(90deg,#ff9a3c 0,#ffe08a 12%,#cfd6de 22%,#8c97a3 70%,#e2483d 72%,#ff6a5c 100%)',
+    glow: '-6px 0 10px 2px rgba(255,150,60,.7)',
+    exhaust: 'rgba(200,200,210,.6)',
+    linger: 760,
+    impact: function (b, t0) {
+      explode(b, t0);
       play(blob(b.x, b.y, env.cell * 2.3, 'border-radius:50%;background:radial-gradient(circle,' +
                                           'rgba(255,240,200,.95) 0,rgba(255,150,40,.8) 35%,rgba(180,40,0,.4) 55%,transparent 70%);'),
            [{ opacity: 1, transform: 'scale(.15)' }, { opacity: .9, transform: 'scale(.9)', offset: .3 },
-            { opacity: 0, transform: 'scale(1.15)' }], 620, t0 + ms);
-      rings(b, '#ffb347', 1, t0 + ms + 40, 560);
+            { opacity: 0, transform: 'scale(1.15)' }], 620, t0);
+      rings(b, '#ffb347', 1, t0 + 40, 560);
     }
-    return [hit ? ms : null, ms + (hit ? 760 : 0)];
-  };
-  STYLES.torpedo.launches = true;
+  });
+
+  /* the ion warhead: no fire — a discharge. A white-blue flash, forked lightning crackling out
+     of it, electric rings and a scatter of blue sparks, flickering rather than burning */
+  STYLES.ionTorpedo = torpedoStyle({
+    body: 'linear-gradient(90deg,#6fe6ff 0,#d9fbff 12%,#cfd6de 22%,#7f8fa3 70%,#2fb4ff 72%,#8beaff 100%)',
+    glow: '-6px 0 10px 2px rgba(80,200,255,.75)',
+    exhaust: 'rgba(140,220,255,.55)',
+    linger: 820,
+    impact: ionBurst
+  });
+
+  function ionBurst(p, t0) {
+    var c = env.cell;
+    play(blob(p.x, p.y, c * 1.6, 'border-radius:50%;background:radial-gradient(circle,' +
+                                 '#fff 0,#c8f6ff 22%,#4fd0ff 45%,rgba(30,120,255,.35) 62%,transparent 72%);'),
+         [{ opacity: 1, transform: 'scale(.2)' }, { opacity: 1, transform: 'scale(1)', offset: .25 },
+          { opacity: .4, transform: 'scale(1.05)', offset: .45 }, { opacity: .9, transform: 'scale(1.1)', offset: .55 },
+          { opacity: 0, transform: 'scale(1.3)' }], 420, t0);
+    rings(p, '#6fdcff', 2, t0 + 30, 520);
+    /* forked lightning: a jagged line from the centre outward, each one flickering on and off */
+    var size = c * 2.6, h = size / 2;
+    for (var k = 0; k < 7; k++) {
+      var ang = k * 0.8976 + 0.4, reach = h * (0.7 + (k % 3) * 0.1), pts = [h + ',' + h], seg = 5;
+      for (var j = 1; j <= seg; j++) {
+        var r = reach * j / seg, wob = (j === seg ? 0 : ((k * 7 + j * 13) % 9 - 4) * c * .045);
+        pts.push((h + Math.cos(ang) * r - Math.sin(ang) * wob).toFixed(1) + ',' +
+                 (h + Math.sin(ang) * r + Math.cos(ang) * wob).toFixed(1));
+      }
+      var bolt = blob(p.x, p.y, size, 'filter:drop-shadow(0 0 3px #4fd0ff) drop-shadow(0 0 6px #2a8cff);');
+      bolt.innerHTML = '<svg width="' + size + '" height="' + size + '" style="overflow:visible">' +
+        '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#e6fbff" stroke-width="' +
+        Math.max(1.2, c * .05) + '" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+      play(bolt, [{ opacity: 0 }, { opacity: 1, offset: .08 }, { opacity: .15, offset: .22 },
+                  { opacity: 1, offset: .36 }, { opacity: .1, offset: .55 }, { opacity: .8, offset: .68 },
+                  { opacity: 0 }], 560, t0 + (k % 3) * 40);
+    }
+    for (var n = 0; n < 9; n++) {
+      var a2 = n * .698 + .2, rr = c * (.8 + (n % 3) * .25);
+      play(blob(p.x, p.y, 3, 'border-radius:50%;background:#bff4ff;box-shadow:0 0 5px #4fd0ff;'),
+           [{ opacity: 1, transform: 'translate(0,0)' },
+            { opacity: 0, transform: 'translate(' + Math.cos(a2) * rr + 'px,' + Math.sin(a2) * rr + 'px)' }],
+           380, t0 + 30);
+    }
+    /* static left crawling over the hull it hit */
+    play(blob(p.x, p.y, c * 1.1, 'border-radius:50%;background:radial-gradient(circle,' +
+                                 'rgba(120,220,255,.35) 0,rgba(60,140,255,.15) 50%,transparent 70%);'),
+         [{ opacity: 0 }, { opacity: .9, offset: .2 }, { opacity: .3, offset: .4 }, { opacity: .8, offset: .6 },
+          { opacity: 0 }], 760, t0 + 120);
+  }
 
   bar.r = function (a, b) { return 'rotate(' + Math.atan2(b.y - a.y, b.x - a.x) + 'rad)'; };
   STYLES['default'] = STYLES.ballistic;
