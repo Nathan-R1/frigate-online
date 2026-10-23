@@ -21,7 +21,7 @@ var AttackFx = (function () {
   var STAGGER = 170;          /* ms between the rolls of one shot */
   var BACKLOG = 3500;         /* never let a run of computer shots fall further behind than this */
 
-  var BY_TYPE = { kinetic: 'ballistic', energy: 'energy', bio: 'bio' };
+  var BY_TYPE = { kinetic: 'ballistic', energy: 'energy', bio: 'bio', ion: 'energy' };
 
   var env = null, lastN = null, freeAt = 0;
 

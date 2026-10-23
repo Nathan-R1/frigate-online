@@ -751,11 +751,14 @@ var Engine = (function () {
   }
 
   /* ================= damage ================= */
-  function damageModule(targetSide, mod, amount) {
+  function damageModule(targetSide, mod, amount, dmgType) {
     if (!mod || amount <= 0) return 0;
     var absorbed = Math.min(targetSide.shield, amount);
     targetSide.shield -= absorbed;
     var rest = amount - absorbed;
+    /* ion damage hits shields and nothing else: whatever they cannot absorb is lost */
+    var lost = dmgType === 'ion' ? rest : 0;
+    if (lost) rest = 0;
     /* A Citadel is the Core wearing another silhouette: the damage lands in the Core's pool,
        and it is the Core that dies when that pool runs out — the Citadel goes with the wreck. */
     var hit = hullHolder(targetSide, mod);
@@ -765,6 +768,7 @@ var Engine = (function () {
       log(targetSide.name + "'s shields absorb " + absorbed + '.', targetSide);
       fire(targetSide, 'onShieldDamaged', { amount: absorbed });
     }
+    if (lost) log('  ' + lost + ' ion damage is lost — it cannot touch the hull.');
     if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage' +
                   (hit === mod ? '' : ' — off the Core') + '.', targetSide);
     if (hit.hull <= 0) { destroyModule(targetSide, hit); lossToCore(targetSide, hit); }
@@ -1390,11 +1394,13 @@ var Engine = (function () {
       if (c.hit) {
         log('  ' + c.text + ' — hit.');
         if (dmg > 0) {
-          if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
+          /* ion damage only ever hits shields: a rock or a drone has none to hit */
+          if (o.dmgType === 'ion' && t.kind !== 'module') log('  The ion charge finds no shields to hit.');
+          else if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
           else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
           /* "For each hit to Hull roll an attack against the same target" — a hit the shields
              soaked entirely is not a hit to hull */
-          else if (damageModule(t.owner, t.obj, dmg) > 0 && o.chainOnHullHit && chained < 12) {
+          else if (damageModule(t.owner, t.obj, dmg, o.dmgType) > 0 && o.chainOnHullHit && chained < 12) {
             n++; chained++;
             log('  Hull hit — another attack.');
           }
@@ -1663,23 +1669,38 @@ var Engine = (function () {
       } });
   };
 
+  /* The ships a shield grant may land on: your own, or for a "choose" grant "an allied ship
+     within Sensor range from this" — measured from the module doing it, and your own ship
+     counts, since you are on your own team. A ship is in range when any of its modules is. */
+  function shieldTargets(o, ctx) {
+    var s = ctx.side;
+    if (o.target !== 'choose') return [s];
+    var from = ctx.module || ctx.deployable || s.modules[s.coreId];
+    if (!from) return [s];
+    var reach = sensorsOf(s);
+    return [s].concat(alliesOf(s)).filter(function (p) {
+      return Object.keys(p.modules).some(function (id) { return dist(from, p.modules[id]) <= reach; });
+    });
+  }
+  /* An effect that would achieve nothing: so far, a shield grant when every ship it could land
+     on is already at full shield. */
+  function wasted(effect, ctx) {
+    return !!effect && effect.length > 0 && effect.every(function (o) {
+      return o.op === 'gainShield' && shieldTargets(o, ctx).every(function (p) { return p.shield >= p.shieldMax; });
+    });
+  }
+
   OPS.gainShield = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
     function give(p) {
       p.shield = Math.min(p.shieldMax, p.shield + n);
       log(p.name + ' gains ' + n + ' shield.', p);
     }
-    if (o.target !== 'choose') { give(s); return; }
-    /* "an allied ship within Sensor range from this" — measured from the module doing it, and
-       your own ship counts, since you are on your own team. A ship is in range when any of
-       its modules is. */
-    var from = ctx.module || ctx.deployable || s.modules[s.coreId];
-    if (!from) { give(s); return; }
-    var reach = sensorsOf(s);
-    var picks = [s].concat(alliesOf(s)).filter(function (p) {
-      return Object.keys(p.modules).some(function (id) { return dist(from, p.modules[id]) <= reach; });
-    });
+    var picks = shieldTargets(o, ctx);
     if (!picks.length) { log(s.name + ' has no ship in Sensor range to shield.', s); return; }
+    /* a ship already at full shield is no choice at all, when another has room */
+    var room = picks.filter(function (p) { return p.shield < p.shieldMax; });
+    if (room.length) picks = room;
     if (picks.length === 1) { give(picks[0]); return; }
     prompt({ kind: 'choice', label: 'Shield which ship?',
       options: picks.map(function (p) { return p.name + ' — ' + p.shield + '/' + p.shieldMax; }),
@@ -2030,11 +2051,15 @@ var Engine = (function () {
      disabled with the reason beside it, rather than taken and refused: picking it would only
      ever be a wasted click. */
   function offerChoice(a, ctx, label) {
-    var why = a.options.map(function (opt) { return activationShortfall(opt, ctx) || null; });
+    /* An option that would achieve nothing — Shield with every ship already at full shield — is
+       not offered at all. If that would leave nothing, everything is shown as it is. */
+    var opts = a.options.filter(function (opt) { return !wasted(opt.effect, ctx); });
+    if (!opts.length) opts = a.options;
+    var why = opts.map(function (opt) { return activationShortfall(opt, ctx) || null; });
     prompt({ kind: 'choice', label: label, disabled: why,
-      options: a.options.map(function (x) { return x.label; }),
+      options: opts.map(function (x) { return x.label; }),
       onResolve: function (idx) {
-        var opt = a.options[idx]; if (!opt || why[idx]) return;
+        var opt = opts[idx]; if (!opt || why[idx]) return;
         activate(opt.cost, opt.effect, ctx, label, opt.label);
       } });
     return true;
@@ -2114,17 +2139,39 @@ var Engine = (function () {
     enqueue([{ op: '__stepMove', objId: obj.id, n: n }], ctx);
     fire(s, 'onMove', { moveBonus: true });
   }
-  function openStepMove(obj, n) {
+  function openStepMove(obj, n, start) {
     /* The prompt object is the live one — stepObject decrements G.pending.left, which is this
-       same `p` — so re-opening after a refusal carries the Move that is actually left. */
+       same `p` — so re-opening after a refusal carries the Move that is actually left. `start`
+       is where this move began and with how much Move, kept across a re-open, so resetStep can
+       put the object back and let it be moved again. */
     var p = { kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
               objId: obj.id, left: n,
+              start: start || { x: obj.x, y: obj.y, n: n },
               onResolve: function () {
                 if (!insideSomething(obj) || onRock(obj)) return;
                 log(obj.name + ' cannot stop inside another piece — move it clear.');
-                openStepMove(obj, p.left);
+                openStepMove(obj, p.left, p.start);
               } };
     prompt(p);
+  }
+
+  /* Put the object being moved back where this move began, with its whole Move again. A Tract
+     Beam's drag comes after its dice, so the activation itself can no longer be taken back —
+     but nothing the drag does is final until Done, and each step only moved this one object. */
+  function resetStep() {
+    var p = G.pending;
+    if (!p || p.kind !== 'moveObject' || !p.start) return false;
+    var t = objectById(p.objId);
+    if (!t) return false;
+    var o = t.obj;
+    if (o.x === p.start.x && o.y === p.start.y && p.left === p.start.n) return false;
+    leaveCell(o);
+    o.x = p.start.x; o.y = p.start.y;
+    enterCell(o, t.kind === 'asteroid' ? 'asteroid' : t.kind, t.owner ? t.owner.idx : null);
+    p.left = p.start.n;
+    log((t.owner ? t.owner.name + "'s " : '') + (o.name || 'The asteroid') + ' is put back to start its move again.', t.owner);
+    emit();
+    return true;
   }
   OPS.__stepMove = function (o, ctx) {
     var s = ctx.side, t = objectById(o.objId);
@@ -2636,7 +2683,7 @@ var Engine = (function () {
     if (!p) return null;
     var out = { kind: p.kind, label: p.label };
     ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards', 'swap',
-     'hint', 'purpose'].forEach(function (k) {
+     'hint', 'purpose', 'start'].forEach(function (k) {
       if (p[k] !== undefined) out[k] = p[k];
     });
     if (typeof p.filter === 'function') {
@@ -2802,7 +2849,7 @@ var Engine = (function () {
     moveShip: moveShip, meetsReq: meetsReq, failingModules: failingModules,
     shipModules: function (s2) { return shipModules(s2); },
     shipReach: function (s2, max) { return shipReach(s2, max); },
-    activateDeployable: activateDeployable, stepDeployable: stepDeployable,
+    activateDeployable: activateDeployable, stepDeployable: stepDeployable, resetStep: resetStep,
     endPlayPhase: endPlayPhase, hasLos: hasLos, lineBlocked: lineBlocked,
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,

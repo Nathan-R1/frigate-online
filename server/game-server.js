@@ -437,7 +437,7 @@ function broadcast(room) {
    belong to whoever's turn it is — there is no legal off-turn action in this game. */
 var COMMANDS = {
   playCard: 1, activateCard: 1, activateModule: 1, activateDeployable: 1,
-  moveShip: 2, stepDeployable: 3, resolve: 1, cancel: 0, undo: 0,
+  moveShip: 2, stepDeployable: 3, resetStep: 0, resolve: 1, cancel: 0, undo: 0,
   endPlayPhase: 0, endTurn: 0,
   /* not an engine call: a whole walk in one intent, applied a square at a time */
   moveRoute: 2
