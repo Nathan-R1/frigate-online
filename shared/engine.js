@@ -1393,8 +1393,11 @@ var Engine = (function () {
     if (o.dmgIfRangeAtLeast && from && dist(from, t.obj) >= o.dmgIfRangeAtLeast.range)
       base = o.dmgIfRangeAtLeast.dmg;
     var dmg = base > 0 ? base + powerOf(from) + buffOf(s, from, 'dmg') : 0;
-    var hit = false, landed = false, rolls = [], chained = 0;
+    var hit = false, landed = false, rolls = [], chained = 0, hullDealt = 0;
     var shot = { from: from || ctx.module || null, to: t.obj };
+    /* what the shot did, for the view: the ship's shields and Core before it, to compare after */
+    var owner = t.owner, core = owner && owner.modules[owner.coreId];
+    var shield0 = owner ? owner.shield : 0, core0 = core ? core.hull : 0;
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
     var friendly = !!t.owner && t.owner.team === s.team;
@@ -1439,15 +1442,22 @@ var Engine = (function () {
         log('  ' + c.text + ' — hit.');
         if (dmg > 0) {
           /* ion damage only ever hits shields: a rock or a drone has none to hit */
+          var dealt = 0;
+          var hullBefore = (t.kind === 'module' ? hullHolder(t.owner, t.obj) : t.obj).hull;
           if (o.dmgType === 'ion' && t.kind !== 'module') log('  The ion charge finds no shields to hit.');
-          else if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
-          else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
-          /* "For each hit to Hull roll an attack against the same target" — a hit the shields
-             soaked entirely is not a hit to hull */
-          else if (damageModule(t.owner, t.obj, dmg, o.dmgType) > 0 && o.chainOnHullHit && chained < 12) {
-            n++; chained++;
-            log('  Hull hit — another attack.');
+          else if (t.kind === 'asteroid') dealt = damageAsteroid(t.obj, dmg);
+          else if (t.kind === 'deployable') dealt = damageDeployable(t.owner, t.obj, dmg);
+          else {
+            dealt = damageModule(t.owner, t.obj, dmg, o.dmgType);
+            /* "For each hit to Hull roll an attack against the same target" — a hit the shields
+               soaked entirely is not a hit to hull */
+            if (dealt > 0 && o.chainOnHullHit && chained < 12) {
+              n++; chained++;
+              log('  Hull hit — another attack.');
+            }
           }
+          /* hull actually lost, not the size of the blow: a 1-hull drone hit for 2 lost 1 */
+          hullDealt += Math.min(dealt || 0, Math.max(0, hullBefore));
         }
         landed = true;
         /* riders such as a tractor beam's shove run once, on the first hit that lands.
@@ -1461,7 +1471,14 @@ var Engine = (function () {
       } else if (!c.chaffed) log('  ' + c.text + ' — miss.');
       if (!objectById(targetId)) break;
     }
-    recordShot(o, s, shot.from, shot.to, rolls);
+    /* Shield damage is the ship's; hull damage is the piece's. A Core that lost hull beyond what
+       landed on it lost it to a module destroyed under it (or its Citadel's shared pool). */
+    var coreNow = owner && owner.modules[owner.coreId];
+    var onCore = core && t.kind === 'module' && hullHolder(owner, t.obj) === core;
+    var coreLoss = core ? Math.max(0, core0 - (coreNow ? coreNow.hull : 0) - (onCore ? hullDealt : 0)) : 0;
+    recordShot(o, s, shot.from, shot.to, rolls, {
+      shield: owner ? Math.max(0, shield0 - owner.shield) : 0, hull: hullDealt,
+      killed: !objectById(targetId), core: core || null, coreLoss: coreLoss });
     /* once per shot that lands, however many of its attacks did — the tutorial's "Great Shot"
        listens for the one, and its "Damage Taken" for the other, which goes to the ship that
        was hit: shields or hull, it has been attacked */
@@ -1479,14 +1496,19 @@ var Engine = (function () {
      own `anim` and `dmgType` and nothing more. Positions are taken before the dice, so a
      beam that drags its target off still ends where the target was standing. */
   var SHOTS_KEEP = 16;
-  function recordShot(o, s, from, to, rolls) {
+  function recordShot(o, s, from, to, rolls, dmg) {
     function spot(p) {
       return p ? { id: p.id, x: p.x, y: p.y, owner: p.owner, stealth: !!p.stealth,
                    spotted: p.spotted ? p.spotted.slice() : undefined } : null;
     }
     G.shotN = (G.shotN || 0) + 1;
+    dmg = dmg || {};
     G.shots = (G.shots || []).concat([{ n: G.shotN, side: s.idx, from: spot(from), to: spot(to),
-      rolls: rolls, anim: o.anim || null, dmgType: o.dmgType || null }]).slice(-SHOTS_KEEP);
+      rolls: rolls, anim: o.anim || null, dmgType: o.dmgType || null,
+      /* what it did: shield and hull damage, whether the target went, and the Core's own losses
+         (its square, for a badge over it) */
+      shield: dmg.shield || 0, hull: dmg.hull || 0, killed: !!dmg.killed,
+      core: spot(dmg.core), coreLoss: dmg.coreLoss || 0 }]).slice(-SHOTS_KEEP);
   }
 
   /* Every square this shot can see: in range of some origin, with a clear line to it. Worked

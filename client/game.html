@@ -619,7 +619,7 @@
           </span>
         </div>
         <button type="button" class="set-item hidden" id="kickBtn">Manage seats…</button>
-        <button type="button" class="set-item" id="keysBtn">Debug keybinds…</button>
+        <button type="button" class="set-item hidden" id="keysBtn">Debug keybinds…</button>
       </div>
     </span>
   </div>
@@ -1768,9 +1768,10 @@
      craft, not hull, so they are not joined. */
   /* Low graphics: no CSS animation, no SMIL, no pings or blocked flashes. A piece is then a
      still silhouette, which is the point — it is there for slow machines and for anyone who
-     finds the motion distracting. */
-  var lowGfx = false;
-  try { lowGfx = localStorage.getItem('frigateGfxLow') === '1'; } catch (e) {}
+     finds the motion distracting. It is the default: full graphics only for those who have
+     asked for them. */
+  var lowGfx = true;
+  try { lowGfx = localStorage.getItem('frigateGfxLow') !== '0'; } catch (e) {}
   function setLowGfx(on) {
     lowGfx = !!on;
     document.documentElement.classList.toggle('gfx-low', lowGfx);
@@ -3148,7 +3149,11 @@
   });
   document.getElementById('modPopClose').addEventListener('click', closeModPopup);
   document.getElementById('modPop').addEventListener('click', function (e) {
-    if (e.target.id === 'modPop') closeModPopup();      /* click the backdrop to dismiss */
+    if (e.target.id === 'modPop') { closeModPopup(); return; }   /* click the backdrop to dismiss */
+    /* a card's text in the popup carries the same info pips as the hand: one opens the module
+       it names, in place of the card */
+    var pip = e.target.closest('.mod-info');
+    if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); }
   });
   /* ---------- copying the room code ----------
      A room code exists to be sent to somebody, so it should not have to be read off the screen
@@ -4109,8 +4114,15 @@
     debugOn = !!on;
     if (!debugOn && Engine.get()) { debugHeld = null; Engine.emit(); }
     try { localStorage.setItem('frigateDebug', debugOn ? '1' : '0'); } catch (e2) {}
+    showKeysBtn();
     renderKeybinds();
   }
+  /* the debug keybinds are only worth listing while there are debug keys to press */
+  function showKeysBtn() {
+    var b = document.getElementById('keysBtn');
+    if (b) b.classList.toggle('hidden', !debugOn);
+  }
+  showKeysBtn();
   var debugHeld = null;          /* the piece picked up, waiting for somewhere to put it */
   var debugCard = null;          /* the card the pointer is over, for the keyboard bindings */
   var debugCell = null;          /* and the square, for the same reason */

@@ -384,7 +384,8 @@ var AttackFx = (function () {
     if (top < lastN) lastN = 0;
     var fresh = shots.filter(function (s) { return s.n > lastN; });
     lastN = top;
-    if (!env.layer || env.still) return;
+    if (!env.layer) return;
+    if (env.still) { fresh.forEach(still); return; }
     fresh.forEach(function (shot) {
       if (Engine.hiddenFrom(shot.to, env.viewer)) return;
       var now = Date.now();
@@ -398,6 +399,80 @@ var AttackFx = (function () {
         else playing--;
       }, wait);
     });
+  }
+
+  /* ---- low graphics: the shot as static marks ----
+     Nothing moves. For a couple of seconds the shot shows who fired at what (a dashed line and
+     the target's corners) and what it did, all over the piece it was aimed at: a shield badge
+     with the shield damage, a round badge with the hull damage, "✕" when it went, or a faint
+     "miss". The Core's own lost point of hull, when a module goes, sits over the Core. Badges
+     on one square add up while they are showing — shield after shield, hull after hull — and a
+     different kind replaces the one there: a hit that takes the last of the shields and then
+     hull shows the hull. */
+  var HOLD = 2500, badges = {};
+  function still(shot) {
+    var me = env.viewer;
+    if (!shot.to || Engine.hiddenFrom(shot.to, me)) return;
+    var b = centre(shot.to);
+    var a = shot.from && !Engine.hiddenFrom(shot.from, me) ? centre(shot.from) : null;
+    if (a && !(a.x === b.x && a.y === b.y))
+      fade(bar(a, b, 1, 'border-top:1px dashed rgba(255,255,255,.6);'));
+    var c = '#ff5a4a', k = 9, w = 2, g = [];
+    ['0 0', '100% 0', '0 100%', '100% 100%'].forEach(function (at) {
+      g.push('linear-gradient(' + c + ',' + c + ') ' + at + '/' + k + 'px ' + w + 'px no-repeat');
+      g.push('linear-gradient(' + c + ',' + c + ') ' + at + '/' + w + 'px ' + k + 'px no-repeat');
+    });
+    fade(blob(b.x, b.y, env.cell + 10, 'background:' + g.join(',') + ';'));
+    var coreSeen = shot.core && !Engine.hiddenFrom(shot.core, me);
+    var dealt = shot.shield || shot.hull || shot.killed || shot.coreLoss;
+    if (shot.shield) badge(shot.to, 'shield', shot.shield);
+    if (shot.hull || shot.killed) badge(shot.to, 'hull', shot.hull, shot.killed);
+    if (shot.coreLoss && coreSeen) badge(shot.core, 'hull', shot.coreLoss);
+    if (!dealt && !(shot.rolls || []).some(Boolean)) badge(shot.to, 'miss', 0);
+  }
+  /* a static mark that is simply taken away after a while */
+  function fade(d) { setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, HOLD); }
+
+  function badge(spot, type, n, killed) {
+    var key = spot.x + ',' + spot.y, b = badges[key];
+    if (b && b.type === type && b.el.parentNode) { b.total += n; b.killed = b.killed || killed; }
+    else {
+      if (b && b.el.parentNode) b.el.parentNode.removeChild(b.el);
+      b = badges[key] = { type: type, total: n, killed: !!killed, el: badgeEl(spot, type) };
+    }
+    var text = type === 'miss' ? 'miss' : (b.killed ? '✕ ' : '') + (b.total ? '−' + b.total : '');
+    b.el.lastChild.textContent = text;
+    /* a disc holds two characters; anything longer ("✕ −3") stretches it into a pill */
+    if (type === 'hull') {
+      var size = parseFloat(b.el.style.height), wide = size + Math.max(0, text.length - 2) * size * 0.34;
+      b.el.style.width = wide + 'px';
+      b.el.style.left = (centre(spot).x - wide / 2) + 'px';
+      b.el.style.borderRadius = size + 'px';
+    }
+    clearTimeout(b.timer);
+    b.timer = setTimeout(function () {
+      if (b.el.parentNode) b.el.parentNode.removeChild(b.el);
+      if (badges[key] === b) delete badges[key];
+    }, HOLD);
+  }
+  /* hung just above the square: a shield outline for shield damage, a disc for hull */
+  function badgeEl(spot, type) {
+    var p = centre(spot), size = Math.max(16, env.cell * 0.62);
+    var col = type === 'shield' ? '#4fd0ff' : type === 'hull' ? '#ff5a4a' : '#9aa3ad';
+    var d = blob(p.x, p.y - env.cell * 0.62, size, 'display:flex;align-items:center;justify-content:center;' +
+      'font:700 ' + Math.round(size * 0.42) + 'px/1 system-ui,sans-serif;color:#fff;white-space:nowrap;z-index:2;' +
+      (type === 'hull' ? 'border-radius:50%;background:#3a1210;border:2px solid ' + col + ';box-sizing:border-box;' :
+       type === 'miss' ? 'color:' + col + ';font-weight:600;' : ''));
+    if (type === 'shield') {
+      d.innerHTML = '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" style="position:absolute;inset:0">' +
+        '<path d="M12 2 20.5 5.2v6.1c0 5-3.5 8.9-8.5 10.7C7 20.2 3.5 16.3 3.5 11.3V5.2Z" fill="#0d2a38" ' +
+        'stroke="' + col + '" stroke-width="2" stroke-linejoin="round"/></svg>';
+    }
+    var t = document.createElement('span');
+    t.style.cssText = 'position:relative;';
+    d.appendChild(t);
+    d.style.opacity = '1';
+    return d;
   }
 
   return { sync: sync, keep: keep, styles: STYLES, byType: BY_TYPE };
