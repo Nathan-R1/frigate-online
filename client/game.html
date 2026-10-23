@@ -2641,12 +2641,27 @@
   var ACT_LINE = /\b(plays|activates)\b/;
   function isAct(l) { return l.kind ? l.kind === 'act' : ACT_LINE.test(l.msg); }
 
+  /* The log follows new lines only while you are at (or within a line or so of) the bottom.
+     Scrolled up to read, it holds still: the line at the top of your view stays where it is,
+     even as the oldest lines drop off the top of the 200 kept. Scroll back down to follow
+     again. */
   function renderLog(G) {
     var lines = G.log.filter(function (l) { return logMode !== 'short' || isAct(l); });
+    var following = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+    var box = logEl.getBoundingClientRect(), anchor = null, offset = 0;
+    if (!following) {
+      for (var i = 0; i < logEl.children.length; i++) {
+        var r = logEl.children[i].getBoundingClientRect();
+        if (r.bottom > box.top) { anchor = logEl.children[i].getAttribute('data-n'); offset = r.top - box.top; break; }
+      }
+    }
     logEl.innerHTML = lines.slice(-200).map(function (l) {
-      return '<div class="t' + l.side + '">' + esc(l.msg) + '</div>';
+      return '<div class="t' + l.side + '"' + (l.n ? ' data-n="' + l.n + '"' : '') + '>' + esc(l.msg) + '</div>';
     }).join('') || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">Nothing yet.</div>';
-    logEl.scrollTop = logEl.scrollHeight;
+    if (following) { logEl.scrollTop = logEl.scrollHeight; return; }
+    var el = anchor && logEl.querySelector('[data-n="' + anchor + '"]');
+    if (el) logEl.scrollTop += (el.getBoundingClientRect().top - box.top) - offset;
+    else if (anchor) logEl.scrollTop = 0;          /* the line you were on has been trimmed away */
   }
 
   function renderPrompt(G) {

@@ -50,7 +50,10 @@ var Engine = (function () {
   function log(msg, who, kind) {
     var idx = who == null ? G.active
             : (typeof who === 'number' ? who : who.idx);
-    var entry = { turn: G.turn, side: idx, msg: msg };
+    /* `n` numbers every entry for good, so a view can tell one line from another however the
+       log is trimmed or copied — a restored game carries on from its last number */
+    if (G.logN === undefined) G.logN = G.log.length ? (G.log[G.log.length - 1].n || G.log.length) : 0;
+    var entry = { n: ++G.logN, turn: G.turn, side: idx, msg: msg };
     if (kind) entry.kind = kind;
     G.log.push(entry);
     if (G.log.length > LOG_KEEP * 2) G.log.splice(0, G.log.length - LOG_KEEP);
