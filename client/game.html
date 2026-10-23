@@ -3787,7 +3787,7 @@
       AICommander.reset();
       Engine.newGame(lobby.seats.map(function (st) {
         return { name: st.name, team: st.team, ai: st.kind === 'computer' };
-      }));
+      }), undefined, { preview: true });
     }
 
     Net.onError(function (msg) { setBadge(msg, true); say('lobbyErr', msg); });
