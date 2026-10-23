@@ -2636,13 +2636,20 @@
   var ACT_LINE = /\b(plays|activates)\b/;
   function isAct(l) { return l.kind ? l.kind === 'act' : ACT_LINE.test(l.msg); }
 
-  /* The log follows new lines only while you are at (or within a line or so of) the bottom.
-     Scrolled up to read, it holds still: the line at the top of your view stays where it is,
-     even as the oldest lines drop off the top of the 200 kept. Scroll back down to follow
-     again. */
+  /* The log follows new lines until you scroll up to read. Following is decided by the scroll
+     itself — where you leave the log, within a few lines of the bottom or not — and not
+     re-measured on every repaint, so a panel resizing or a long line wrapping never knocks it
+     off the bottom. Scrolled up, it holds still: the line at the top of your view stays where
+     it is, even as the oldest lines drop off the top of the 200 kept. Scroll back down (to
+     within a few lines of the end) to follow again. */
+  var LOG_SLACK = 60;
+  var logFollow = true;
+  logEl.addEventListener('scroll', function () {
+    logFollow = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < LOG_SLACK;
+  });
   function renderLog(G) {
     var lines = G.log.filter(function (l) { return logMode !== 'short' || isAct(l); });
-    var following = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+    var following = logFollow;
     var box = logEl.getBoundingClientRect(), anchor = null, offset = 0;
     if (!following) {
       for (var i = 0; i < logEl.children.length; i++) {
