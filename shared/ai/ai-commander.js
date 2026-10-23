@@ -117,6 +117,52 @@ var AICommander = (function () {
     steps.forEach(function (st2) { x += st2[0]; y += st2[1]; out.push({ x: x, y: y }); });
     return out.length > 1 ? out : null;
   }
+  /* ---------- cut-off modules ----------
+     Modules no longer joined to the Core do not move with the ship (engine.js: shipModules).
+     The ship can only bring itself alongside them: after a move of (dx,dy), any cut-off module
+     touching the moved hull — or touching one that does — is part of the ship again. */
+  function cutOff(s) {
+    var on = {};
+    Engine.shipModules(s).forEach(function (m) { on[m.id] = true; });
+    return K.modList(s).filter(function (m) { return !on[m.id]; });
+  }
+  /* how many cut-off modules a move of (dx,dy) joins back to the Core */
+  function rejoined(s, dx, dy) {
+    var loose = cutOff(s);
+    if (!loose.length) return 0;
+    var at = {};
+    Engine.shipModules(s).forEach(function (m) { at[(m.x + dx) + ',' + (m.y + dy)] = 'ship'; });
+    loose.forEach(function (m) { at[m.x + ',' + m.y] = m.id; });
+    var core = s.modules[s.coreId], q = [(core.x + dx) + ',' + (core.y + dy)], seen = {}, n = 0;
+    seen[q[0]] = true;
+    while (q.length) {
+      var xy = q.shift().split(','), x = +xy[0], y = +xy[1];
+      [[1,0],[-1,0],[0,1],[0,-1]].forEach(function (d) {
+        var k = (x + d[0]) + ',' + (y + d[1]);
+        if (seen[k] || !at[k]) return;
+        seen[k] = true;
+        if (at[k] !== 'ship') n++;
+        q.push(k);
+      });
+    }
+    return n;
+  }
+  /* the reachable square that rejoins the most cut-off modules, cheapest first; null if none */
+  function rejoin(s, nodes) {
+    if (!cutOff(s).length) return null;
+    var best = null, bn = 0;
+    Object.keys(nodes).forEach(function (k) {
+      var nd = nodes[k], got = rejoined(s, nd.dx, nd.dy);
+      if (got > bn || (got === bn && got > 0 && nd.cost < best.cost)) { bn = got; best = nd; }
+    });
+    return best;
+  }
+  /* could a move of a few squares rejoin anything — worth starting an engine for */
+  function canRejoin(s) {
+    return !!rejoin(s, P.reachable(s, REJOIN_REACH));
+  }
+  var REJOIN_REACH = 3;          /* a typical engine's worth of Move */
+
   function manoeuvre(s, st) {
     var foe = foeOf(s);
     var reach = P.budget(s);
@@ -144,7 +190,10 @@ var AICommander = (function () {
       return best;
     }
 
-    var best = pick(P.reachable(s, horizon));
+    /* Pieces cut off from the hull break apart at the end of the turn. If moving the ship can
+       join any of them back on — this turn, within the Move we hold — that comes before where
+       the doctrine would like to be. */
+    var best = rejoin(s, P.reachable(s, reach)) || pick(P.reachable(s, horizon));
     if (best && (best.dx || best.dy)) {
       /* Telegraph. When someone is watching, the first visit publishes the route and stops;
          the board draws it, and the commit happens on the next tick. That is what makes an
@@ -482,6 +531,18 @@ var AICommander = (function () {
       if (s.playsLeft > 0 && s.hand.length) Engine.playCard(choosePlay(s, st));
       else Engine.endPlayPhase();
       return;
+    }
+
+    /* 0. a module cut off from the hull is lost at the end of the turn: if a move can join it
+       back on, get Move and spend it on that before anything else */
+    if (cutOff(s).length) {
+      if (s.moveLeft > 0) { manoeuvre(s, st); return; }
+      if (canRejoin(s)) {
+        var eng = K.modList(s).filter(function (m) {
+          return !m.exhausted && K.isEngine(m) && Engine.fx(m.name, 'mod').activate &&
+                 Engine.meetsReq(s, m) && Engine.affordable(s, m, 'mod'); })[0];
+        if (eng) { Engine.activateModule(eng.id); return; }
+      }
     }
 
     /* 1. if a gun already bears on something, shoot — burning engines to close a gap we do

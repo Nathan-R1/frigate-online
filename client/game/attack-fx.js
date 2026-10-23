@@ -404,7 +404,7 @@ var AttackFx = (function () {
   /* ---- low graphics: the shot as static marks ----
      Nothing moves. For a couple of seconds the shot shows who fired at what (a dashed line and
      the target's corners) and what it did, all over the piece it was aimed at: a shield badge
-     with the shield damage, a round badge with the hull damage, "✕" when it went, or a faint
+     with the shield damage, a round badge with the hull damage, "💀" when it went, or a faint
      "miss". The Core's own lost point of hull, when a module goes, sits over the Core. Badges
      on one square add up while they are showing — shield after shield, hull after hull — and a
      different kind replaces the one there: a hit that takes the last of the shields and then
@@ -440,9 +440,9 @@ var AttackFx = (function () {
       if (b && b.el.parentNode) b.el.parentNode.removeChild(b.el);
       b = badges[key] = { type: type, total: n, killed: !!killed, el: badgeEl(spot, type) };
     }
-    var text = type === 'miss' ? 'miss' : (b.killed ? '✕ ' : '') + (b.total ? '−' + b.total : '');
+    var text = type === 'miss' ? 'miss' : (b.killed ? '💀 ' : '') + (b.total ? '−' + b.total : '');
     b.el.lastChild.textContent = text;
-    /* a disc holds two characters; anything longer ("✕ −3") stretches it into a pill */
+    /* a disc holds two characters; anything longer ("💀 −3") stretches it into a pill */
     if (type === 'hull') {
       var size = parseFloat(b.el.style.height), wide = size + Math.max(0, text.length - 2) * size * 0.34;
       b.el.style.width = wide + 'px';
