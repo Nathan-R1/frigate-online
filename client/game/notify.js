@@ -71,7 +71,8 @@ var Notify = (function () {
   function show(p) {
     guard.style.display = 'block';
     var pop = guard.firstChild;
-    pop.className = 'tut-pos ' + p.side;
+    /* a notice that points at nothing (the forfeit) sits in the middle with no arrow */
+    pop.className = 'tut-pos ' + (p.side || 'centre');
     pop.querySelector('.tut-title').textContent = p.title;
     var sub = pop.querySelector('.tut-sub');
     sub.textContent = p.text;

@@ -10,10 +10,10 @@
  * roll then sends its own round across. A hit ends in the style's impact; a miss ends in
  * nothing — the round simply fades where it was going.
  *
- * How a shot looks is a style: ballistic, energy, bio, tractor or torpedo. An attack may name
- * one with `anim` (card-effects.js); left out, the damage type picks it, and anything else
- * falls back to the default ballistic round. A new look is one entry in STYLES — and, for a
- * damage type, one line in BY_TYPE.
+ * How a shot looks is a style: ballistic, energy, bio, tractor, torpedo or ionTorpedo. An
+ * attack may name one with `anim` (card-effects.js); left out, the damage type picks it, and
+ * anything else falls back to the default ballistic round. A new look is one entry in STYLES —
+ * and, for a damage type, one line in BY_TYPE.
  */
 var AttackFx = (function () {
   'use strict';
@@ -21,7 +21,7 @@ var AttackFx = (function () {
   var STAGGER = 170;          /* ms between the rolls of one shot */
   var BACKLOG = 3500;         /* never let a run of computer shots fall further behind than this */
 
-  var BY_TYPE = { kinetic: 'ballistic', energy: 'energy', bio: 'bio' };
+  var BY_TYPE = { kinetic: 'ballistic', energy: 'energy', bio: 'bio', ion: 'energy' };
 
   var env = null, lastN = null, freeAt = 0;
 
@@ -182,40 +182,103 @@ var AttackFx = (function () {
      trailing exhaust, and a hit is a warhead going off — the ballistic fireball, bigger, with a
      shockwave behind it. A miss runs on past and burns out. `launches` tells draw() the piece
      has left its square, so the one left standing there (see keep) goes as it sets off. */
-  STYLES.torpedo = function (a, b, hit, t0, i) {
-    var from = a || b, end = hit ? b : wide(from, b, i);
-    var ms = a ? Math.min(560, 260 + Math.sqrt(Math.pow(end.x - a.x, 2) + Math.pow(end.y - a.y, 2)) / env.cell * 55) : 0;
-    if (a) {
-      var dx = end.x - a.x, dy = end.y - a.y, rot = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
-      var len = env.cell * .7, thick = Math.max(5, env.cell * .2);
-      var body = blob(a.x, a.y, len, 'height:' + thick + 'px;margin-top:' + (len - thick) / 2 + 'px;' +
-        'border-radius:' + thick + 'px ' + thick * 1.6 + 'px ' + thick * 1.6 + 'px ' + thick + 'px;' +
-        'background:linear-gradient(90deg,#ff9a3c 0,#ffe08a 12%,#cfd6de 22%,#8c97a3 70%,#e2483d 72%,#ff6a5c 100%);' +
-        'box-shadow:-6px 0 10px 2px rgba(255,150,60,.7);');
-      play(body, [{ opacity: 1, transform: 'translate(0,0) ' + rot },
-                  { opacity: 1, transform: 'translate(' + dx * .15 + 'px,' + dy * .15 + 'px) ' + rot, offset: .35 },
-                  { opacity: hit ? 1 : 0, transform: 'translate(' + dx + 'px,' + dy + 'px) ' + rot }],
-           ms, t0, 'cubic-bezier(.55,0,.85,.5)');
-      /* exhaust left hanging along the run */
-      for (var k = 1; k <= 5; k++) {
-        var f = k / 6, at = Math.pow(f, 1.8);
-        play(blob(a.x + dx * at, a.y + dy * at, env.cell * .35,
-                  'border-radius:50%;background:radial-gradient(circle,rgba(200,200,210,.6),transparent 70%);'),
-             [{ opacity: .8, transform: 'scale(.4)' }, { opacity: 0, transform: 'scale(1.6)' }],
-             520, t0 + ms * f);
+  /* A torpedo's flight is the same whatever it carries; what it looks like and what happens
+     when it lands is the warhead's. */
+  function torpedoStyle(look) {
+    var style = function (a, b, hit, t0, i) {
+      var from = a || b, end = hit ? b : wide(from, b, i);
+      var ms = a ? Math.min(560, 260 + Math.sqrt(Math.pow(end.x - a.x, 2) + Math.pow(end.y - a.y, 2)) / env.cell * 55) : 0;
+      if (a) {
+        var dx = end.x - a.x, dy = end.y - a.y, rot = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
+        var len = env.cell * .7, thick = Math.max(5, env.cell * .2);
+        var body = blob(a.x, a.y, len, 'height:' + thick + 'px;margin-top:' + (len - thick) / 2 + 'px;' +
+          'border-radius:' + thick + 'px ' + thick * 1.6 + 'px ' + thick * 1.6 + 'px ' + thick + 'px;' +
+          'background:' + look.body + ';box-shadow:' + look.glow + ';');
+        play(body, [{ opacity: 1, transform: 'translate(0,0) ' + rot },
+                    { opacity: 1, transform: 'translate(' + dx * .15 + 'px,' + dy * .15 + 'px) ' + rot, offset: .35 },
+                    { opacity: hit ? 1 : 0, transform: 'translate(' + dx + 'px,' + dy + 'px) ' + rot }],
+             ms, t0, 'cubic-bezier(.55,0,.85,.5)');
+        /* exhaust left hanging along the run */
+        for (var k = 1; k <= 5; k++) {
+          var f = k / 6, at = Math.pow(f, 1.8);
+          play(blob(a.x + dx * at, a.y + dy * at, env.cell * .35,
+                    'border-radius:50%;background:radial-gradient(circle,' + look.exhaust + ',transparent 70%);'),
+               [{ opacity: .8, transform: 'scale(.4)' }, { opacity: 0, transform: 'scale(1.6)' }],
+               520, t0 + ms * f);
+        }
       }
-    }
-    if (hit) {
-      explode(b, t0 + ms);
+      if (hit) look.impact(b, t0 + ms);
+      return [hit ? ms : null, ms + (hit ? look.linger : 0)];
+    };
+    /* the piece itself is the round: draw() lets the copy left on its square go at launch */
+    style.launches = true;
+    return style;
+  }
+
+  /* the ballistic warhead: the fireball, bigger, with a shockwave behind it */
+  STYLES.torpedo = torpedoStyle({
+    body: 'linear-gradient(90deg,#ff9a3c 0,#ffe08a 12%,#cfd6de 22%,#8c97a3 70%,#e2483d 72%,#ff6a5c 100%)',
+    glow: '-6px 0 10px 2px rgba(255,150,60,.7)',
+    exhaust: 'rgba(200,200,210,.6)',
+    linger: 760,
+    impact: function (b, t0) {
+      explode(b, t0);
       play(blob(b.x, b.y, env.cell * 2.3, 'border-radius:50%;background:radial-gradient(circle,' +
                                           'rgba(255,240,200,.95) 0,rgba(255,150,40,.8) 35%,rgba(180,40,0,.4) 55%,transparent 70%);'),
            [{ opacity: 1, transform: 'scale(.15)' }, { opacity: .9, transform: 'scale(.9)', offset: .3 },
-            { opacity: 0, transform: 'scale(1.15)' }], 620, t0 + ms);
-      rings(b, '#ffb347', 1, t0 + ms + 40, 560);
+            { opacity: 0, transform: 'scale(1.15)' }], 620, t0);
+      rings(b, '#ffb347', 1, t0 + 40, 560);
     }
-    return [hit ? ms : null, ms + (hit ? 760 : 0)];
-  };
-  STYLES.torpedo.launches = true;
+  });
+
+  /* the ion warhead: no fire — a discharge. A white-blue flash, forked lightning crackling out
+     of it, electric rings and a scatter of blue sparks, flickering rather than burning */
+  STYLES.ionTorpedo = torpedoStyle({
+    body: 'linear-gradient(90deg,#6fe6ff 0,#d9fbff 12%,#cfd6de 22%,#7f8fa3 70%,#2fb4ff 72%,#8beaff 100%)',
+    glow: '-6px 0 10px 2px rgba(80,200,255,.75)',
+    exhaust: 'rgba(140,220,255,.55)',
+    linger: 820,
+    impact: ionBurst
+  });
+
+  function ionBurst(p, t0) {
+    var c = env.cell;
+    play(blob(p.x, p.y, c * 1.6, 'border-radius:50%;background:radial-gradient(circle,' +
+                                 '#fff 0,#c8f6ff 22%,#4fd0ff 45%,rgba(30,120,255,.35) 62%,transparent 72%);'),
+         [{ opacity: 1, transform: 'scale(.2)' }, { opacity: 1, transform: 'scale(1)', offset: .25 },
+          { opacity: .4, transform: 'scale(1.05)', offset: .45 }, { opacity: .9, transform: 'scale(1.1)', offset: .55 },
+          { opacity: 0, transform: 'scale(1.3)' }], 420, t0);
+    rings(p, '#6fdcff', 2, t0 + 30, 520);
+    /* forked lightning: a jagged line from the centre outward, each one flickering on and off */
+    var size = c * 2.6, h = size / 2;
+    for (var k = 0; k < 7; k++) {
+      var ang = k * 0.8976 + 0.4, reach = h * (0.7 + (k % 3) * 0.1), pts = [h + ',' + h], seg = 5;
+      for (var j = 1; j <= seg; j++) {
+        var r = reach * j / seg, wob = (j === seg ? 0 : ((k * 7 + j * 13) % 9 - 4) * c * .045);
+        pts.push((h + Math.cos(ang) * r - Math.sin(ang) * wob).toFixed(1) + ',' +
+                 (h + Math.sin(ang) * r + Math.cos(ang) * wob).toFixed(1));
+      }
+      var bolt = blob(p.x, p.y, size, 'filter:drop-shadow(0 0 3px #4fd0ff) drop-shadow(0 0 6px #2a8cff);');
+      bolt.innerHTML = '<svg width="' + size + '" height="' + size + '" style="overflow:visible">' +
+        '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#e6fbff" stroke-width="' +
+        Math.max(1.2, c * .05) + '" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+      play(bolt, [{ opacity: 0 }, { opacity: 1, offset: .08 }, { opacity: .15, offset: .22 },
+                  { opacity: 1, offset: .36 }, { opacity: .1, offset: .55 }, { opacity: .8, offset: .68 },
+                  { opacity: 0 }], 560, t0 + (k % 3) * 40);
+    }
+    for (var n = 0; n < 9; n++) {
+      var a2 = n * .698 + .2, rr = c * (.8 + (n % 3) * .25);
+      play(blob(p.x, p.y, 3, 'border-radius:50%;background:#bff4ff;box-shadow:0 0 5px #4fd0ff;'),
+           [{ opacity: 1, transform: 'translate(0,0)' },
+            { opacity: 0, transform: 'translate(' + Math.cos(a2) * rr + 'px,' + Math.sin(a2) * rr + 'px)' }],
+           380, t0 + 30);
+    }
+    /* static left crawling over the hull it hit */
+    play(blob(p.x, p.y, c * 1.1, 'border-radius:50%;background:radial-gradient(circle,' +
+                                 'rgba(120,220,255,.35) 0,rgba(60,140,255,.15) 50%,transparent 70%);'),
+         [{ opacity: 0 }, { opacity: .9, offset: .2 }, { opacity: .3, offset: .4 }, { opacity: .8, offset: .6 },
+          { opacity: 0 }], 760, t0 + 120);
+  }
 
   bar.r = function (a, b) { return 'rotate(' + Math.atan2(b.y - a.y, b.x - a.x) + 'rad)'; };
   STYLES['default'] = STYLES.ballistic;
@@ -321,7 +384,8 @@ var AttackFx = (function () {
     if (top < lastN) lastN = 0;
     var fresh = shots.filter(function (s) { return s.n > lastN; });
     lastN = top;
-    if (!env.layer || env.still) return;
+    if (!env.layer) return;
+    if (env.still) { fresh.forEach(still); return; }
     fresh.forEach(function (shot) {
       if (Engine.hiddenFrom(shot.to, env.viewer)) return;
       var now = Date.now();
@@ -335,6 +399,80 @@ var AttackFx = (function () {
         else playing--;
       }, wait);
     });
+  }
+
+  /* ---- low graphics: the shot as static marks ----
+     Nothing moves. For a couple of seconds the shot shows who fired at what (a dashed line and
+     the target's corners) and what it did, all over the piece it was aimed at: a shield badge
+     with the shield damage, a round badge with the hull damage, "💀" when it went, or a faint
+     "miss". The Core's own lost point of hull, when a module goes, sits over the Core. Badges
+     on one square add up while they are showing — shield after shield, hull after hull — and a
+     different kind replaces the one there: a hit that takes the last of the shields and then
+     hull shows the hull. */
+  var HOLD = 2500, badges = {};
+  function still(shot) {
+    var me = env.viewer;
+    if (!shot.to || Engine.hiddenFrom(shot.to, me)) return;
+    var b = centre(shot.to);
+    var a = shot.from && !Engine.hiddenFrom(shot.from, me) ? centre(shot.from) : null;
+    if (a && !(a.x === b.x && a.y === b.y))
+      fade(bar(a, b, 1, 'border-top:1px dashed rgba(255,255,255,.6);'));
+    var c = '#ff5a4a', k = 9, w = 2, g = [];
+    ['0 0', '100% 0', '0 100%', '100% 100%'].forEach(function (at) {
+      g.push('linear-gradient(' + c + ',' + c + ') ' + at + '/' + k + 'px ' + w + 'px no-repeat');
+      g.push('linear-gradient(' + c + ',' + c + ') ' + at + '/' + w + 'px ' + k + 'px no-repeat');
+    });
+    fade(blob(b.x, b.y, env.cell + 10, 'background:' + g.join(',') + ';'));
+    var coreSeen = shot.core && !Engine.hiddenFrom(shot.core, me);
+    var dealt = shot.shield || shot.hull || shot.killed || shot.coreLoss;
+    if (shot.shield) badge(shot.to, 'shield', shot.shield);
+    if (shot.hull || shot.killed) badge(shot.to, 'hull', shot.hull, shot.killed);
+    if (shot.coreLoss && coreSeen) badge(shot.core, 'hull', shot.coreLoss);
+    if (!dealt && !(shot.rolls || []).some(Boolean)) badge(shot.to, 'miss', 0);
+  }
+  /* a static mark that is simply taken away after a while */
+  function fade(d) { setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, HOLD); }
+
+  function badge(spot, type, n, killed) {
+    var key = spot.x + ',' + spot.y, b = badges[key];
+    if (b && b.type === type && b.el.parentNode) { b.total += n; b.killed = b.killed || killed; }
+    else {
+      if (b && b.el.parentNode) b.el.parentNode.removeChild(b.el);
+      b = badges[key] = { type: type, total: n, killed: !!killed, el: badgeEl(spot, type) };
+    }
+    var text = type === 'miss' ? 'miss' : (b.killed ? '💀 ' : '') + (b.total ? '−' + b.total : '');
+    b.el.lastChild.textContent = text;
+    /* a disc holds two characters; anything longer ("💀 −3") stretches it into a pill */
+    if (type === 'hull') {
+      var size = parseFloat(b.el.style.height), wide = size + Math.max(0, text.length - 2) * size * 0.34;
+      b.el.style.width = wide + 'px';
+      b.el.style.left = (centre(spot).x - wide / 2) + 'px';
+      b.el.style.borderRadius = size + 'px';
+    }
+    clearTimeout(b.timer);
+    b.timer = setTimeout(function () {
+      if (b.el.parentNode) b.el.parentNode.removeChild(b.el);
+      if (badges[key] === b) delete badges[key];
+    }, HOLD);
+  }
+  /* hung just above the square: a shield outline for shield damage, a disc for hull */
+  function badgeEl(spot, type) {
+    var p = centre(spot), size = Math.max(16, env.cell * 0.62);
+    var col = type === 'shield' ? '#4fd0ff' : type === 'hull' ? '#ff5a4a' : '#9aa3ad';
+    var d = blob(p.x, p.y - env.cell * 0.62, size, 'display:flex;align-items:center;justify-content:center;' +
+      'font:700 ' + Math.round(size * 0.42) + 'px/1 system-ui,sans-serif;color:#fff;white-space:nowrap;z-index:2;' +
+      (type === 'hull' ? 'border-radius:50%;background:#3a1210;border:2px solid ' + col + ';box-sizing:border-box;' :
+       type === 'miss' ? 'color:' + col + ';font-weight:600;' : ''));
+    if (type === 'shield') {
+      d.innerHTML = '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" style="position:absolute;inset:0">' +
+        '<path d="M12 2 20.5 5.2v6.1c0 5-3.5 8.9-8.5 10.7C7 20.2 3.5 16.3 3.5 11.3V5.2Z" fill="#0d2a38" ' +
+        'stroke="' + col + '" stroke-width="2" stroke-linejoin="round"/></svg>';
+    }
+    var t = document.createElement('span');
+    t.style.cssText = 'position:relative;';
+    d.appendChild(t);
+    d.style.opacity = '1';
+    return d;
   }
 
   return { sync: sync, keep: keep, styles: STYLES, byType: BY_TYPE };

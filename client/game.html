@@ -22,6 +22,12 @@
            border:1px solid var(--cyan); color:var(--cyan); border-radius:6px; }
   .g-btn:hover:not(:disabled) { background:var(--cyan); color:var(--ink-strong); }
   .g-btn:disabled { opacity:.35; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
+  /* "nothing left to do here — move on": the phase button that would, lit and breathing */
+  .g-btn.nudge:not(:disabled) { border-color:var(--amber); color:var(--amber);
+    box-shadow:0 0 0 1px rgba(232,192,74,.5),0 0 14px rgba(232,192,74,.45);
+    animation:nudge-glow 1.6s ease-in-out infinite; }
+  @keyframes nudge-glow { 0%,100% { box-shadow:0 0 0 1px rgba(232,192,74,.35),0 0 6px rgba(232,192,74,.25); }
+    50% { box-shadow:0 0 0 1px rgba(232,192,74,.7),0 0 18px rgba(232,192,74,.6); } }
   /* the phase buttons keep their mark and drop their words when the bar gets tight */
   .g-btn:has(.btn-ico) { display:inline-flex; align-items:center; gap:6px; }
   .btn-ico { width:13px; height:13px; flex:none; display:block; }
@@ -100,7 +106,7 @@
   .piece.ast { opacity:.94; }
   .piece.clickable { cursor:pointer; }
 
-  /* selected — the piece the pad and the arrow keys drive */
+  /* selected — the piece the arrow keys drive */
   .piece.sel { outline:2px solid var(--cyan); outline-offset:-2px;
                box-shadow:0 0 12px rgba(79,216,201,.6); border-radius:6px; }
   /* exhausted — spent for the turn */
@@ -249,11 +255,6 @@
   .mc-val { font-family:var(--disp); font-weight:700; font-size:22px; line-height:1;
     color:var(--cyan); text-shadow:0 0 10px rgba(79,216,201,.35); min-width:28px; text-align:center; }
   .mc-sub { font-family:var(--mono); font-size:10px; color:var(--ink-dim); white-space:nowrap; }
-  .movepad { display:grid; grid-template-columns:repeat(3,30px); gap:3px; margin:6px 0; }
-  .movepad button { font-family:var(--mono); font-size:12px; padding:5px 0; cursor:pointer;
-                    background:var(--panel-alt); border:1px solid var(--cyan-dim); color:var(--cyan); border-radius:4px; }
-  .movepad button:disabled { opacity:.25; cursor:default; }
-  .movepad .sp { visibility:hidden; }
   .g-right { display:flex; flex-direction:column; border-left:1px solid var(--line-bright);
              background:var(--panel); min-height:0; }
   .g-prompt { padding:10px 12px; border-bottom:1px solid var(--line); min-height:52px; }
@@ -594,10 +595,10 @@
             <button type="button" data-instant="1">On</button>
           </span>
         </div>
-        <div class="set-row"><span class="set-label">Lock camera</span>
-          <span class="set-opts" id="lockOpts">
-            <button type="button" data-lock="0">Off</button>
-            <button type="button" data-lock="1">On</button>
+        <div class="set-row"><span class="set-label">Follow camera</span>
+          <span class="set-opts" id="followOpts">
+            <button type="button" data-follow="0">Off</button>
+            <button type="button" data-follow="1">On</button>
           </span>
         </div>
         <div class="set-row"><span class="set-label">Labels</span>
@@ -613,7 +614,7 @@
           </span>
         </div>
         <button type="button" class="set-item hidden" id="kickBtn">Manage seats…</button>
-        <button type="button" class="set-item" id="keysBtn">Debug keybinds…</button>
+        <button type="button" class="set-item hidden" id="keysBtn">Debug keybinds…</button>
       </div>
     </span>
   </div>
@@ -1128,36 +1129,48 @@
     if (live.length) VIEW = live[0];
   }
 
-  /* Lock camera: at the start of every turn the view centres on the seat at the controls, so
-     the ship being played is the one under the lens. On by default — the turn is the one thing
-     that travels around the board, and the camera is a window on it. */
-  var lockCamera = true;
-  try { lockCamera = localStorage.getItem('frigateLockCamera') !== '0'; } catch (e) {}
-  function setLockCamera(on) {
-    lockCamera = !!on;
-    try { localStorage.setItem('frigateLockCamera', lockCamera ? '1' : '0'); } catch (e) {}
+  /* Follow camera: at the start of every turn the view centres on the seat at the controls,
+     so the ship being played is the one under the lens. On by default — the turn is the one
+     thing that travels around the board, and the camera is a window on it. (The setting is
+     still stored under its old name, so a choice made before the rename is kept.) */
+  var followCamera = true;
+  try { followCamera = localStorage.getItem('frigateLockCamera') !== '0'; } catch (e) {}
+  function setFollowCamera(on) {
+    followCamera = !!on;
+    try { localStorage.setItem('frigateLockCamera', followCamera ? '1' : '0'); } catch (e) {}
   }
 
-  /* The locked camera watches the turn: when the seat at the controls changes, the view
+  /* The following camera watches the turn: when the seat at the controls changes, the view
      centres on that seat's Core. The key is the turn and the seat, so it fires once per
      turn and never while the player is panning around of their own accord. */
-  var camLockKey = null;
-  function lockCameraTo(G) {
+  var camFollowKey = null;
+  function followCameraTo(G) {
     if (!G || G.over) return;
     /* switched off — forget what was watched, so switching it back on re-centres at once */
-    if (!lockCamera) { camLockKey = null; return; }
+    if (!followCamera) { camFollowKey = null; return; }
     if (menuOpen()) return;              /* a picker is over the board: leave the view alone */
     var key = G.turn + ':' + G.active;
-    if (key === camLockKey) return;
+    if (key === camFollowKey) return;
+    /* A seat whose every piece is hidden from you — the pregame, or a cloaked fleet — is not
+       followed: centring on it would point straight at where it is hiding. The view stays put
+       for that turn, and does not jump across later in it if something is revealed. */
+    if (allHiddenFromMe(G, G.active)) { camFollowKey = key; return; }
     /* the key is only remembered once the camera has actually moved: a pane with no size
        yet must not be written off as done */
-    if (focusCore(G.active)) camLockKey = key;
+    if (focusCore(G.active)) camFollowKey = key;
+  }
+  function allHiddenFromMe(G, idx) {
+    var s = G.players[idx], me = meIdx();
+    if (!s || idx === me) return false;
+    var pieces = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+      .concat(Object.keys(s.deployables).map(function (id) { return s.deployables[id]; }));
+    return pieces.length > 0 && pieces.every(function (o) { return Engine.hiddenFrom(o, me); });
   }
 
   function render(G) {
     if (!G) return;
     syncView(G);
-    lockCameraTo(G);
+    followCameraTo(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
     if (G.over) document.getElementById('overTitle').innerHTML = overHtml(G);
@@ -1171,14 +1184,40 @@
      names to sides. The words between them stay the box's own colour. This is the one place the
      title is markup rather than text, and names come from sheets and lobbies, so they are
      escaped on the way in. */
+  /* a hand that holds cards, every one of them a Discard card */
+  function onlyDiscardCards(s) {
+    return !!s && s.hand.length > 0 && s.hand.every(function (id) {
+      var c = s.cards[id], t = c && Engine.findTech(c.name);
+      return /\bDiscard\b/.test(((t && t.traits) || '') + ' ' + ((c && c.traits) || ''));
+    });
+  }
+  /* Is there anything of this side's that could be activated right now — the same test that
+     lights a piece or a card up as ready. */
+  function anythingToActivate(s) {
+    if (!s) return false;
+    function ready(o, kind) {
+      var e = Engine.fx(o.name, kind === 'tech' ? 'tech' : 'mod');
+      return !o.exhausted && !!e.activate && Engine.affordable(s, o, kind) &&
+             (kind !== 'mod' || Engine.meetsReq(s, o));
+    }
+    return Object.keys(s.modules).some(function (id) { return ready(s.modules[id], 'mod'); }) ||
+           Object.keys(s.deployables).some(function (id) { return ready(s.deployables[id], 'dep'); }) ||
+           s.played.some(function (id) { return s.cards[id] && ready(s.cards[id], 'tech'); });
+  }
+
   function overHtml(G) {
     var w = G.over.winners || [];
-    if (!w.length) return 'Everyone is destroyed';
+    /* a seat that forfeited for want of modules says so, under the verdict */
+    var why = G.players.filter(function (p) { return p.forfeit; }).map(function (p) {
+      return '<div style="font-size:.5em;opacity:.8;margin-top:6px">' + esc(p.name) +
+             ' forfeited due to lack of modules</div>';
+    }).join('');
+    if (!w.length) return 'Everyone is destroyed' + why;
     var names = w.map(function (i) {
       return '<span style="color:' + SEAT_HEX[i % 4] + '">' + esc(G.players[i].name) + '</span>';
     });
-    if (names.length === 1) return names[0] + ' wins';
-    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win';
+    if (names.length === 1) return names[0] + ' wins' + why;
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win' + why;
   }
 
   function bar(s, G) {
@@ -1215,6 +1254,12 @@
     if (pbLabel) pbLabel.textContent = G.turn === 0 ? 'End Pregame Phase' : 'End Play Phase';
     eb.disabled = !mine;
     pb.disabled = !mine;
+    /* Nothing worth doing left in this phase: the button that moves on is lit to say so. In the
+       play phase that is a hand of nothing but Discard cards; in the action phase it is a ship
+       with nothing it can activate. */
+    var me = G.players[meIdx()];
+    pb.classList.toggle('nudge', mine && inPlay && onlyDiscardCards(me));
+    eb.classList.toggle('nudge', mine && G.phase === 'action' && !anythingToActivate(me));
     /* the roster and the phase both change what the row has to hold, so it is re-fitted
        once everything on it is in its final shape */
     fitTopBar(bars);
@@ -1718,9 +1763,10 @@
      craft, not hull, so they are not joined. */
   /* Low graphics: no CSS animation, no SMIL, no pings or blocked flashes. A piece is then a
      still silhouette, which is the point — it is there for slow machines and for anyone who
-     finds the motion distracting. */
-  var lowGfx = false;
-  try { lowGfx = localStorage.getItem('frigateGfxLow') === '1'; } catch (e) {}
+     finds the motion distracting. It is the default: full graphics only for those who have
+     asked for them. */
+  var lowGfx = true;
+  try { lowGfx = localStorage.getItem('frigateGfxLow') !== '0'; } catch (e) {}
   function setLowGfx(on) {
     lowGfx = !!on;
     document.documentElement.classList.toggle('gfx-low', lowGfx);
@@ -1855,19 +1901,33 @@
     return out;
   }
 
-  function buildPiece(rec) {
+  /* a seat colour, greyed and darkened: what a spent piece wears in low graphics */
+  function dullHex(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return hex;
+    var n = parseInt(m[1], 16), c = [n >> 16, (n >> 8) & 255, n & 255];
+    var grey = (c[0] + c[1] + c[2]) / 3;
+    return '#' + c.map(function (v) {
+      var x = Math.round((v * 0.45 + grey * 0.55) * 0.62);
+      return ('0' + Math.max(0, Math.min(255, x)).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  function buildPiece(rec, col) {
+    col = col || rec.color;
     var d = document.createElement('div');
     d.setAttribute('data-obj', rec.id);
     d.setAttribute('data-shape', rec.shape);
+    d.setAttribute('data-color', col);
     d.style.width = d.style.height = CELL + 'px';
-    d.style.setProperty('--pc', rec.color);
+    d.style.setProperty('--pc', col);
     if (rec.kind === 'ast') {
       var seed = GamePieces.hash(rec.id);
       d.style.setProperty('--astro-start', Math.floor(seed * 360) + 'deg');
       d.style.setProperty('--astro-speed', (28 + seed * 42).toFixed(0) + 's');
-      d.appendChild(GamePieces.build(rec.shape, rec.color, seed));
+      d.appendChild(GamePieces.build(rec.shape, col, seed));
     } else {
-      d.appendChild(GamePieces.build(rec.shape, rec.color));
+      d.appendChild(GamePieces.build(rec.shape, col));
     }
     ['mc-tl','mc-tr','mc-bl','mc-br'].forEach(function (k) {
       var sp = document.createElement('span');
@@ -1994,11 +2054,15 @@
     recs.forEach(function (rec, idx) {
       /* a rock that has broken up needs new art, not just new classes */
       var node = byId[rec.id];
-      if (node && node.getAttribute('data-shape') !== rec.shape) {
+      /* Low graphics draws no filters, so a spent piece cannot be dimmed the usual way — it is
+         drawn in a duller version of its own colour instead, and rebuilt only when that flips */
+      var col = (lowGfx && rec.kind !== 'ast' && rec.o && rec.o.exhausted) ? dullHex(rec.color) : rec.color;
+      if (node && (node.getAttribute('data-shape') !== rec.shape ||
+                   node.getAttribute('data-color') !== col)) {
         piecesEl.removeChild(node);
         node = null;
       }
-      node = node || buildPiece(rec);
+      node = node || buildPiece(rec, col);
       var ref = piecesEl.children[idx];
       if (ref !== node) piecesEl.insertBefore(node, ref || null);
       paintPiece(node, rec, G);
@@ -2572,12 +2636,27 @@
   var ACT_LINE = /\b(plays|activates)\b/;
   function isAct(l) { return l.kind ? l.kind === 'act' : ACT_LINE.test(l.msg); }
 
+  /* The log follows new lines only while you are at (or within a line or so of) the bottom.
+     Scrolled up to read, it holds still: the line at the top of your view stays where it is,
+     even as the oldest lines drop off the top of the 200 kept. Scroll back down to follow
+     again. */
   function renderLog(G) {
     var lines = G.log.filter(function (l) { return logMode !== 'short' || isAct(l); });
+    var following = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+    var box = logEl.getBoundingClientRect(), anchor = null, offset = 0;
+    if (!following) {
+      for (var i = 0; i < logEl.children.length; i++) {
+        var r = logEl.children[i].getBoundingClientRect();
+        if (r.bottom > box.top) { anchor = logEl.children[i].getAttribute('data-n'); offset = r.top - box.top; break; }
+      }
+    }
     logEl.innerHTML = lines.slice(-200).map(function (l) {
-      return '<div class="t' + l.side + '">' + esc(l.msg) + '</div>';
+      return '<div class="t' + l.side + '"' + (l.n ? ' data-n="' + l.n + '"' : '') + '>' + esc(l.msg) + '</div>';
     }).join('') || '<div style="color:var(--ink-dim);font-family:var(--mono);font-size:11px">Nothing yet.</div>';
-    logEl.scrollTop = logEl.scrollHeight;
+    if (following) { logEl.scrollTop = logEl.scrollHeight; return; }
+    var el = anchor && logEl.querySelector('[data-n="' + anchor + '"]');
+    if (el) logEl.scrollTop += (el.getBoundingClientRect().top - box.top) - offset;
+    else if (anchor) logEl.scrollTop = 0;          /* the line you were on has been trimmed away */
   }
 
   function renderPrompt(G) {
@@ -2641,21 +2720,20 @@
       var left = G.players[G.active].moveLeft || 0;
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">The whole ship moves ' +
            'with its Core. Click a highlighted square to take the Core there — red squares are ' +
-           'blocked, because some part of the hull would hit something. Or use the pad and arrow ' +
+           'blocked, because some part of the hull would hit something. Or use the arrow ' +
            'keys.</div>' +
            '<div style="font-size:11px;margin-bottom:4px"><b style="color:var(--cyan)">' + left +
            '</b> Move left</div>' +
-           movePad(left > 0) +
            rockNote(G) + stuckNote(G) +
            '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
            '>Done moving</button>' + cancelBtn();
     }
     else if (p.kind === 'moveObject')
       h += '<div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">Click where it should go, ' +
-           'or use the pad — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' + movePad(p.left > 0) +
+           'or use the arrow keys — <b style="color:var(--amber)">' + p.left + '</b> left.</div>' +
            rockNote(G) + stuckNote(G) +
            '<button class="g-btn" data-done="1"' + (stuckIds(G).length ? ' disabled' : '') +
-           '>Done</button>' + cancelBtn();
+           '>Done</button>' + resetStepBtn(G, p) + cancelBtn();
     else if (p.kind === 'space')
       h += '<div style="font-size:11px;color:var(--ink-dim)">Click a highlighted cell.</div>' +
            '<div style="margin-top:6px">' +
@@ -2728,18 +2806,18 @@
            '(outlined in red). Move ' + (n === 1 ? 'it' : 'them') + ' clear to finish.</div>';
   }
 
+  /* Put the object back where this move began — offered once it has actually moved. A Tract
+     Beam's drag cannot be cancelled (the dice are already cast), but it can be started again. */
+  function resetStepBtn(G, p) {
+    var t = p.start && Engine.objectById(p.objId);
+    if (!t || (t.obj.x === p.start.x && t.obj.y === p.start.y && p.left === p.start.n)) return '';
+    return '<button class="g-btn ghost" style="margin-left:6px" data-resetstep="1">Reset</button>';
+  }
+
   function cancelBtn(label) {
     if (!Engine.canUndo()) return '';
     return '<button class="g-btn ghost" style="margin-left:6px" data-cancel="1">' +
            (label || 'Cancel') + '</button>';
-  }
-
-  function movePad(on) {
-    var d = on ? '' : ' disabled';
-    return '<div class="movepad">' +
-      '<button class="sp"></button><button data-mv="0,-1"' + d + '>↑</button><button class="sp"></button>' +
-      '<button data-mv="-1,0"' + d + '>←</button><button class="sp"></button><button data-mv="1,0"' + d + '>→</button>' +
-      '<button class="sp"></button><button data-mv="0,1"' + d + '>↓</button><button class="sp"></button></div>';
   }
 
   /* ---------- input ---------- */
@@ -3065,13 +3143,17 @@
     if (b.dataset.sit) return Net.claim(+b.dataset.sit);
     if (b.dataset.confirm) return Engine.resolve(true);
     if (b.dataset.choice !== undefined) Engine.resolve(+b.dataset.choice);
-    if (b.dataset.mv) { var v = b.dataset.mv.split(','); nudge(+v[0], +v[1]); return; }
     if (b.dataset.cancel) { selMod = null; hoverCell = null; clearRoute(); Engine.undo(); return; }
+    if (b.dataset.resetstep) { hoverCell = null; clearRoute(); Engine.resetStep(); return; }
     if (b.dataset.done) Engine.resolve(null);
   });
   document.getElementById('modPopClose').addEventListener('click', closeModPopup);
   document.getElementById('modPop').addEventListener('click', function (e) {
-    if (e.target.id === 'modPop') closeModPopup();      /* click the backdrop to dismiss */
+    if (e.target.id === 'modPop') { closeModPopup(); return; }   /* click the backdrop to dismiss */
+    /* a card's text in the popup carries the same info pips as the hand: one opens the module
+       it names, in place of the card */
+    var pip = e.target.closest('.mod-info');
+    if (pip) { e.stopPropagation(); openModPopup(pip.getAttribute('data-mod')); }
   });
   /* ---------- copying the room code ----------
      A room code exists to be sent to somebody, so it should not have to be read off the screen
@@ -3130,7 +3212,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
-    var lock = document.getElementById('lockOpts');
+    var follow = document.getElementById('followOpts');
     var lbl = document.getElementById('labelOpts');
     var dbg = document.getElementById('debugOpts');
     var gfx = document.getElementById('gfxOpts');
@@ -3141,8 +3223,8 @@
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
       });
-      [].forEach.call(lock.children, function (b) {
-        b.classList.toggle('on', (b.getAttribute('data-lock') === '1') === lockCamera);
+      [].forEach.call(follow.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-follow') === '1') === followCamera);
       });
       [].forEach.call(lbl.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-label') === '1') === showLabels);
@@ -3196,12 +3278,12 @@
       mark();
       Engine.emit();
     });
-    lock.addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-lock]');
+    follow.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-follow]');
       if (!b) return;
-      setLockCamera(b.getAttribute('data-lock') === '1');
+      setFollowCamera(b.getAttribute('data-follow') === '1');
       mark();
-      /* the paint that follows re-reads the lock, so switching it on centres the camera on
+      /* the paint that follows re-reads the setting, so switching it on centres the camera on
          the seat at the controls there and then */
       Engine.emit();
     });
@@ -3948,7 +4030,7 @@
     else warmServer();
   })();
 
-  /* one nudge function for the pad and the keyboard: the ship's move, or a deployable step */
+  /* the arrow keys: the ship's move, or a deployable step */
   function nudge(dx, dy) {
     var G = Engine.get(), p = G.pending, s = G.players[meIdx()];
     if (p && p.kind === 'moveObject') {
@@ -4032,8 +4114,15 @@
     debugOn = !!on;
     if (!debugOn && Engine.get()) { debugHeld = null; Engine.emit(); }
     try { localStorage.setItem('frigateDebug', debugOn ? '1' : '0'); } catch (e2) {}
+    showKeysBtn();
     renderKeybinds();
   }
+  /* the debug keybinds are only worth listing while there are debug keys to press */
+  function showKeysBtn() {
+    var b = document.getElementById('keysBtn');
+    if (b) b.classList.toggle('hidden', !debugOn);
+  }
+  showKeysBtn();
   var debugHeld = null;          /* the piece picked up, waiting for somewhere to put it */
   var debugCard = null;          /* the card the pointer is over, for the keyboard bindings */
   var debugCell = null;          /* and the square, for the same reason */

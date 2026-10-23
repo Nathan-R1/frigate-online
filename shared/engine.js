@@ -50,7 +50,10 @@ var Engine = (function () {
   function log(msg, who, kind) {
     var idx = who == null ? G.active
             : (typeof who === 'number' ? who : who.idx);
-    var entry = { turn: G.turn, side: idx, msg: msg };
+    /* `n` numbers every entry for good, so a view can tell one line from another however the
+       log is trimmed or copied — a restored game carries on from its last number */
+    if (G.logN === undefined) G.logN = G.log.length ? (G.log[G.log.length - 1].n || G.log.length) : 0;
+    var entry = { n: ++G.logN, turn: G.turn, side: idx, msg: msg };
     if (kind) entry.kind = kind;
     G.log.push(entry);
     if (G.log.length > LOG_KEEP * 2) G.log.splice(0, G.log.length - LOG_KEEP);
@@ -529,6 +532,19 @@ var Engine = (function () {
 
   function startTurn() {
     var s = side();
+    /* A ship down to its bare Core with no way left to build anything can only sit there, and
+       the game would never end. It forfeits as its turn comes round — at turn start, so a
+       player halfway through placing their last module is never caught out — and play passes
+       straight on to the next seat. */
+    if (G.turn >= 1 && strandedCore(s)) {
+      s.forfeit = true;
+      checkWin();
+      if (G.over) { emit(); return; }
+      var nxt = nextLiving(G.active);
+      if (nxt <= G.active) G.turn++;
+      G.active = nxt;
+      return startTurn();
+    }
     G.phase = 'upkeep';
     tickDurations(s);
     s.moveLeft = 0;
@@ -624,6 +640,34 @@ var Engine = (function () {
   var notifiers = [];
   function onNotice(fn) { notifiers.push(fn); }
   function notice(e) { for (var i = 0; i < notifiers.length; i++) notifiers[i](e); }
+
+  /* Only the Core left, no deployable still on the board, and no card that could still make a
+     module or launch a deployable: none in the deck, the hand or the discard pile (it reshuffles
+     back in), and no builder or launcher in play with the charge to use. What counts is read off
+     the card data — anything whose effect creates a module or a deployable. A Citadel is the
+     Core in another shape, so it is no module here, and a card that only builds one is no way
+     out either. */
+  function strandedCore(s) {
+    if (!alive(s)) return false;
+    if (Object.keys(s.modules).some(function (id) { return !isCoreLike(s, s.modules[id]); })) return false;
+    if (Object.keys(s.deployables).length) return false;
+    function makesPiece(v) {
+      if (Array.isArray(v)) return v.some(makesPiece);
+      if (v && typeof v === 'object')
+        return (v.op === 'createModule' && !fx(v.module, 'mod').core &&
+                !staticOp(v.module, 'countsAsCore')) || v.op === 'createDeployable' ||
+               Object.keys(v).some(function (k) { return makesPiece(v[k]); });
+      return false;
+    }
+    var live = s.deck.concat(s.hand, s.discard).some(function (id) {
+      var c = s.cards[id]; return c && makesPiece(fx(c.name, 'tech'));
+    });
+    var inPlay = s.played.some(function (id) {
+      var c = s.cards[id], e = c && fx(c.name, 'tech');
+      return e && e.activate && makesPiece(e.activate) && !costShortfall(e.activate.cost, { side: s, card: c });
+    });
+    return !live && !inPlay;
+  }
 
   function nextLiving(from) {
     var n = G.players.length;
@@ -751,11 +795,14 @@ var Engine = (function () {
   }
 
   /* ================= damage ================= */
-  function damageModule(targetSide, mod, amount) {
+  function damageModule(targetSide, mod, amount, dmgType) {
     if (!mod || amount <= 0) return 0;
     var absorbed = Math.min(targetSide.shield, amount);
     targetSide.shield -= absorbed;
     var rest = amount - absorbed;
+    /* ion damage hits shields and nothing else: whatever they cannot absorb is lost */
+    var lost = dmgType === 'ion' ? rest : 0;
+    if (lost) rest = 0;
     /* A Citadel is the Core wearing another silhouette: the damage lands in the Core's pool,
        and it is the Core that dies when that pool runs out — the Citadel goes with the wreck. */
     var hit = hullHolder(targetSide, mod);
@@ -765,6 +812,7 @@ var Engine = (function () {
       log(targetSide.name + "'s shields absorb " + absorbed + '.', targetSide);
       fire(targetSide, 'onShieldDamaged', { amount: absorbed });
     }
+    if (lost) log('  ' + lost + ' ion damage is lost — it cannot touch the hull.');
     if (rest) log(targetSide.name + "'s " + mod.name + ' takes ' + rest + ' hull damage' +
                   (hit === mod ? '' : ' — off the Core') + '.', targetSide);
     if (hit.hull <= 0) { destroyModule(targetSide, hit); lossToCore(targetSide, hit); }
@@ -834,7 +882,7 @@ var Engine = (function () {
     if (G.over) return true;
     /* mark anyone whose Core is gone as out, then see how many teams remain */
     G.players.forEach(function (s) {
-      if (!s.dead && !s.modules[s.coreId]) {
+      if (!s.dead && (!s.modules[s.coreId] || s.forfeit)) {
         s.dead = true;
         /* the rest of the hull goes with the Core, so the wreck stops blocking the board */
         /* leaveCell, not a bare vacate: a wreck piece may be standing inside an asteroid,
@@ -846,7 +894,10 @@ var Engine = (function () {
           var d = s.deployables[id]; delete s.deployables[id]; leaveCell(d);
         });
         s.moveLeft = 0;
-        log(s.name + ' is eliminated — their Core is destroyed.', s);
+        if (s.forfeit) {
+          log(s.name + ' forfeited due to lack of modules.', s);
+          notice({ title: 'Forfeit', text: s.name + ' forfeited due to lack of modules.' });
+        } else log(s.name + ' is eliminated — their Core is destroyed.', s);
       }
     });
     var teams = teamsAlive();
@@ -1345,8 +1396,11 @@ var Engine = (function () {
     if (o.dmgIfRangeAtLeast && from && dist(from, t.obj) >= o.dmgIfRangeAtLeast.range)
       base = o.dmgIfRangeAtLeast.dmg;
     var dmg = base > 0 ? base + powerOf(from) + buffOf(s, from, 'dmg') : 0;
-    var hit = false, landed = false, rolls = [], chained = 0;
+    var hit = false, landed = false, rolls = [], chained = 0, hullDealt = 0;
     var shot = { from: from || ctx.module || null, to: t.obj };
+    /* what the shot did, for the view: the ship's shields and Core before it, to compare after */
+    var owner = t.owner, core = owner && owner.modules[owner.coreId];
+    var shield0 = owner ? owner.shield : 0, core0 = core ? core.hull : 0;
     /* A check is a piloting problem, not a duel: aiming at your own hull or an ally's,
        nobody is trying to slip the beam, so it simply lands. */
     var friendly = !!t.owner && t.owner.team === s.team;
@@ -1390,14 +1444,23 @@ var Engine = (function () {
       if (c.hit) {
         log('  ' + c.text + ' — hit.');
         if (dmg > 0) {
-          if (t.kind === 'asteroid') damageAsteroid(t.obj, dmg);
-          else if (t.kind === 'deployable') damageDeployable(t.owner, t.obj, dmg);
-          /* "For each hit to Hull roll an attack against the same target" — a hit the shields
-             soaked entirely is not a hit to hull */
-          else if (damageModule(t.owner, t.obj, dmg) > 0 && o.chainOnHullHit && chained < 12) {
-            n++; chained++;
-            log('  Hull hit — another attack.');
+          /* ion damage only ever hits shields: a rock or a drone has none to hit */
+          var dealt = 0;
+          var hullBefore = (t.kind === 'module' ? hullHolder(t.owner, t.obj) : t.obj).hull;
+          if (o.dmgType === 'ion' && t.kind !== 'module') log('  The ion charge finds no shields to hit.');
+          else if (t.kind === 'asteroid') dealt = damageAsteroid(t.obj, dmg);
+          else if (t.kind === 'deployable') dealt = damageDeployable(t.owner, t.obj, dmg);
+          else {
+            dealt = damageModule(t.owner, t.obj, dmg, o.dmgType);
+            /* "For each hit to Hull roll an attack against the same target" — a hit the shields
+               soaked entirely is not a hit to hull */
+            if (dealt > 0 && o.chainOnHullHit && chained < 12) {
+              n++; chained++;
+              log('  Hull hit — another attack.');
+            }
           }
+          /* hull actually lost, not the size of the blow: a 1-hull drone hit for 2 lost 1 */
+          hullDealt += Math.min(dealt || 0, Math.max(0, hullBefore));
         }
         landed = true;
         /* riders such as a tractor beam's shove run once, on the first hit that lands.
@@ -1411,7 +1474,14 @@ var Engine = (function () {
       } else if (!c.chaffed) log('  ' + c.text + ' — miss.');
       if (!objectById(targetId)) break;
     }
-    recordShot(o, s, shot.from, shot.to, rolls);
+    /* Shield damage is the ship's; hull damage is the piece's. A Core that lost hull beyond what
+       landed on it lost it to a module destroyed under it (or its Citadel's shared pool). */
+    var coreNow = owner && owner.modules[owner.coreId];
+    var onCore = core && t.kind === 'module' && hullHolder(owner, t.obj) === core;
+    var coreLoss = core ? Math.max(0, core0 - (coreNow ? coreNow.hull : 0) - (onCore ? hullDealt : 0)) : 0;
+    recordShot(o, s, shot.from, shot.to, rolls, {
+      shield: owner ? Math.max(0, shield0 - owner.shield) : 0, hull: hullDealt,
+      killed: !objectById(targetId), core: core || null, coreLoss: coreLoss });
     /* once per shot that lands, however many of its attacks did — the tutorial's "Great Shot"
        listens for the one, and its "Damage Taken" for the other, which goes to the ship that
        was hit: shields or hull, it has been attacked */
@@ -1429,14 +1499,19 @@ var Engine = (function () {
      own `anim` and `dmgType` and nothing more. Positions are taken before the dice, so a
      beam that drags its target off still ends where the target was standing. */
   var SHOTS_KEEP = 16;
-  function recordShot(o, s, from, to, rolls) {
+  function recordShot(o, s, from, to, rolls, dmg) {
     function spot(p) {
       return p ? { id: p.id, x: p.x, y: p.y, owner: p.owner, stealth: !!p.stealth,
                    spotted: p.spotted ? p.spotted.slice() : undefined } : null;
     }
     G.shotN = (G.shotN || 0) + 1;
+    dmg = dmg || {};
     G.shots = (G.shots || []).concat([{ n: G.shotN, side: s.idx, from: spot(from), to: spot(to),
-      rolls: rolls, anim: o.anim || null, dmgType: o.dmgType || null }]).slice(-SHOTS_KEEP);
+      rolls: rolls, anim: o.anim || null, dmgType: o.dmgType || null,
+      /* what it did: shield and hull damage, whether the target went, and the Core's own losses
+         (its square, for a badge over it) */
+      shield: dmg.shield || 0, hull: dmg.hull || 0, killed: !!dmg.killed,
+      core: spot(dmg.core), coreLoss: dmg.coreLoss || 0 }]).slice(-SHOTS_KEEP);
   }
 
   /* Every square this shot can see: in range of some origin, with a clear line to it. Worked
@@ -1663,23 +1738,38 @@ var Engine = (function () {
       } });
   };
 
+  /* The ships a shield grant may land on: your own, or for a "choose" grant "an allied ship
+     within Sensor range from this" — measured from the module doing it, and your own ship
+     counts, since you are on your own team. A ship is in range when any of its modules is. */
+  function shieldTargets(o, ctx) {
+    var s = ctx.side;
+    if (o.target !== 'choose') return [s];
+    var from = ctx.module || ctx.deployable || s.modules[s.coreId];
+    if (!from) return [s];
+    var reach = sensorsOf(s);
+    return [s].concat(alliesOf(s)).filter(function (p) {
+      return Object.keys(p.modules).some(function (id) { return dist(from, p.modules[id]) <= reach; });
+    });
+  }
+  /* An effect that would achieve nothing: so far, a shield grant when every ship it could land
+     on is already at full shield. */
+  function wasted(effect, ctx) {
+    return !!effect && effect.length > 0 && effect.every(function (o) {
+      return o.op === 'gainShield' && shieldTargets(o, ctx).every(function (p) { return p.shield >= p.shieldMax; });
+    });
+  }
+
   OPS.gainShield = function (o, ctx) {
     var s = ctx.side, n = resolveCount(s, o.n, ctx);
     function give(p) {
       p.shield = Math.min(p.shieldMax, p.shield + n);
       log(p.name + ' gains ' + n + ' shield.', p);
     }
-    if (o.target !== 'choose') { give(s); return; }
-    /* "an allied ship within Sensor range from this" — measured from the module doing it, and
-       your own ship counts, since you are on your own team. A ship is in range when any of
-       its modules is. */
-    var from = ctx.module || ctx.deployable || s.modules[s.coreId];
-    if (!from) { give(s); return; }
-    var reach = sensorsOf(s);
-    var picks = [s].concat(alliesOf(s)).filter(function (p) {
-      return Object.keys(p.modules).some(function (id) { return dist(from, p.modules[id]) <= reach; });
-    });
+    var picks = shieldTargets(o, ctx);
     if (!picks.length) { log(s.name + ' has no ship in Sensor range to shield.', s); return; }
+    /* a ship already at full shield is no choice at all, when another has room */
+    var room = picks.filter(function (p) { return p.shield < p.shieldMax; });
+    if (room.length) picks = room;
     if (picks.length === 1) { give(picks[0]); return; }
     prompt({ kind: 'choice', label: 'Shield which ship?',
       options: picks.map(function (p) { return p.name + ' — ' + p.shield + '/' + p.shieldMax; }),
@@ -2030,11 +2120,19 @@ var Engine = (function () {
      disabled with the reason beside it, rather than taken and refused: picking it would only
      ever be a wasted click. */
   function offerChoice(a, ctx, label) {
-    var why = a.options.map(function (opt) { return activationShortfall(opt, ctx) || null; });
+    /* Only options that can actually be taken are offered: one whose cost cannot be paid
+       (Shield with no charge to spend) or that would achieve nothing (Shield with every ship
+       already at full shield) is left off the list. If that would leave nothing, everything is
+       shown, greyed with its reason. */
+    var opts = a.options.filter(function (opt) {
+      return !wasted(opt.effect, ctx) && !activationShortfall(opt, ctx);
+    });
+    if (!opts.length) opts = a.options;
+    var why = opts.map(function (opt) { return activationShortfall(opt, ctx) || null; });
     prompt({ kind: 'choice', label: label, disabled: why,
-      options: a.options.map(function (x) { return x.label; }),
+      options: opts.map(function (x) { return x.label; }),
       onResolve: function (idx) {
-        var opt = a.options[idx]; if (!opt || why[idx]) return;
+        var opt = opts[idx]; if (!opt || why[idx]) return;
         activate(opt.cost, opt.effect, ctx, label, opt.label);
       } });
     return true;
@@ -2114,17 +2212,39 @@ var Engine = (function () {
     enqueue([{ op: '__stepMove', objId: obj.id, n: n }], ctx);
     fire(s, 'onMove', { moveBonus: true });
   }
-  function openStepMove(obj, n) {
+  function openStepMove(obj, n, start) {
     /* The prompt object is the live one — stepObject decrements G.pending.left, which is this
-       same `p` — so re-opening after a refusal carries the Move that is actually left. */
+       same `p` — so re-opening after a refusal carries the Move that is actually left. `start`
+       is where this move began and with how much Move, kept across a re-open, so resetStep can
+       put the object back and let it be moved again. */
     var p = { kind: 'moveObject', label: 'Move ' + obj.name + ' up to ' + n,
               objId: obj.id, left: n,
+              start: start || { x: obj.x, y: obj.y, n: n },
               onResolve: function () {
                 if (!insideSomething(obj) || onRock(obj)) return;
                 log(obj.name + ' cannot stop inside another piece — move it clear.');
-                openStepMove(obj, p.left);
+                openStepMove(obj, p.left, p.start);
               } };
     prompt(p);
+  }
+
+  /* Put the object being moved back where this move began, with its whole Move again. A Tract
+     Beam's drag comes after its dice, so the activation itself can no longer be taken back —
+     but nothing the drag does is final until Done, and each step only moved this one object. */
+  function resetStep() {
+    var p = G.pending;
+    if (!p || p.kind !== 'moveObject' || !p.start) return false;
+    var t = objectById(p.objId);
+    if (!t) return false;
+    var o = t.obj;
+    if (o.x === p.start.x && o.y === p.start.y && p.left === p.start.n) return false;
+    leaveCell(o);
+    o.x = p.start.x; o.y = p.start.y;
+    enterCell(o, t.kind === 'asteroid' ? 'asteroid' : t.kind, t.owner ? t.owner.idx : null);
+    p.left = p.start.n;
+    log((t.owner ? t.owner.name + "'s " : '') + (o.name || 'The asteroid') + ' is put back to start its move again.', t.owner);
+    emit();
+    return true;
   }
   OPS.__stepMove = function (o, ctx) {
     var s = ctx.side, t = objectById(o.objId);
@@ -2636,7 +2756,7 @@ var Engine = (function () {
     if (!p) return null;
     var out = { kind: p.kind, label: p.label };
     ['options', 'disabled', 'targets', 'envelope', 'pattern', 'left', 'objId', 'cards', 'swap',
-     'hint', 'purpose'].forEach(function (k) {
+     'hint', 'purpose', 'start'].forEach(function (k) {
       if (p[k] !== undefined) out[k] = p[k];
     });
     if (typeof p.filter === 'function') {
@@ -2658,7 +2778,7 @@ var Engine = (function () {
                 shots: copy(G.shots || []),
                 players: [] };
     G.players.forEach(function (s, i) {
-      var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead,
+      var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead, forfeit: s.forfeit,
                      shield: s.shield, shieldMax: s.shieldMax, skills: s.skills, stats: s.stats,
                      coreId: s.coreId, modules: s.modules, deployables: s.deployables,
                      playsLeft: s.playsLeft, moveLeft: s.moveLeft, moveBonus: s.moveBonus,
@@ -2802,7 +2922,7 @@ var Engine = (function () {
     moveShip: moveShip, meetsReq: meetsReq, failingModules: failingModules,
     shipModules: function (s2) { return shipModules(s2); },
     shipReach: function (s2, max) { return shipReach(s2, max); },
-    activateDeployable: activateDeployable, stepDeployable: stepDeployable,
+    activateDeployable: activateDeployable, stepDeployable: stepDeployable, resetStep: resetStep,
     endPlayPhase: endPlayPhase, hasLos: hasLos, lineBlocked: lineBlocked,
     endTurn: endTurn, resolve: resolve, cancel: cancel, attackRoll: attackRoll,
     dist: dist, stepDist: stepDist, cellAt: cellAt, sensorsOf: sensorsOf, speedOf: speedOf,
