@@ -600,10 +600,10 @@
             <button type="button" data-instant="1">On</button>
           </span>
         </div>
-        <div class="set-row"><span class="set-label">Lock camera</span>
-          <span class="set-opts" id="lockOpts">
-            <button type="button" data-lock="0">Off</button>
-            <button type="button" data-lock="1">On</button>
+        <div class="set-row"><span class="set-label">Follow camera</span>
+          <span class="set-opts" id="followOpts">
+            <button type="button" data-follow="0">Off</button>
+            <button type="button" data-follow="1">On</button>
           </span>
         </div>
         <div class="set-row"><span class="set-label">Labels</span>
@@ -1134,36 +1134,48 @@
     if (live.length) VIEW = live[0];
   }
 
-  /* Lock camera: at the start of every turn the view centres on the seat at the controls, so
-     the ship being played is the one under the lens. On by default — the turn is the one thing
-     that travels around the board, and the camera is a window on it. */
-  var lockCamera = true;
-  try { lockCamera = localStorage.getItem('frigateLockCamera') !== '0'; } catch (e) {}
-  function setLockCamera(on) {
-    lockCamera = !!on;
-    try { localStorage.setItem('frigateLockCamera', lockCamera ? '1' : '0'); } catch (e) {}
+  /* Follow camera: at the start of every turn the view centres on the seat at the controls,
+     so the ship being played is the one under the lens. On by default — the turn is the one
+     thing that travels around the board, and the camera is a window on it. (The setting is
+     still stored under its old name, so a choice made before the rename is kept.) */
+  var followCamera = true;
+  try { followCamera = localStorage.getItem('frigateLockCamera') !== '0'; } catch (e) {}
+  function setFollowCamera(on) {
+    followCamera = !!on;
+    try { localStorage.setItem('frigateLockCamera', followCamera ? '1' : '0'); } catch (e) {}
   }
 
-  /* The locked camera watches the turn: when the seat at the controls changes, the view
+  /* The following camera watches the turn: when the seat at the controls changes, the view
      centres on that seat's Core. The key is the turn and the seat, so it fires once per
      turn and never while the player is panning around of their own accord. */
-  var camLockKey = null;
-  function lockCameraTo(G) {
+  var camFollowKey = null;
+  function followCameraTo(G) {
     if (!G || G.over) return;
     /* switched off — forget what was watched, so switching it back on re-centres at once */
-    if (!lockCamera) { camLockKey = null; return; }
+    if (!followCamera) { camFollowKey = null; return; }
     if (menuOpen()) return;              /* a picker is over the board: leave the view alone */
     var key = G.turn + ':' + G.active;
-    if (key === camLockKey) return;
+    if (key === camFollowKey) return;
+    /* A seat whose every piece is hidden from you — the pregame, or a cloaked fleet — is not
+       followed: centring on it would point straight at where it is hiding. The view stays put
+       for that turn, and does not jump across later in it if something is revealed. */
+    if (allHiddenFromMe(G, G.active)) { camFollowKey = key; return; }
     /* the key is only remembered once the camera has actually moved: a pane with no size
        yet must not be written off as done */
-    if (focusCore(G.active)) camLockKey = key;
+    if (focusCore(G.active)) camFollowKey = key;
+  }
+  function allHiddenFromMe(G, idx) {
+    var s = G.players[idx], me = meIdx();
+    if (!s || idx === me) return false;
+    var pieces = Object.keys(s.modules).map(function (id) { return s.modules[id]; })
+      .concat(Object.keys(s.deployables).map(function (id) { return s.deployables[id]; }));
+    return pieces.length > 0 && pieces.every(function (o) { return Engine.hiddenFrom(o, me); });
   }
 
   function render(G) {
     if (!G) return;
     syncView(G);
-    lockCameraTo(G);
+    followCameraTo(G);
     renderTop(G); renderBoard(G); renderHand(G); renderLog(G); renderPrompt(G);
     document.getElementById('overlay').classList.toggle('hidden', !G.over);
     if (G.over) document.getElementById('overTitle').innerHTML = overHtml(G);
@@ -3177,7 +3189,7 @@
     var menu = document.getElementById('settingsMenu');
     var opts = document.getElementById('linkOpts');
     var inst = document.getElementById('instantOpts');
-    var lock = document.getElementById('lockOpts');
+    var follow = document.getElementById('followOpts');
     var lbl = document.getElementById('labelOpts');
     var dbg = document.getElementById('debugOpts');
     var gfx = document.getElementById('gfxOpts');
@@ -3188,8 +3200,8 @@
       [].forEach.call(inst.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-instant') === '1') === instantMoves);
       });
-      [].forEach.call(lock.children, function (b) {
-        b.classList.toggle('on', (b.getAttribute('data-lock') === '1') === lockCamera);
+      [].forEach.call(follow.children, function (b) {
+        b.classList.toggle('on', (b.getAttribute('data-follow') === '1') === followCamera);
       });
       [].forEach.call(lbl.children, function (b) {
         b.classList.toggle('on', (b.getAttribute('data-label') === '1') === showLabels);
@@ -3243,12 +3255,12 @@
       mark();
       Engine.emit();
     });
-    lock.addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-lock]');
+    follow.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-follow]');
       if (!b) return;
-      setLockCamera(b.getAttribute('data-lock') === '1');
+      setFollowCamera(b.getAttribute('data-follow') === '1');
       mark();
-      /* the paint that follows re-reads the lock, so switching it on centres the camera on
+      /* the paint that follows re-reads the setting, so switching it on centres the camera on
          the seat at the controls there and then */
       Engine.emit();
     });
