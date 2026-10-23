@@ -521,6 +521,13 @@
   #modePick .box { min-width:min(92vw, 480px); text-align:left; }
   #setupPick .box { min-width:min(92vw, 480px); text-align:left; }
   .rost-count { display:flex; gap:8px; margin:0 0 14px; }
+  /* the ship chooser: a preset per hull class, then the builder */
+  .ship-pick { display:block; width:100%; margin:6px 0; padding:9px 12px; text-align:left;
+               text-transform:none; letter-spacing:normal; }
+  .ship-pick b { font-family:var(--disp); font-size:13px; letter-spacing:.06em; }
+  .ship-pick small { display:block; margin-top:3px; font-family:var(--mono); font-size:10.5px;
+                     color:var(--ink-dim); white-space:normal; }
+  .ship-pick.on { border-color:var(--amber); }
   .rost-row { display:grid; grid-template-columns:1.1fr 1fr 1fr auto auto; gap:8px; align-items:center;
               padding:6px 0; border-top:1px solid var(--line); }
   .rost-row .rn { font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--sc, var(--cyan));
@@ -653,6 +660,13 @@
   <div class="mp-head"><span class="mp-name" id="keysPopName">Debug keybinds</span></div>
   <div class="mp-meta"><span class="chip" id="keysPopState"></span></div>
   <div class="keybinds" id="keysPopList"></div>
+</div></div>
+<div class="mp-back hidden" id="shipPop"><div class="mp-box" role="dialog" aria-modal="true"
+     aria-labelledby="shipPopName">
+  <button type="button" class="mp-close" id="shipPopClose" title="Close">&#10005;</button>
+  <div class="mp-head"><span class="mp-name" id="shipPopName">Choose a ship</span></div>
+  <p class="rost-note">Fly a ready-made ship, or build your own in the sheet builder.</p>
+  <div id="shipPopList"></div>
 </div></div>
 <div class="mp-back hidden" id="kickPop"><div class="mp-box" role="dialog" aria-modal="true"
      aria-labelledby="kickPopName">
@@ -886,6 +900,53 @@
     return (sh && sh.tech || []).filter(function (t) { return Engine.cardIsStarter(t); }).length;
   }
 
+  /* The edit button asks first: one of the preset ships, or the sheet builder. A preset takes
+     the seat at once; the builder is where it can then be changed, like any other build. The
+     host roster and the online lobby each say what a pick does — `opts.preset(p)` and
+     `opts.builder()` — and which preset the seat is flying now, if they know. */
+  var chooserFor = null;
+  function openShipChooser(label, cur, opts) {
+    chooserFor = opts;
+    document.getElementById('shipPopName').textContent = label + ' — choose a ship';
+    document.getElementById('shipPopList').innerHTML = SHIP_PRESETS.map(function (p) {
+      return '<button type="button" class="g-btn ghost ship-pick' + (cur && cur.preset === p.name ? ' on' : '') +
+             '" data-preset="' + esc(p.name) + '"><b>' + esc(p.name) + '</b><small>' + esc(p.desc) +
+             '</small></button>';
+    }).join('') +
+      '<button type="button" class="g-btn ship-pick" data-builder="1"><b>Sheet builder…</b><small>' +
+      (cur ? 'Edit this ship card by card.' : 'Build a ship of your own.') + '</small></button>';
+    document.getElementById('shipPop').classList.remove('hidden');
+  }
+  function closeShipChooser() {
+    document.getElementById('shipPop').classList.add('hidden');
+    chooserFor = null;
+  }
+  /* the host roster: a preset is written into the seat's build here, in this browser */
+  function chooseForRosterSeat(i) {
+    openShipChooser('Player ' + (i + 1), sheetOf(i), {
+      preset: function (p) {
+        seatSheets[i] = { sheet: presetSheet(p), choices: null };
+        writeStore(GAME_SEATS_KEY, seatSheets);
+        renderRoster();
+      },
+      builder: function () { editSeat(i); }
+    });
+  }
+  (function () {
+    var pop = document.getElementById('shipPop');
+    document.getElementById('shipPopClose').addEventListener('click', closeShipChooser);
+    pop.addEventListener('click', function (e) {
+      if (e.target === pop) { closeShipChooser(); return; }
+      var b = e.target.closest('button[data-preset], button[data-builder]');
+      if (!b || !chooserFor) return;
+      var opts = chooserFor;
+      closeShipChooser();
+      if (b.hasAttribute('data-builder')) { opts.builder(); return; }
+      var p = presetNamed(b.getAttribute('data-preset'));
+      if (p) opts.preset(p);
+    });
+  })();
+
   /* Throw a seat's build away and put it back on the default ship. */
   function resetSeat(i) {
     var sh = sheetOf(i);
@@ -1025,24 +1086,81 @@
   /* the copies that deploy before the first turn — a deck with none arrives as a bare Core */
   var STOCK_STARTERS = { 'Cannon Unit': 1, 'Graviton Unit': 1, 'Shield Generator': 1 };
 
-  function stockCards() {
+  var STOCK = { level: STOCK_LEVEL, hulls: STOCK_HULLS, core: STOCK_CORE, granted: STOCK_GRANTED,
+                extra: STOCK_EXTRA, starters: STOCK_STARTERS };
+
+  /* ---------- preset ships ----------
+     Four ready-made level 3 ships, one per hull class, offered from a seat's edit button
+     beside the sheet builder. Each takes its class's own core options where the builder offers
+     one (Standard where it does not) and three techs on top, and spends the builder's 13 skill
+     points so the sheet is legal: Logistics covers the deck's storage, Leadership its
+     leadership, and Science allows its Starter Cards (3 plus half Science). The grants have to
+     match the builder's own core-option tables, as the stock ship's do. */
+  var SHIP_PRESETS = [
+    { name: 'Striker', desc: 'Close-range P.D. guns, guided TAT rounds, Vital Burst to fire twice.',
+      level: 3, hulls: { Striker: 3 },
+      core: { weapons: 'Close Range', engines: 'Lightweight', generator: 'Flexible' },
+      granted: [['P.D. Unit', 4], ['Grav Jet', 2], ['Boost', 1], ['Dynamo', 1]],
+      extra: [['Vital Burst', 1], ['TAT Launcher', 1], ['Revitaliser', 1]],
+      starters: { 'P.D. Unit': 2, 'Grav Jet': 1 },
+      skills: { Cyber: 1, Diplomacy: 0, Engineering: 1, Leadership: 1, Logistics: 1,
+                Navigation: 4, Piloting: 1, Sensors: 3, Science: 1 } },
+    { name: 'Tank', desc: 'A Citadel core, four Cannons and a laser, shields that hit back.',
+      level: 3, hulls: { Tank: 3 },
+      core: { weapons: 'Standard', engines: 'Heavyweight', generator: 'Citadel' },
+      granted: [['Cannon Unit', 4], ['Thrust Unit', 3], ['Citadel', 1], ['Shield Generator', 1]],
+      extra: [['DEW Unit', 1], ['Shield Unit', 1], ['Fire Shield', 1]],
+      starters: { 'Citadel': 1, 'Cannon Unit': 1, 'Thrust Unit': 1, 'Shield Generator': 1 },
+      skills: { Cyber: 1, Diplomacy: 0, Engineering: 2, Leadership: 2, Logistics: 1,
+                Navigation: 1, Piloting: 1, Sensors: 3, Science: 2 } },
+    { name: 'Jump', desc: 'Fast and slippery: Burning Wave up close, Rotating Jet to reshape, a Phantom dodge.',
+      level: 3, hulls: { Jump: 3 },
+      core: { weapons: 'Lightweight', engines: 'Heavyweight', generator: 'Standard' },
+      granted: [['Cannon Unit', 3], ['Boost', 2], ['Thrust Unit', 3], ['Shield Generator', 1]],
+      extra: [['Burning Wave', 1], ['Rotating Jet', 1], ['Phantom', 1]],
+      starters: { 'Cannon Unit': 1, 'Thrust Unit': 1, 'Shield Generator': 1 },
+      skills: { Cyber: 1, Diplomacy: 0, Engineering: 1, Leadership: 1, Logistics: 1,
+                Navigation: 2, Piloting: 4, Sensors: 3, Science: 0 } },
+    { name: 'Controller', desc: 'Asteroids: Debris Field to make them, AI Piloting to fly through them, a Lance to spend them.',
+      level: 3, hulls: { Controller: 3 },
+      core: { weapons: 'Tactician', engines: 'Standard', generator: 'Flexible' },
+      granted: [['Cannon Unit', 3], ['Tract Beam', 1], ['Graviton Unit', 3], ['Boost', 1], ['Dynamo', 1]],
+      extra: [['Asteroid Lance', 1], ['AI Piloting', 1], ['Debris Field', 1]],
+      starters: { 'Cannon Unit': 1, 'Graviton Unit': 1, 'AI Piloting': 1, 'Tract Beam': 1 },
+      skills: { Cyber: 4, Diplomacy: 0, Engineering: 1, Leadership: 0, Logistics: 2,
+                Navigation: 0, Piloting: 0, Sensors: 4, Science: 2 } }
+  ];
+  function presetNamed(name) {
+    return SHIP_PRESETS.filter(function (p) { return p.name === name; })[0] || null;
+  }
+
+  function buildCards(build) {
     var out = [];
-    STOCK_GRANTED.concat(STOCK_EXTRA).forEach(function (pair) {
+    build.granted.concat(build.extra).forEach(function (pair) {
       for (var i = 0; i < pair[1]; i++) out.push(pair[0]);
     });
     return out;
   }
-  /* The deck as the game deals it: every card, with the promoted copies carrying the trait. */
-  function starterDeck() {
+  /* A build's deck as the game deals it: every card, with the promoted copies carrying the
+     trait. A card that is a Starter Card by nature (the Citadel) already says so. */
+  function buildDeck(build) {
     var left = {};
-    Object.keys(STOCK_STARTERS).forEach(function (k) { left[k] = STOCK_STARTERS[k]; });
-    return stockCards().map(function (name) {
+    Object.keys(build.starters).forEach(function (k) { left[k] = build.starters[k]; });
+    return buildCards(build).map(function (name) {
       var base = (Engine.findTech(name) || {}).traits || '';
       var promote = left[name] > 0;
       if (promote) left[name]--;
-      return { name: name,
-               traits: promote ? (base ? base + ' Starter Card' : 'Starter Card') : base };
+      var starter = promote && !/start(?:er|ing)\s*card/i.test(base);
+      return { name: name, traits: starter ? (base ? base + ' Starter Card' : 'Starter Card') : base };
     });
+  }
+  function starterDeck() { return buildDeck(STOCK); }
+  /* a preset as the sheet the builder exports — so it plays, and opens for editing, like one */
+  function presetSheet(p) {
+    var skills = {};
+    Object.keys(p.skills).forEach(function (k) { skills[k] = { points: String(p.skills[k]), penalty: '' }; });
+    return { shipName: p.name, shipClass: p.name, level: p.level, hulls: p.hulls,
+             coreOptions: p.core, skills: skills, tech: buildDeck(p), mods: [], preset: p.name };
   }
   /* The tutorial deals both sides the fixed kit the menu promises: a single Graviton Unit,
      promoted to a Starter Card so the pregame builds it into the ship, and a flat 2 in every
@@ -3422,6 +3540,7 @@
       var sh = sheetOf(i);
       var sub;
       if (!sh) sub = 'Stock frigate';
+      else if (sh.preset) sub = esc(sh.preset) + ' preset';
       else {
         sub = esc(sh.shipName || sh.shipClass || 'Custom build');
         if (!starterCount(sh)) sub += ' — no Starter Cards, deploys as a bare Core';
@@ -3437,7 +3556,7 @@
            so the ships are built at this screen. Online, whoever sits in a seat can still
            edit that ship for themselves in the lobby — before the deal. */
         '<button type="button" class="rost-edit" data-edit="' + i + '" title="' +
-          (sh ? 'Edit this build in the sheet builder' : 'Build a sheet for this player') + '">' +
+          'Choose a preset ship, or open the sheet builder' + '">' +
           EDIT_ICON + '</button>' +
         '<button type="button" class="rost-edit rost-trash" data-reset="' + i + '"' +
           (sh ? '' : ' disabled') + ' title="' +
@@ -3523,7 +3642,7 @@
     var t = e.target.closest('button[data-reset]');
     if (t) { resetSeat(+t.getAttribute('data-reset')); return; }
     var b = e.target.closest('button[data-edit]');
-    if (b) editSeat(+b.getAttribute('data-edit'));
+    if (b) chooseForRosterSeat(+b.getAttribute('data-edit'));
   });
   rostRows.addEventListener('change', function (e) {
     var t = e.target;
@@ -3809,9 +3928,27 @@
       }, function (err) { say('lobbyErr', err.message); });
     }
 
+    /* The lobby's edit button asks the same question. A preset is saved on the server against
+       that seat at once — no trip to the builder — under no new name, so the seat keeps its
+       player's. The builder is the old way round, through the seat's current ship. */
+    function chooseForLobbySeat(idx) {
+      say('lobbyErr', '');
+      Net.seatSetup(idx).then(function (info) {
+        var sheet = sheetFromSetup(info.setup);
+        openShipChooser(info.name || ('Seat ' + (idx + 1)), sheet, {
+          preset: function (p) {
+            Net.setSeatSetup(idx, setupFromSheet(presetSheet(p)), '')
+              .then(function () { say('lobbyErr', ''); },
+                    function (err) { say('lobbyErr', 'could not save that ship: ' + err.message); });
+          },
+          builder: function () { editLobbySeat(idx); }
+        });
+      }, function (err) { say('lobbyErr', err.message); });
+    }
+
     document.getElementById('lobbySeats').addEventListener('click', function (e) {
       var ed = e.target.closest('button[data-editseat]');
-      if (ed) { editLobbySeat(+ed.getAttribute('data-editseat')); return; }
+      if (ed) { chooseForLobbySeat(+ed.getAttribute('data-editseat')); return; }
       var kb = e.target.closest('button[data-kickseat]');
       if (kb) {
         var idx = +kb.getAttribute('data-kickseat');
@@ -4062,7 +4199,7 @@
       e.preventDefault(); closeModPopup(); return;
     }
     if (e.key === 'Escape') {
-      var shut = ['keysPop', 'cardPop', 'kickPop'].filter(function (k) {
+      var shut = ['keysPop', 'cardPop', 'kickPop', 'shipPop'].filter(function (k) {
         return !document.getElementById(k).classList.contains('hidden'); });
       if (shut.length) { e.preventDefault();
         shut.forEach(function (k) { document.getElementById(k).classList.add('hidden'); }); return; }
