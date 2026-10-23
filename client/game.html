@@ -22,6 +22,12 @@
            border:1px solid var(--cyan); color:var(--cyan); border-radius:6px; }
   .g-btn:hover:not(:disabled) { background:var(--cyan); color:var(--ink-strong); }
   .g-btn:disabled { opacity:.35; cursor:not-allowed; border-color:var(--line); color:var(--ink-dim); }
+  /* "nothing left to do here — move on": the phase button that would, lit and breathing */
+  .g-btn.nudge:not(:disabled) { border-color:var(--amber); color:var(--amber);
+    box-shadow:0 0 0 1px rgba(232,192,74,.5),0 0 14px rgba(232,192,74,.45);
+    animation:nudge-glow 1.6s ease-in-out infinite; }
+  @keyframes nudge-glow { 0%,100% { box-shadow:0 0 0 1px rgba(232,192,74,.35),0 0 6px rgba(232,192,74,.25); }
+    50% { box-shadow:0 0 0 1px rgba(232,192,74,.7),0 0 18px rgba(232,192,74,.6); } }
   /* the phase buttons keep their mark and drop their words when the bar gets tight */
   .g-btn:has(.btn-ico) { display:inline-flex; align-items:center; gap:6px; }
   .btn-ico { width:13px; height:13px; flex:none; display:block; }
@@ -1171,14 +1177,40 @@
      names to sides. The words between them stay the box's own colour. This is the one place the
      title is markup rather than text, and names come from sheets and lobbies, so they are
      escaped on the way in. */
+  /* a hand that holds cards, every one of them a Discard card */
+  function onlyDiscardCards(s) {
+    return !!s && s.hand.length > 0 && s.hand.every(function (id) {
+      var c = s.cards[id], t = c && Engine.findTech(c.name);
+      return /\bDiscard\b/.test(((t && t.traits) || '') + ' ' + ((c && c.traits) || ''));
+    });
+  }
+  /* Is there anything of this side's that could be activated right now — the same test that
+     lights a piece or a card up as ready. */
+  function anythingToActivate(s) {
+    if (!s) return false;
+    function ready(o, kind) {
+      var e = Engine.fx(o.name, kind === 'tech' ? 'tech' : 'mod');
+      return !o.exhausted && !!e.activate && Engine.affordable(s, o, kind) &&
+             (kind !== 'mod' || Engine.meetsReq(s, o));
+    }
+    return Object.keys(s.modules).some(function (id) { return ready(s.modules[id], 'mod'); }) ||
+           Object.keys(s.deployables).some(function (id) { return ready(s.deployables[id], 'dep'); }) ||
+           s.played.some(function (id) { return s.cards[id] && ready(s.cards[id], 'tech'); });
+  }
+
   function overHtml(G) {
     var w = G.over.winners || [];
-    if (!w.length) return 'Everyone is destroyed';
+    /* a seat that forfeited for want of modules says so, under the verdict */
+    var why = G.players.filter(function (p) { return p.forfeit; }).map(function (p) {
+      return '<div style="font-size:.5em;opacity:.8;margin-top:6px">' + esc(p.name) +
+             ' forfeited due to lack of modules</div>';
+    }).join('');
+    if (!w.length) return 'Everyone is destroyed' + why;
     var names = w.map(function (i) {
       return '<span style="color:' + SEAT_HEX[i % 4] + '">' + esc(G.players[i].name) + '</span>';
     });
-    if (names.length === 1) return names[0] + ' wins';
-    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win';
+    if (names.length === 1) return names[0] + ' wins' + why;
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' win' + why;
   }
 
   function bar(s, G) {
@@ -1215,6 +1247,12 @@
     if (pbLabel) pbLabel.textContent = G.turn === 0 ? 'End Pregame Phase' : 'End Play Phase';
     eb.disabled = !mine;
     pb.disabled = !mine;
+    /* Nothing worth doing left in this phase: the button that moves on is lit to say so. In the
+       play phase that is a hand of nothing but Discard cards; in the action phase it is a ship
+       with nothing it can activate. */
+    var me = G.players[meIdx()];
+    pb.classList.toggle('nudge', mine && inPlay && onlyDiscardCards(me));
+    eb.classList.toggle('nudge', mine && G.phase === 'action' && !anythingToActivate(me));
     /* the roster and the phase both change what the row has to hold, so it is re-fitted
        once everything on it is in its final shape */
     fitTopBar(bars);

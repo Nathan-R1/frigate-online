@@ -529,6 +529,19 @@ var Engine = (function () {
 
   function startTurn() {
     var s = side();
+    /* A ship down to its bare Core with no way left to build anything can only sit there, and
+       the game would never end. It forfeits as its turn comes round — at turn start, so a
+       player halfway through placing their last module is never caught out — and play passes
+       straight on to the next seat. */
+    if (G.turn >= 1 && strandedCore(s)) {
+      s.forfeit = true;
+      checkWin();
+      if (G.over) { emit(); return; }
+      var nxt = nextLiving(G.active);
+      if (nxt <= G.active) G.turn++;
+      G.active = nxt;
+      return startTurn();
+    }
     G.phase = 'upkeep';
     tickDurations(s);
     s.moveLeft = 0;
@@ -624,6 +637,34 @@ var Engine = (function () {
   var notifiers = [];
   function onNotice(fn) { notifiers.push(fn); }
   function notice(e) { for (var i = 0; i < notifiers.length; i++) notifiers[i](e); }
+
+  /* Only the Core left, no deployable still on the board, and no card that could still make a
+     module or launch a deployable: none in the deck, the hand or the discard pile (it reshuffles
+     back in), and no builder or launcher in play with the charge to use. What counts is read off
+     the card data — anything whose effect creates a module or a deployable. A Citadel is the
+     Core in another shape, so it is no module here, and a card that only builds one is no way
+     out either. */
+  function strandedCore(s) {
+    if (!alive(s)) return false;
+    if (Object.keys(s.modules).some(function (id) { return !isCoreLike(s, s.modules[id]); })) return false;
+    if (Object.keys(s.deployables).length) return false;
+    function makesPiece(v) {
+      if (Array.isArray(v)) return v.some(makesPiece);
+      if (v && typeof v === 'object')
+        return (v.op === 'createModule' && !fx(v.module, 'mod').core &&
+                !staticOp(v.module, 'countsAsCore')) || v.op === 'createDeployable' ||
+               Object.keys(v).some(function (k) { return makesPiece(v[k]); });
+      return false;
+    }
+    var live = s.deck.concat(s.hand, s.discard).some(function (id) {
+      var c = s.cards[id]; return c && makesPiece(fx(c.name, 'tech'));
+    });
+    var inPlay = s.played.some(function (id) {
+      var c = s.cards[id], e = c && fx(c.name, 'tech');
+      return e && e.activate && makesPiece(e.activate) && !costShortfall(e.activate.cost, { side: s, card: c });
+    });
+    return !live && !inPlay;
+  }
 
   function nextLiving(from) {
     var n = G.players.length;
@@ -838,7 +879,7 @@ var Engine = (function () {
     if (G.over) return true;
     /* mark anyone whose Core is gone as out, then see how many teams remain */
     G.players.forEach(function (s) {
-      if (!s.dead && !s.modules[s.coreId]) {
+      if (!s.dead && (!s.modules[s.coreId] || s.forfeit)) {
         s.dead = true;
         /* the rest of the hull goes with the Core, so the wreck stops blocking the board */
         /* leaveCell, not a bare vacate: a wreck piece may be standing inside an asteroid,
@@ -850,7 +891,10 @@ var Engine = (function () {
           var d = s.deployables[id]; delete s.deployables[id]; leaveCell(d);
         });
         s.moveLeft = 0;
-        log(s.name + ' is eliminated — their Core is destroyed.', s);
+        if (s.forfeit) {
+          log(s.name + ' forfeited due to lack of modules.', s);
+          notice({ title: 'Forfeit', text: s.name + ' forfeited due to lack of modules.' });
+        } else log(s.name + ' is eliminated — their Core is destroyed.', s);
       }
     });
     var teams = teamsAlive();
@@ -2051,9 +2095,13 @@ var Engine = (function () {
      disabled with the reason beside it, rather than taken and refused: picking it would only
      ever be a wasted click. */
   function offerChoice(a, ctx, label) {
-    /* An option that would achieve nothing — Shield with every ship already at full shield — is
-       not offered at all. If that would leave nothing, everything is shown as it is. */
-    var opts = a.options.filter(function (opt) { return !wasted(opt.effect, ctx); });
+    /* Only options that can actually be taken are offered: one whose cost cannot be paid
+       (Shield with no charge to spend) or that would achieve nothing (Shield with every ship
+       already at full shield) is left off the list. If that would leave nothing, everything is
+       shown, greyed with its reason. */
+    var opts = a.options.filter(function (opt) {
+      return !wasted(opt.effect, ctx) && !activationShortfall(opt, ctx);
+    });
     if (!opts.length) opts = a.options;
     var why = opts.map(function (opt) { return activationShortfall(opt, ctx) || null; });
     prompt({ kind: 'choice', label: label, disabled: why,
@@ -2705,7 +2753,7 @@ var Engine = (function () {
                 shots: copy(G.shots || []),
                 players: [] };
     G.players.forEach(function (s, i) {
-      var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead,
+      var p = copy({ idx: s.idx, name: s.name, team: s.team, ai: s.ai, dead: s.dead, forfeit: s.forfeit,
                      shield: s.shield, shieldMax: s.shieldMax, skills: s.skills, stats: s.stats,
                      coreId: s.coreId, modules: s.modules, deployables: s.deployables,
                      playsLeft: s.playsLeft, moveLeft: s.moveLeft, moveBonus: s.moveBonus,
