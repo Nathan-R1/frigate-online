@@ -313,7 +313,8 @@ var Engine = (function () {
   }
 
   /* newGame(configArray) — 2 to 4 sides. Each config may carry { name, team, ai, deck, modules }.
-     A side with no team is its own team, so the default is a free-for-all. */
+     A side with no team is its own team, so the default is a free-for-all. `preview` marks a
+     board drawn only as scenery (the lobby backdrop): it keeps bare Cores from forfeiting. */
   /* A seed may be given so that the same table can be dealt twice — a server restoring a game
      it saved, or a test that wants the same dice every run. Left out, one is made. */
   function newGame(configs, seed, opts) {
@@ -322,7 +323,7 @@ var Engine = (function () {
     var s0 = (seed === undefined || seed === null) ? newSeed() : (seed | 0);
     G = { turn: 1, active: 0, phase: 'upkeep', cells: {}, players: [], pending: null,
           log: [], seq: 1, over: null, queue: [], asteroids: {}, shapes: [],
-          seed: s0, rng: s0, shots: [], shotN: 0 };
+          seed: s0, rng: s0, shots: [], shotN: 0, preview: !!(opts && opts.preview) };
     /* Settled before a single piece is put down, because the Core is placed below and it has
        to be hidden with the rest of the hull it is about to grow. */
     if (!(opts && opts.autoSetup)) G.turn = 0;
@@ -535,8 +536,9 @@ var Engine = (function () {
     /* A ship down to its bare Core with no way left to build anything can only sit there, and
        the game would never end. It forfeits as its turn comes round — at turn start, so a
        player halfway through placing their last module is never caught out — and play passes
-       straight on to the next seat. */
-    if (G.turn >= 1 && strandedCore(s)) {
+       straight on to the next seat. A preview board (the lobby's backdrop) is deliberately
+       nothing but bare Cores, so it must never be mistaken for a stranded real game. */
+    if (!G.preview && G.turn >= 1 && strandedCore(s)) {
       s.forfeit = true;
       checkWin();
       if (G.over) { emit(); return; }
