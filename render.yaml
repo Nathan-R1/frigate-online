@@ -25,7 +25,7 @@ services:
       - key: DATABASE_URL
         sync: false          # set in the dashboard, never committed
       - key: NODE_VERSION
-        value: "20"
+        value: "24"
       # Render terminates the connection at its edge, so the address this process sees is the
       # proxy's and every player would share one rate-limit bucket. The forwarded address is
       # only believed where something in front is known to be setting it, so say so here
